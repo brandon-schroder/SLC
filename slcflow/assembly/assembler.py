@@ -175,9 +175,14 @@ class ResidualAssembler:
     # ------------------------------------------------------------------
     # Continuity (sections 3.2, 5.4) and capacity (A.7, section 6.6)
     # ------------------------------------------------------------------
-    def _mass_cumulative(self, j, vm, fields: AssembledFields):
+    def mass_cumulative(self, j, vm, fields: AssembledFields):
         """Cumulative of ``rho Vm cos(eps) (1 - B) r`` over the nodal
-        partition with THE shared quadrature rule (section 5.4)."""
+        partition with THE shared quadrature rule (section 5.4).
+
+        Public reusable piece (ARCH-5.2): the classical driver's streamline
+        repositioning inverts exactly this cumulative, which is what keeps
+        the repositioning targets and the position residual consistent
+        (the section 5.4 same-rule requirement)."""
         fz = self.frozen
         r = fields.metrics.r[:, j]
         vt = fz.transported.rvt[:, j] / r
@@ -190,7 +195,7 @@ class ResidualAssembler:
     def continuity_F(self, j, vm_q0, fields: AssembledFields) -> float:
         """Q-o continuity residual ``F_j(Vm_q0)`` (section 5.4)."""
         vm = self._integrate(fields.dists[j], vm_q0)
-        return float(_TWO_PI * self._mass_cumulative(j, vm, fields)[-1]
+        return float(_TWO_PI * self.mass_cumulative(j, vm, fields)[-1]
                      - self.frozen.spec.mdot)
 
     def qo_capacity(self, j, fields: AssembledFields) -> float:
@@ -210,7 +215,7 @@ class ResidualAssembler:
             2.0 * fz.transported.h0[0, j] - vt0 * vt0, 1e-12))
 
         def neg_mdot(v):
-            val = _TWO_PI * self._mass_cumulative(
+            val = _TWO_PI * self.mass_cumulative(
                 j, self._integrate(d, v), fields)[-1]
             return float(np.nan_to_num(-val, nan=np.inf, posinf=np.inf,
                                        neginf=np.inf))
@@ -251,7 +256,7 @@ class ResidualAssembler:
         fz = self.frozen
         fields = self.split(x)
         mdot = fz.spec.mdot
-        cums = [self._mass_cumulative(j, fields.vm[:, j], fields)
+        cums = [self.mass_cumulative(j, fields.vm[:, j], fields)
                 for j in range(fz.n_qo)]
         r_cont = np.array([_TWO_PI * c[-1] - mdot for c in cums])
         psi_int = fz.topology.psi[1:-1]
