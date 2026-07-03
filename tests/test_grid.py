@@ -14,7 +14,6 @@ from slcflow.errors import ConfigError
 from slcflow.geometry import FlowPath, StationDef, StationType, WallCurve
 from slcflow.grid import (
     GridTopology,
-    MetricsConfig,
     cumulative,
     evaluate_metrics,
     initialize_positions,
