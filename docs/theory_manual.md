@@ -460,3 +460,21 @@ $$T_{2s} = T_2 - \frac{\zeta V_2^2}{2 c_p}, \qquad \Delta s = c_p \ln\frac{T_2}{
 3. Each conversion records $(\text{coefficient in},\ \Delta s\ \text{out},\ \text{reference state used})$ in the row diagnostics for auditability.
 
 ## Appendix C — Regression-test tolerances and reference data provenance
+
+### C.1 V1 — Analytic REE (bound at M2; `tests/test_v1_analytic_ree.py`)
+
+Reference solutions: closed-form Vm(r) families (A.5 case 1) + dense 20001-point 1-D continuity inversion, implemented in `slcflow/verification/v1_analytic_ree.py` independently of the kernel's nodal quadrature. Default annulus $r_0/r_1 = 0.3/0.6$ m, $h_0 = 3\times10^5$ J/kg, $s = 0$, perfect gas (air).
+
+| Case | Grid | Check | Tolerance | Measured (2026-07, M2) |
+|---|---|---|---|---|
+| V1a free vortex, incompressible limit ($M_m \approx 0.02$) | $N_{sl}=9$ | spanwise Vm uniformity | rtol 1e-8 | ~6e-8 vs. reference |
+| | | positions vs. closed-form area rule | 1e-3 span | (compressibility residue) |
+| | | positions vs. dense reference | 1e-5 span | 3.2e-8 |
+| V1b free vortex, compressible ($M_m \approx 0.43$) | $N_{sl}=9$ | hub Vm vs. reference | rtol 5e-5 | 1.2e-5 |
+| | | positions | 2e-4 span | 5.1e-6 |
+| | | full residual vector at answer | 1e-7 of $\dot m/2\pi$ | — |
+| V1c forced vortex ($\Omega_f = 60$ s⁻¹) | $N_{sl}=17$ | Vm profile / hub level | rtol 2e-3 | 9.6e-5 |
+| | | positions | 2e-3 span | 7.0e-6 |
+| V1d grid convergence, V1c over $N_{sl} = 5, 9, 17$ | | observed order | > 1.7 | **1.94** (errors 1.40e-3 / 3.69e-4 / 9.55e-5) |
+
+Note: V1b's hub-Vm tolerance is the $N_{sl}=9$ nodal-trapezoid discretization error, not reference precision — the reference quadrature is deliberately independent. The M1 frozen-streamline V2 gate tolerances currently live in `tests/test_grid.py`; migrate them to C.2 when the full V2 case ships (M3).
