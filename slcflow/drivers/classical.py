@@ -48,12 +48,23 @@ class ClassicalConfig:
     """Driver settings (section 6.2, 6.4). All tolerances are the relative
     norms of section 6.2.5."""
 
-    max_outer: int = 60
+    max_outer: int = 200
     tol_pos: float = 1e-9       # max |dq| / q-o length
     tol_cont: float = 1e-9      # max_j |F_j| / mdot
     tol_closure: float = 1e-9   # closure-update norm (static closures: 0)
     omega_sl_max: float = 0.7   # user cap on the relaxation factor
-    wilkinson_c: float = 1.0    # [VERIFY] section 6.4 constant; M3 calibration
+    # Section 6.4 Wilkinson constant. Provisionally calibrated at M3-1 on
+    # the V2 bend: the measured instability threshold (with the section 5.5
+    # kappa lag at 0.3) is ~0.3 x the local aspect factor; 0.15 keeps ~50%
+    # margin and was validated at two station densities. [VERIFY] the
+    # formal stability-envelope sweep is M3-3.
+    wilkinson_c: float = 0.15
+    # Section 5.5 curvature under-relaxation. None resolves per tier: 0.3
+    # when the curvature term is active ("on by default in Tier 3"), 1.0
+    # (off) otherwise. Without it the curvature-repositioning feedback is
+    # unstable at ANY omega_sl on station-dense curved paths (measured at
+    # M3-1: the streamwise odd-even mode diverges even at omega = 0.05).
+    kappa_relax: float = None
     brentq_rtol: float = 1e-12
 
     def __post_init__(self):
@@ -62,6 +73,10 @@ class ClassicalConfig:
         if not (0.0 < self.omega_sl_max <= 1.0):
             raise ConfigError(
                 f"omega_sl_max must be in (0, 1], got {self.omega_sl_max}")
+        if self.kappa_relax is not None \
+                and not (0.0 < self.kappa_relax <= 1.0):
+            raise ConfigError(
+                f"kappa_relax must be in (0, 1], got {self.kappa_relax}")
 
 
 @dataclass(frozen=True)
@@ -192,6 +207,11 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
     vm_lagged = np.tile(vm_q0[None, :], (n_sl, 1))
 
     closures = ClosureFields(blockage, iteration_tag=0)
+    # Section 5.5 default resolution: curvature lag on whenever the
+    # curvature term is active (config/tier branching, not flow branching).
+    kappa_relax = config.kappa_relax if config.kappa_relax is not None \
+        else (0.3 if fidelity.curvature_term > 0.0 else 1.0)
+    kappa_prev = None      # section 5.5 lag; None on the first iterate
     history = []
     status, reason = SolveStatus.MAX_ITER, ""
     frozen = asm = fields = x = None
@@ -213,10 +233,19 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                               fidelity=fidelity, spec=spec,
                               transported=transported, closures=closures,
                               vm_lagged=vm_lagged,
+                              kappa_lagged=kappa_prev,
+                              kappa_relax=kappa_relax,
                               metrics_config=metrics_config)
         asm = ResidualAssembler(frozen)
         x = pack(vm_q0, q_full[1:-1, :])
         fields = asm.split(x)
+        # Section 5.5 lag is recursive (blend against the previously USED
+        # field): replicate the assembler's blend to carry the EMA forward.
+        if kappa_prev is None:
+            kappa_prev = fields.metrics.kappa_m
+        else:
+            kappa_prev = (kappa_relax * fields.metrics.kappa_m
+                          + (1.0 - kappa_relax) * kappa_prev)
 
         if not all(np.all(np.isfinite(a)) for a in
                    (fields.vm, fields.rho, fields.mach_m)):

@@ -76,6 +76,12 @@ class FrozenInputs:
     vm_lagged : previous-iterate ``Vm(i, j)`` used for the dVm/dm lean term
         (section 5.2 "using the current iterate"). Defaults to zeros, which
         together with Tier-2 flags reproduces the REE limit exactly.
+    kappa_lagged, kappa_relax : optional curvature under-relaxation
+        (section 5.5): the master-ODE curvature distribution uses
+        ``kappa_relax * kappa_new + (1 - kappa_relax) * kappa_lagged``
+        when a lagged field is supplied. ``kappa_relax = 1`` (default) or
+        ``kappa_lagged = None`` disables the blend. Curvature is the noise
+        amplifier of SLC; drivers pass the previous iterate's field here.
     metrics_config : streamline-fit settings forwarded to the grid layer.
     """
 
@@ -86,6 +92,8 @@ class FrozenInputs:
     transported: TransportFields
     closures: ClosureFields
     vm_lagged: np.ndarray = None
+    kappa_lagged: np.ndarray = None
+    kappa_relax: float = 1.0
     metrics_config: MetricsConfig = field(default_factory=MetricsConfig)
 
     def __post_init__(self):
@@ -109,6 +117,15 @@ class FrozenInputs:
                 raise ConfigError(
                     f"vm_lagged shape {vm.shape} != (n_sl, n_qo) = {shape}")
             object.__setattr__(self, "vm_lagged", vm)
+        if not (0.0 < self.kappa_relax <= 1.0):
+            raise ConfigError(
+                f"kappa_relax must be in (0, 1], got {self.kappa_relax}")
+        if self.kappa_lagged is not None:
+            kl = np.asarray(self.kappa_lagged, dtype=float)
+            if kl.shape != shape:
+                raise ConfigError(
+                    f"kappa_lagged shape {kl.shape} != (n_sl, n_qo) = {shape}")
+            object.__setattr__(self, "kappa_lagged", kl)
 
     @property
     def n_sl(self) -> int:

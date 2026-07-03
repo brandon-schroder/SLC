@@ -11,13 +11,15 @@ Numpy/scipy-bound like the grid layer (PCHIP interpolation is a section 5.3
 requirement); the AD-6 xp-injection story for this module follows whatever
 resolution the grid layer's spline dependency eventually gets.
 
-Known limitations, deliberate for M2 (recorded per ARCH-9 discipline):
+Known limitations (recorded per ARCH-9 discipline):
   * A crossing-streamline iterate (non-monotone q on a q-o) raises from
     scipy's PCHIP constructor rather than saturating (AD-10 letter). The
-    repositioning relaxation that prevents such iterates is M3 machinery;
-    revisit the guard there.
-  * The single NaN/Inf boundary check with diagnostic dump (ARCH-6) lands
-    with the driver sub-step, which owns the reproducer-bundle plumbing.
+    classical driver structurally cannot produce one — its repositioning is
+    a convex blend of monotone position vectors (tested at M3) — so this is
+    reachable only through externally supplied ``x``; the Newton driver's
+    line-search globalization must reject such trial steps (M5).
+  * The NaN/Inf boundary check lives in the classical driver (input side +
+    assembled fields); the ARCH-6 reproducer-bundle serialization is M5.
 """
 from __future__ import annotations
 
@@ -112,7 +114,14 @@ class ResidualAssembler:
         dvm_dm = np.stack(
             [np.gradient(fz.vm_lagged[i, :], metrics.m[i, :])
              for i in range(fz.n_sl)], axis=0)
-        kcos = metrics.kappa_m * np.cos(metrics.eps)
+        # Optional curvature under-relaxation (section 5.5): blend with the
+        # lagged field. Branching on the *presence* of a lagged field is
+        # config/topology branching, not a flow-value branch (AD-6).
+        kappa = metrics.kappa_m
+        if fz.kappa_lagged is not None:
+            kappa = (fz.kappa_relax * metrics.kappa_m
+                     + (1.0 - fz.kappa_relax) * fz.kappa_lagged)
+        kcos = kappa * np.cos(metrics.eps)
         leansin = dvm_dm * np.sin(metrics.eps)
 
         dists = []
