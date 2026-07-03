@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[test]"
+      - name: Import-direction check (ARCH-2 / AD-5)
+        run: python tools/check_imports.py
+      - name: AD-6 / smoothness lint
+        run: python tools/check_ad6.py
+      - name: Tests
+        run: pytest -q
