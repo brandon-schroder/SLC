@@ -112,10 +112,12 @@ class PerfectGas:
 
     # --- stagnation <-> static (isentropic) -------------------------------
     def stag_from_static(self, h, s, V):
+        """Isentropic stagnation state from a static state and speed (§3.7)."""
         h0 = h + 0.5 * V * V
         T0 = self.T(h0, s)
         p0 = self.p(h0, s)  # same entropy -> isentropic stagnation
         return StagState(h0=h0, s=s, T0=T0, p0=p0)
 
     def static_h_from_stag(self, h0, V):
+        """Inverse of :meth:`stag_from_static`: static enthalpy from h0 and speed (§3.7)."""
         return h0 - 0.5 * V * V
