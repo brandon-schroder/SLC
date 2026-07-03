@@ -102,10 +102,32 @@ These are not suggestions; violating them is a bug even if tests pass.
 - **M1** (geometry/grid: `WallCurve`, `FlowPath`/q-o construction,
   streamline init, metric evaluation) — closed. Acceptance gate
   (frozen-streamline master-ODE vs. analytic bend solution) passing.
+- **M0/M1 cleanup audit** — closed (6 commits on `main`, CI-green baseline).
+  Covered: repo/environment sanity, naming/layout vs. ARCH-2, test-provenance
+  re-check (`test_grid.py`/`test_grid_adjudication.py` split confirmed still
+  valid), spec-traceability spot-check, dead-code sweep, and an independent
+  `fluid`/`closures` adjudication suite
+  (`tests/test_fluid_closures_adjudication.py`) matching the
+  `test_grid_adjudication.py` precedent. No open items remain from this pass.
 - **M2** (residual assembler + classical driver, Tier 2 vs. analytic radial
-  equilibrium V1, grid-convergence check) — **next**. See ARCH-8 for the full
-  milestone list and ARCH-3.2/3.3 + §6.1 for the state/residual contracts M2
-  must implement.
+  equilibrium V1, grid-convergence check) — closed. Ran as four reviewed
+  sub-steps on `main`: (1) `transport/` — §3.3–3.5 conservation relations +
+  C¹ work/loss schedules (§3.6 mixing deferred to M8 per ARCH-8/ARCH-9);
+  (2) `assembly/` + `slcflow/types.py` — `FrozenInputs` as the single config
+  boundary, `ResidualAssembler` (RK2 master ODE over PCHIP distributions,
+  §5.3–5.4/§6.1 elimination form, A.7 capacity); (3) `drivers/classical.py`
+  + `diagnostics/` — §6.2 nested scheme, typed `SolveStatus` returns
+  (ARCH-6), all three §6.2.5 norms recorded; (4) `verification/` — V1
+  analytic-REE cases with independent dense references. Acceptance gate
+  passing: V1a–V1c regressions + grid-order check, observed order 1.94
+  (tolerances in Theory Manual Appendix C.1).
+- **M3** (full Tier 3 repositioning, V2/V3 green, Wilkinson constant
+  calibrated) — **next**. Entry work carried from M2 reviews: calibrate
+  `ClassicalConfig.wilkinson_c` (`[VERIFY]`, §6.4) on the free-vortex case;
+  replace the crossing-streamline PCHIP raise with a repositioning guard
+  (AD-10 — see the known-limitations note in `assembly/assembler.py`);
+  migrate the M1 frozen-streamline V2 gate tolerances from `test_grid.py`
+  into Appendix C.2 when the full V2 case ships.
 
 ## Commands
 
