@@ -477,4 +477,18 @@ Reference solutions: closed-form Vm(r) families (A.5 case 1) + dense 20001-point
 | | | positions | 2e-3 span | 7.0e-6 |
 | V1d grid convergence, V1c over $N_{sl} = 5, 9, 17$ | | observed order | > 1.7 | **1.94** (errors 1.40e-3 / 3.69e-4 / 9.55e-5) |
 
-Note: V1b's hub-Vm tolerance is the $N_{sl}=9$ nodal-trapezoid discretization error, not reference precision — the reference quadrature is deliberately independent. The M1 frozen-streamline V2 gate tolerances currently live in `tests/test_grid.py`; migrate them to C.2 when the full V2 case ships (M3).
+Note: V1b's hub-Vm tolerance is the $N_{sl}=9$ nodal-trapezoid discretization error, not reference precision — the reference quadrature is deliberately independent.
+
+### C.2 V2 — Curved annulus, full Tier 3 (bound at M3-2; `tests/test_v2_curved_annulus.py`)
+
+Reference: **planar-limit concentric-bend solution** (`slcflow/verification/v2_curved_annulus.py`) — meridional free vortex $V_m = A/R_{bend}$ with dense 1-D continuity positions, exact for bend-center machine radius $r_c \gg R_{bend}$; default $r_c = 400$ m with bend radii 0.2/0.5 m puts the $O(R/r_c)$ reference deviation below the comparison floor. The case is defined by $A$; $\dot m$ is derived from the reference. The frozen-streamline V2 gate (metrics + master-ODE only, coupled 2nd-order refinement) remains in `tests/test_grid.py` (M1).
+
+| Check | Grid | Tolerance | Measured (2026-07, M3-2) |
+|---|---|---|---|
+| central-third Vm vs. reference | $N_{sl}=9$, 7 st. | rtol 2e-2 | 1.0e-2 |
+| central-third positions | same | 6e-3 span | 2.6e-3 |
+| full residual vector at answer | same | 1e-7 of $\dot m/2\pi$ | — |
+| planar-limit family (central Vm err) | $r_c = 4/40/400$ | monotone, ≥4× total | 8.9e-2 / 1.4e-2 / 1.0e-2 |
+| reference floor, grid-independence | (5,5) and (17,13) | ≤ 2e-2 | 8.2e-3 / 8.6e-3 |
+
+Caveats (measured, M3-2): (i) the comparison window is the **central third** of the bend — spline end-condition error at the inflow/outflow stations contaminates a fixed *physical* length, so fixed station-count exclusions anti-converge under refinement; (ii) the residual ~1e-2 central disagreement is **grid- and $r_c$-independent** (tested to $r_c = 4000$): it is the boundary-development difference between the solved problem (flow boundaries at the bend ends) and the fully-developed reference vortex, not solver error. **[VERIFY: cross-check against an external potential-flow/CFD reference with straight inlet/exit duct extensions to close caveat (ii).]** Discretization-order evidence for the coupled machinery: M1 frozen-streamline gate (coupled refinement, order ≈ 2) + V1d (repositioning, order 1.94).

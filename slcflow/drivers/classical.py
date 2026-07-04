@@ -149,15 +149,30 @@ def _solve_qo(asm: ResidualAssembler, j, fields, v_hi, rtol, v_prev=None):
         return float(brentq(F_of, lo, grid[k_up], rtol=rtol))
 
 
-def _omega_sl(config: ClassicalConfig, fields: AssembledFields):
+def _omega_sl(config: ClassicalConfig, fields: AssembledFields,
+              curvature_on: bool = True):
     """Adaptive streamline relaxation factor (section 6.4, Wilkinson form):
     worst-case local (dm/dq)^2 aspect ratio times (1 - Mm^2), scaled by the
-    [VERIFY] constant and capped by the user maximum."""
+    [VERIFY] constant and capped by the user maximum.
+
+    The aspect factor is capped at 1: section 6.4 states the criterion is
+    *binding when dm < dq*, i.e. closely spaced q-o's demand extra damping
+    -- it never licenses relaxation above the base limit. Measured at M3-2:
+    letting it amplify (fine spanwise grids, dm > dq) re-excites the
+    odd-even mode at omega ~ 0.3+ regardless of n_sl. The full envelope
+    model is M3-3.
+
+    The throttle exists for the curvature-repositioning feedback loop; with
+    the curvature term inactive (Tier 1/2) repositioning is a plain fixed
+    point and runs at the user cap (config/tier branching, AD-1)."""
+    if not curvature_on:
+        return config.omega_sl_max
     dm = np.diff(fields.metrics.m, axis=1)          # (n_sl, n_qo-1)
     dq = np.diff(fields.q, axis=0)                  # (n_sl-1, n_qo)
     aspect2 = (dm[:-1, :] / dq[:, :-1]) ** 2        # per-cell worst pairing
     mm2 = float(np.max(fields.mach_m ** 2))
-    om = config.wilkinson_c * max(1.0 - mm2, 0.0) * float(np.min(aspect2))
+    om = (config.wilkinson_c * max(1.0 - mm2, 0.0)
+          * min(float(np.min(aspect2)), 1.0))
     return float(np.clip(om, 1e-3, config.omega_sl_max))
 
 
@@ -273,7 +288,8 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         fields = asm.split(pack(vm_q0, q_full[1:-1, :]))
 
         # (6.2.2.3) reposition streamlines: invert THE mass cumulative.
-        omega = _omega_sl(config, fields)
+        omega = _omega_sl(config, fields,
+                          curvature_on=fidelity.curvature_term > 0.0)
         q_target_cols = []
         for j in range(n_qo):
             cum = asm.mass_cumulative(j, fields.vm[:, j], fields)
