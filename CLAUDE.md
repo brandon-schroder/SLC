@@ -122,12 +122,33 @@ These are not suggestions; violating them is a bug even if tests pass.
   passing: V1a–V1c regressions + grid-order check, observed order 1.94
   (tolerances in Theory Manual Appendix C.1).
 - **M3** (full Tier 3 repositioning, V2/V3 green, Wilkinson constant
-  calibrated) — **next**. Entry work carried from M2 reviews: calibrate
-  `ClassicalConfig.wilkinson_c` (`[VERIFY]`, §6.4) on the free-vortex case;
-  replace the crossing-streamline PCHIP raise with a repositioning guard
-  (AD-10 — see the known-limitations note in `assembly/assembler.py`);
-  migrate the M1 frozen-streamline V2 gate tolerances from `test_grid.py`
-  into Appendix C.2 when the full V2 case ships.
+  calibrated) — closed. Ran as four reviewed sub-steps on `main`:
+  (1) Tier-3 stabilization — §5.5 curvature lag wired as lagged data;
+  measured finding: the lag is *mandatory* (not optional) whenever the
+  curvature term is active, else the streamwise odd-even mode diverges at
+  any ω; crossing-streamline carryover resolved structurally (classical
+  repositioning is a convex blend of monotone vectors; Newton-side guard
+  is M5). (2) V2 curved annulus vs. planar-limit concentric reference
+  (Appendix C.2; `[VERIFY]` remains for an external potential-flow
+  cross-check with duct extensions). (3) §6.4 `[VERIFY]` resolved (manual
+  v0.3): measured envelope is ω ≤ ~7.3·(Δm_min/L_qo)^1.5 — *not* the
+  literature (Δm/Δq)² aspect form; shipped `wilkinson_c = 4.4` (0.6×
+  margin); envelope + rerunnable study in Appendix C.3 /
+  `tools/calibrate_wilkinson.py`. (4) V3 tier consistency: Tier 2 ≡ Tier 3
+  bit-for-bit on straight-annulus vortex cases, asserted at 1e-10 with a
+  curved-path non-vacuousness guard (Appendix C.4).
+- **M4** (axial-compressor correlation set + Tier 1 mode, V4/V5) —
+  **next**. First real content for `closures/` (Lieblein incidence/
+  deviation, Koch–Smith or Aungier losses per §7.1) behind the ARCH-4.2
+  interfaces, plus the `machine/` facade with the n_sl = 1 Tier-1 path
+  (lifts the `ResidualAssembler` n_sl ≥ 2 constraint). Items that come due
+  here, carried from M2/M3 reviews: the Tier-1 mass-average clause of V3
+  (Appendix C.4); the `rvt_le` consistency integration test for the
+  closure-fed transport path (§3.4); moving `t_stations` validation into
+  `ClosureFields`/`FrozenInputs` when in-blade schedules become closure
+  data; an `assert_valid_schedule` contract-test helper (§7.3.4) with the
+  first non-default `DistributionSchedule`; Appendix B conversion checks
+  charged at row exit (`[VERIFY]` per correlation, §4.4).
 
 ## Commands
 
