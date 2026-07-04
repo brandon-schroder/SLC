@@ -136,15 +136,20 @@ class _V1Base:
                        vm_dense=vm)
 
     # --- solver invocation ----------------------------------------------
-    def solve(self, n_sl, config: ClassicalConfig = ClassicalConfig()
-              ) -> ClassicalResult:
+    def solve(self, n_sl, config: ClassicalConfig = ClassicalConfig(),
+              fidelity: FidelityConfig = None) -> ClassicalResult:
+        """Solve at Tier 2 by default; V3 (tier consistency, section 8)
+        passes Tier 3 explicitly — on this straight annulus the Tier-3
+        exclusive terms must vanish at the fixed point (A.5 check 3)."""
         topo = annulus_topology(self.r0, self.r1, self.length, n_sl,
                                 self.n_stations)
         exact = self.exact()
         inlet = TransportFields(
             h0=np.full(n_sl, self.h0), s=np.full(n_sl, self.s),
             rvt=self.inlet_rvt(topo.psi, exact))
-        return solve_classical(topo, self.gas, FidelityConfig.tier2(),
+        if fidelity is None:
+            fidelity = FidelityConfig.tier2()
+        return solve_classical(topo, self.gas, fidelity,
                                MassFlowSpec(self.mdot), inlet, config=config)
 
 

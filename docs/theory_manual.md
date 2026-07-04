@@ -509,3 +509,7 @@ V2 curved-annulus case, Tier 3, κ-lag 0.3, fixed-ω sweep; ω\* = largest conve
 | (9, 19) | 0.058 | < 0.10 (0.10 diverges) | 0.10 |
 
 Key facts: thresholds independent of $N_{sl}$ (5/9/17 identical at fixed stations); the fitted model passes within 2% of the measured-unstable (9,19) point, hence the mandatory 0.6× margin in the shipped default $K = 4.4$; without the §5.5 κ-lag the mode diverges at any ω (measured at 13 stations down to ω = 0.02). All measurements at peak $M_m \approx 0.3$; the $(1-M_m^2)$ factor is retained from theory, not independently calibrated. Rerun the tool after any repositioning/curvature-lag change.
+
+### C.4 V3 — Tier consistency (bound at M3-4; `tests/test_v3_tier_consistency.py`)
+
+Section 8 requirement on the free-vortex (and forced-vortex) uniform-inlet straight annulus, $N_{sl} = 9$: Tier 2 vs. Tier 3 measured **bit-for-bit identical** (2026-07, M3-4) — the Tier-3-exclusive terms multiply exactly-zero $\kappa_m$/$\varepsilon$ and the relaxation paths coincide at the cap. Asserted at 1e-10 (far below discretization) so hidden tier branching fails loudly; a non-vacuousness guard checks the tiers *do* diverge on a curved path. The Tier-1 mass-average clause is deferred to M4 (needs the $N_{sl}=1$ machine facade and closure evaluation).
