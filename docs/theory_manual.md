@@ -1,6 +1,6 @@
 # Streamline Curvature Throughflow Solver — Theory Manual
 
-**Status:** Draft v0.2 — formulation baseline; master-equation derivation and loss-conversion appendices completed. Changelog: v0.2 corrects the sign of the blade-force term in §3.1 ($+f_{b,q} \to -f_{b,q}$, see A.5) and adds the q-o orientation convention (A.1.1).
+**Status:** Draft v0.3 — formulation baseline; master-equation derivation and loss-conversion appendices completed. Changelog: v0.2 corrects the sign of the blade-force term in §3.1 ($+f_{b,q} \to -f_{b,q}$, see A.5) and adds the q-o orientation convention (A.1.1). v0.3 resolves the §6.4 relaxation-criterion [VERIFY]: the implementation's measured stability envelope follows $(\Delta m / L_{qo})^{3/2}$, not Wilkinson's $(\Delta m/\Delta q)^2$ aspect form; calibrated constants and the envelope data in Appendix C.3.
 **Scope:** Reduced-order aero-thermodynamic modeling of axial, radial, and mixed-flow compressors and turbines via a single streamline-curvature (SLC) kernel with degenerate meanline and radial-equilibrium modes.
 
 Items marked **[VERIFY]** are constants, signs, or model details that must be checked against the primary sources in the reference library before implementation is considered frozen.
@@ -241,9 +241,11 @@ Assemble $\mathbf{R}(\mathbf{x})$ exactly as above but solve simultaneously: New
 
 ### 6.4 Stability: streamline relaxation (Wilkinson criterion)
 
-Streamline repositioning is unstable at large relaxation factors because curvature feeds back through second derivatives. The maximum stable factor scales as
+Streamline repositioning is unstable at large relaxation factors because curvature feeds back through second derivatives. Wilkinson's (1970) analysis gives the scaling
 $$\omega_{sl} \;\lesssim\; C\,\big(1 - M_m^2\big)\left(\frac{\Delta m}{\Delta q}\right)^{2} \quad (\text{binding when } \Delta m < \Delta q),$$
-i.e., closely spaced q-o's relative to streamline spacing demand heavy damping, and the margin vanishes as meridional Mach → 1. Implement $\omega_{sl}$ as an adaptive per-iteration value from the local worst-case grid aspect ratio and $M_m$, capped by a user maximum. **[VERIFY constant $C$ and exact form against Wilkinson (1970) and Aungier's damping-factor formula; calibrate on the free-vortex test case.]**
+for his discretization. **Calibrated result for this implementation (M3-3, Appendix C.3):** the measured envelope of the dominant instability — a streamwise odd-even mode of the per-q-o continuity solutions, amplified into curvature noise by the streamline fit — depends on *station density alone* (thresholds identical for $N_{sl} = 5, 9, 17$ at fixed stations) and follows
+$$\omega_{sl} \;\le\; K\,\big(1 - M_m^2\big)\left(\frac{\Delta m_{min}}{L_{qo}}\right)^{3/2}, \qquad K_{threshold} \approx 7.3,\; K_{default} = 4.4\;(0.6\times\text{margin}),$$
+with the §5.5 curvature lag at 0.3 (without which the mode diverges at *any* $\omega_{sl}$ on station-dense curved paths — the lag is mandatory, not optional, whenever the curvature term is active). The Wilkinson aspect form is deliberately not used: it over-throttles coarse spanwise grids and, uncapped, licenses divergent factors on fine ones (both measured). Implement $\omega_{sl}$ per-iteration from this envelope, capped by a user maximum; recalibrate with `tools/calibrate_wilkinson.py` after any change to repositioning or curvature-lag machinery. The exponent rests on one geometry family — revisit if V5/V7-class cases misbehave.
 
 ### 6.5 Transonic branch selection
 
@@ -492,3 +494,18 @@ Reference: **planar-limit concentric-bend solution** (`slcflow/verification/v2_c
 | reference floor, grid-independence | (5,5) and (17,13) | ≤ 2e-2 | 8.2e-3 / 8.6e-3 |
 
 Caveats (measured, M3-2): (i) the comparison window is the **central third** of the bend — spline end-condition error at the inflow/outflow stations contaminates a fixed *physical* length, so fixed station-count exclusions anti-converge under refinement; (ii) the residual ~1e-2 central disagreement is **grid- and $r_c$-independent** (tested to $r_c = 4000$): it is the boundary-development difference between the solved problem (flow boundaries at the bend ends) and the fully-developed reference vortex, not solver error. **[VERIFY: cross-check against an external potential-flow/CFD reference with straight inlet/exit duct extensions to close caveat (ii).]** Discretization-order evidence for the coupled machinery: M1 frozen-streamline gate (coupled refinement, order ≈ 2) + V1d (repositioning, order 1.94).
+
+### C.3 §6.4 relaxation-envelope calibration (M3-3; `tools/calibrate_wilkinson.py`)
+
+V2 curved-annulus case, Tier 3, κ-lag 0.3, fixed-ω sweep; ω\* = largest converged factor (`x` = divergence, `m` = >150 iterations without divergence, i.e. slow, stability-safe):
+
+| Grid $(N_{sl}, N_{st})$ | $\Delta m_{min}/L_{qo}$ | ω\* measured | model $7.3\,x^{1.5}$ |
+|---|---|---|---|
+| (9, 5) | 0.262 | ≥ 0.70 (cap) | 0.98 |
+| (9, 7) / (17, 7) | 0.175 | ≥ 0.70 (cap) | 0.53 |
+| (9, 10) | 0.116 | 0.28 | 0.29 |
+| (9, 13) / (5, 13) | 0.087 | 0.20 | 0.19 |
+| (17, 13) | 0.087 | 0.14–0.20 (0.20 marginal) | 0.19 |
+| (9, 19) | 0.058 | < 0.10 (0.10 diverges) | 0.10 |
+
+Key facts: thresholds independent of $N_{sl}$ (5/9/17 identical at fixed stations); the fitted model passes within 2% of the measured-unstable (9,19) point, hence the mandatory 0.6× margin in the shipped default $K = 4.4$; without the §5.5 κ-lag the mode diverges at any ω (measured at 13 stations down to ω = 0.02). All measurements at peak $M_m \approx 0.3$; the $(1-M_m^2)$ factor is retained from theory, not independently calibrated. Rerun the tool after any repositioning/curvature-lag change.

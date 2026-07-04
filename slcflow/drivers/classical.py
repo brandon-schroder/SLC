@@ -53,12 +53,12 @@ class ClassicalConfig:
     tol_cont: float = 1e-9      # max_j |F_j| / mdot
     tol_closure: float = 1e-9   # closure-update norm (static closures: 0)
     omega_sl_max: float = 0.7   # user cap on the relaxation factor
-    # Section 6.4 Wilkinson constant. Provisionally calibrated at M3-1 on
-    # the V2 bend: the measured instability threshold (with the section 5.5
-    # kappa lag at 0.3) is ~0.3 x the local aspect factor; 0.15 keeps ~50%
-    # margin and was validated at two station densities. [VERIFY] the
-    # formal stability-envelope sweep is M3-3.
-    wilkinson_c: float = 0.15
+    # Section 6.4 relaxation constant, CALIBRATED at M3-3 (Appendix C.3,
+    # tools/calibrate_wilkinson.py): omega = wilkinson_c * (1 - Mm^2) *
+    # (dm_min/L_qo)^1.5 with the kappa lag at 0.3. Measured threshold
+    # constant ~7.3; 4.4 is the 0.6x-margin default. Recalibrate (rerun the
+    # tool) after any change to repositioning or curvature-lag machinery.
+    wilkinson_c: float = 4.4
     # Section 5.5 curvature under-relaxation. None resolves per tier: 0.3
     # when the curvature term is active ("on by default in Tier 3"), 1.0
     # (off) otherwise. Without it the curvature-repositioning feedback is
@@ -151,28 +151,31 @@ def _solve_qo(asm: ResidualAssembler, j, fields, v_hi, rtol, v_prev=None):
 
 def _omega_sl(config: ClassicalConfig, fields: AssembledFields,
               curvature_on: bool = True):
-    """Adaptive streamline relaxation factor (section 6.4, Wilkinson form):
-    worst-case local (dm/dq)^2 aspect ratio times (1 - Mm^2), scaled by the
-    [VERIFY] constant and capped by the user maximum.
+    """Adaptive streamline relaxation factor (section 6.4, as CALIBRATED at
+    M3-3 -- Appendix C.3, ``tools/calibrate_wilkinson.py``):
 
-    The aspect factor is capped at 1: section 6.4 states the criterion is
-    *binding when dm < dq*, i.e. closely spaced q-o's demand extra damping
-    -- it never licenses relaxation above the base limit. Measured at M3-2:
-    letting it amplify (fine spanwise grids, dm > dq) re-excites the
-    odd-even mode at omega ~ 0.3+ regardless of n_sl. The full envelope
-    model is M3-3.
+        omega = wilkinson_c * (1 - Mm^2) * (dm_min / L_qo)^1.5
+
+    The measured stability envelope of this implementation's odd-even
+    curvature-repositioning mode tracks the *station density* alone --
+    thresholds are identical for n_sl = 5, 9, 17 at fixed stations -- so
+    Wilkinson's literature (dm/dq)^2 aspect form is deliberately NOT used
+    (it both over-throttles coarse grids and, un-capped, licenses divergent
+    factors on fine spanwise grids; both measured). Exponent 1.5 and the
+    threshold constant ~7.3 are fitted to the C.3 envelope;
+    ``wilkinson_c = 4.4`` is the 0.6x-margin default (the fit passes within
+    2% of a measured-unstable point, so margin is not optional).
 
     The throttle exists for the curvature-repositioning feedback loop; with
     the curvature term inactive (Tier 1/2) repositioning is a plain fixed
     point and runs at the user cap (config/tier branching, AD-1)."""
     if not curvature_on:
         return config.omega_sl_max
-    dm = np.diff(fields.metrics.m, axis=1)          # (n_sl, n_qo-1)
-    dq = np.diff(fields.q, axis=0)                  # (n_sl-1, n_qo)
-    aspect2 = (dm[:-1, :] / dq[:, :-1]) ** 2        # per-cell worst pairing
+    dm_min = float(np.min(np.diff(fields.metrics.m, axis=1)))
+    span = float(np.max(fields.metrics.qo_length))
     mm2 = float(np.max(fields.mach_m ** 2))
     om = (config.wilkinson_c * max(1.0 - mm2, 0.0)
-          * min(float(np.min(aspect2)), 1.0))
+          * (dm_min / span) ** 1.5)
     return float(np.clip(om, 1e-3, config.omega_sl_max))
 
 
