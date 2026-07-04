@@ -137,18 +137,44 @@ These are not suggestions; violating them is a bug even if tests pass.
   `tools/calibrate_wilkinson.py`. (4) V3 tier consistency: Tier 2 ≡ Tier 3
   bit-for-bit on straight-annulus vortex cases, asserted at 1e-10 with a
   curved-path non-vacuousness guard (Appendix C.4).
-- **M4** (axial-compressor correlation set + Tier 1 mode, V4/V5) —
-  **next**. First real content for `closures/` (Lieblein incidence/
-  deviation, Koch–Smith or Aungier losses per §7.1) behind the ARCH-4.2
-  interfaces, plus the `machine/` facade with the n_sl = 1 Tier-1 path
-  (lifts the `ResidualAssembler` n_sl ≥ 2 constraint). Items that come due
-  here, carried from M2/M3 reviews: the Tier-1 mass-average clause of V3
-  (Appendix C.4); the `rvt_le` consistency integration test for the
-  closure-fed transport path (§3.4); moving `t_stations` validation into
-  `ClosureFields`/`FrozenInputs` when in-blade schedules become closure
-  data; an `assert_valid_schedule` contract-test helper (§7.3.4) with the
-  first non-default `DistributionSchedule`; Appendix B conversion checks
-  charged at row exit (`[VERIFY]` per correlation, §4.4).
+- **M4** (axial-compressor correlation set + Tier 1 mode, V4/V5) — closed.
+  Ran as five reviewed sub-steps on `main`: (1) `closures/interfaces.py`
+  (ARCH-4.2 protocol layer) + `simple.py` prescribed closures + closure-fed
+  blade-row wiring in the driver (AD-4 lagged eval, §6.2.2.4; the carried
+  `rvt_le` consistency test landed here). (2) `closures/conversions.py` —
+  Appendix B loss→entropy conversions (B.1 rotor re-referencing, B.2/B.3/B.4)
+  with the assert-don't-clamp KE guard. (3) `geometry/bladerow.py`
+  (`ParamRowGeometry`, C¹-in-span PCHIP) + `closures/axial_compressor/
+  lieblein.py` — Lieblein/SP-36 incidence/deviation (Aungier fits), and the
+  §6.2.4 closure under-relaxation discovered *necessary* here (the swirl↔
+  continuity Picard loop diverges otherwise). (4) `axial_compressor/loss.py`
+  — equivalent-diffusion profile loss + `LIEBLEIN_NACA65` CorrelationSet;
+  measured `closure_relax = 0.25` (0.5 diverges), §7.3.2 ω̄ ceiling to keep
+  B.2 in-domain, and an AD-10 gap closed (negative-Vm repositioning → typed
+  `NUMERICAL_FAILURE`). (5) `machine/` facade (ARCH-5.5,
+  `Machine.evaluate → PerformanceResult`) + the n_sl = 1 **Tier-1 meanline**
+  (lifts the `ResidualAssembler` n_sl ≥ 2 constraint; one-point area rule as
+  the coarsest §5.4 quadrature, repositioning off — one kernel, no tier
+  branch per AD-1), the V3 Tier-1 mass-average clause (Appendix C.4), and the
+  V5 axial-compressor entry point. **V4/V5 status is structural** (anchors,
+  trends, bands, C¹ sweeps, end-to-end convergence): point-by-point
+  published-figure / NASA-data reproduction and speedline/choke traversal
+  are `[VERIFY]`, blocked on the reference-library correlation calibration
+  (every Lieblein coefficient is `[VERIFY]`) and the M5 continuation driver.
+  Still-open carryovers deferred past M4 (not needed until in-blade/mixing
+  data exists): moving `t_stations` validation into `ClosureFields`/
+  `FrozenInputs` for in-blade schedules; an `assert_valid_schedule`
+  contract-test helper (§7.3.4) with the first non-default
+  `DistributionSchedule`.
+- **M5** (Newton driver + continuation + BC switching, V9 choke traversal on
+  the V5 case) — **next**. See ARCH-5.3/5.4 and ARCH-8. Brings the
+  `scipy`-style Newton driver over `ResidualAssembler.residual` (colored-FD
+  Jacobian, warm start mandatory), the continuation/map driver (§6.7,
+  choke→stall ordering, driver escalation), and `BackPressureSpec`
+  BC-switching (the residual form is stubbed in `types.py`/`FrozenInputs` and
+  rejected until now). Closes the V5 `[VERIFY]` speedline/choke items and
+  binds V9 operability. The `machine/` facade's `warm_start` argument and the
+  reproducer-bundle serialization (ARCH-6) are the seams already left for it.
 
 ## Commands
 

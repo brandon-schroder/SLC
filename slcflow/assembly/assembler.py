@@ -39,6 +39,25 @@ __all__ = ["AssembledFields", "ResidualAssembler"]
 
 _TWO_PI = 2.0 * np.pi
 _CAPACITY_SCAN = 96      # coarse-scan points for the A.7 capacity search
+_DENSE_AREA = 400        # dense samples for the Tier-1 area measure (G-5 rule)
+
+
+class _Const:
+    """A constant "interpolant" for the Tier-1 meanline (section 8): with a
+    single mid-``psi`` node there is nothing to interpolate *across* span, and
+    the master ODE is trivial (one node -> the integrator's node-to-node loop
+    runs zero times and never evaluates these). Built anyway so the
+    ``_QoDistributions`` shape is uniform across tiers (no parallel path,
+    AD-1); ``derivative`` returns the zero constant."""
+
+    def __init__(self, c):
+        self._c = float(c)
+
+    def __call__(self, q):
+        return np.full(np.shape(q), self._c) if np.ndim(q) else self._c
+
+    def derivative(self):
+        return _Const(0.0)
 
 
 @dataclass(frozen=True)
@@ -87,12 +106,31 @@ class ResidualAssembler:
     """
 
     def __init__(self, frozen: FrozenInputs):
-        if frozen.n_sl < 2:
+        # n_sl == 1 is the Tier-1 meanline (section 8): a single mid-psi
+        # streamline, walls entering only as the q-o LENGTH measure. n_sl >= 2
+        # is the walls-plus-interior form (section 6.1). Both run THE SAME
+        # assembly below (AD-1) — the only differences are the coarsest
+        # quadrature and a trivial one-node ODE, selected by topology integer,
+        # never by a flow value. FrozenInputs already validated q_fixed for
+        # the n_sl == 1 case at the config boundary.
+        if frozen.n_sl < 1:
             raise ConfigError(
-                "ResidualAssembler needs n_sl >= 2 (wall streamlines fixed "
-                "to the annulus, section 6.1); the Tier-1 n_sl = 1 mode "
-                "arrives with the machine facade (M4)")
+                f"ResidualAssembler needs n_sl >= 1, got {frozen.n_sl}")
         self.frozen = frozen
+        # Tier-1 meanline area measure: the geometric ``integral of r dq`` per
+        # q-o (the annulus area / 2*pi), the frozen part of the mass integral
+        # the meanline flux multiplies (section 8). Built with THE shared
+        # quadrature rule on a dense geometry sample — the same rule (and the
+        # same dense-r cumulative) that ``grid.initialize_positions`` places
+        # the mean line with, so the flux point and its measure are consistent
+        # (section 5.4). Geometry is frozen (AD-8), so this is computed once.
+        self._area_measure = None
+        if frozen.n_sl == 1:
+            self._area_measure = np.array([
+                float(cumulative(qo.point(
+                    np.linspace(0.0, qo.length, _DENSE_AREA))[1],
+                    np.linspace(0.0, qo.length, _DENSE_AREA))[-1])
+                for qo in frozen.topology.flowpath.qo_curves])
 
     # ------------------------------------------------------------------
     # Preparation: x -> geometry, metrics, interpolants
@@ -100,8 +138,16 @@ class ResidualAssembler:
     def _full_q(self, q_interior):
         """Nodal q with wall rows attached: walls sit at ``q = 0`` and
         ``q = qo_length`` (section 6.1; which physical wall is which is the
-        A.1.1 orientation, never assumed here — AD-9)."""
+        A.1.1 orientation, never assumed here — AD-9).
+
+        Tier-1 exception (section 8): the meanline has no wall streamlines in
+        the state — the single mid-``psi`` node sits at the fixed area-rule
+        position (``frozen.q_fixed``), and the walls enter only through the
+        q-o LENGTH measure in :meth:`mass_cumulative`. Returning the single
+        node here is what makes the master ODE trivial."""
         topo = self.frozen.topology
+        if topo.n_sl == 1:
+            return self.frozen.q_fixed
         lengths = np.array([qo.length for qo in topo.flowpath.qo_curves])
         n_qo = topo.n_qo
         return np.concatenate([np.zeros((1, n_qo)), q_interior,
@@ -128,8 +174,14 @@ class ResidualAssembler:
         for j, qo in enumerate(fz.topology.flowpath.qo_curves):
             qn = q_full[:, j]
 
-            def interp(vals):
-                return PchipInterpolator(qn, vals, extrapolate=True)
+            def interp(vals, _qn=qn):
+                # Tier-1 meanline: a single span node -> no PCHIP is
+                # constructible (needs >= 2 nodes) and none is needed (the
+                # one-node ODE never evaluates it). A constant carries the
+                # nodal value with a zero derivative (section 8).
+                if _qn.size == 1:
+                    return _Const(vals[0])
+                return PchipInterpolator(_qn, vals, extrapolate=True)
 
             p_h0 = interp(fz.transported.h0[:, j])
             p_s = interp(fz.transported.s[:, j])
@@ -197,6 +249,18 @@ class ResidualAssembler:
         vt = fz.transported.rvt[:, j] / r
         h = fz.transported.h0[:, j] - 0.5 * (vm * vm + vt * vt)
         rho = fz.fluid.rho(h, fz.transported.s[:, j])
+        if fz.n_sl == 1:
+            # Tier-1 meanline (section 8): the wall-to-wall mass integral
+            # factored as [flux]_mean * (integral of r dq) — the flux
+            # (WITHOUT the r weight) evaluated at the single mid-psi node,
+            # times the frozen geometric area measure. This is the textbook
+            # meanline area rule and the coarsest instance of THE section 5.4
+            # quadrature, not a separate rule; the length-1 cumulative keeps
+            # continuity_F/qo_capacity/residual reading ``[-1]`` exactly as at
+            # higher n_sl.
+            flux = (rho * vm * np.cos(fields.metrics.eps[:, j])
+                    * (1.0 - fz.closures.blockage[:, j]))
+            return flux * self._area_measure[j]
         integrand = (rho * vm * np.cos(fields.metrics.eps[:, j])
                      * (1.0 - fz.closures.blockage[:, j]) * r)
         return cumulative(integrand, fields.q[:, j])

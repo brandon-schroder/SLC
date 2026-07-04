@@ -510,6 +510,15 @@ V2 curved-annulus case, Tier 3, κ-lag 0.3, fixed-ω sweep; ω\* = largest conve
 
 Key facts: thresholds independent of $N_{sl}$ (5/9/17 identical at fixed stations); the fitted model passes within 2% of the measured-unstable (9,19) point, hence the mandatory 0.6× margin in the shipped default $K = 4.4$; without the §5.5 κ-lag the mode diverges at any ω (measured at 13 stations down to ω = 0.02). All measurements at peak $M_m \approx 0.3$; the $(1-M_m^2)$ factor is retained from theory, not independently calibrated. Rerun the tool after any repositioning/curvature-lag change.
 
-### C.4 V3 — Tier consistency (bound at M3-4; `tests/test_v3_tier_consistency.py`)
+### C.4 V3 — Tier consistency (bound at M3-4 / M4-5; `tests/test_v3_tier_consistency.py`)
 
-Section 8 requirement on the free-vortex (and forced-vortex) uniform-inlet straight annulus, $N_{sl} = 9$: Tier 2 vs. Tier 3 measured **bit-for-bit identical** (2026-07, M3-4) — the Tier-3-exclusive terms multiply exactly-zero $\kappa_m$/$\varepsilon$ and the relaxation paths coincide at the cap. Asserted at 1e-10 (far below discretization) so hidden tier branching fails loudly; a non-vacuousness guard checks the tiers *do* diverge on a curved path. The Tier-1 mass-average clause is deferred to M4 (needs the $N_{sl}=1$ machine facade and closure evaluation).
+Section 8 requirement on the free-vortex (and forced-vortex) uniform-inlet straight annulus, $N_{sl} = 9$: Tier 2 vs. Tier 3 measured **bit-for-bit identical** (2026-07, M3-4) — the Tier-3-exclusive terms multiply exactly-zero $\kappa_m$/$\varepsilon$ and the relaxation paths coincide at the cap. Asserted at 1e-10 (far below discretization) so hidden tier branching fails loudly; a non-vacuousness guard checks the tiers *do* diverge on a curved path.
+
+**Tier-1 mass-average clause (bound at M4-5).** With the $N_{sl}=1$ meanline now assembling — the one-point area rule $\dot m_j = 2\pi\,[\rho V_m \cos\varepsilon\,(1-B)]_{\psi=0.5}\int r\,dq$, the coarsest instance of the §5.4 quadrature, evaluated at the fixed area-rule mean line (repositioning off) — the meanline $V_m$ is required to equal the mass-flux-weighted ($\rho V_m \cos\varepsilon\,r$) span average of the Tier-2 field to closure-evaluation error. On the prescribed V1 cases the closures are trivial, so the residue is purely the meanline quadrature error.
+
+| Case ($N_{sl}=1$ vs. $N_{sl}=9$) | Check | Tolerance | Measured (2026-07, M4-5) |
+|---|---|---|---|
+| V1b free vortex (uniform $V_m$) | meanline $V_m$ vs. mass-avg Tier 2 | rtol 1e-3 | 8.3e-4 |
+| V1c forced vortex ($V_m(r)$ varies) | meanline $V_m$ vs. mass-avg Tier 2 | rtol 2e-3 | 1.34e-3 |
+
+The forced-vortex residue is larger because its $V_m$ genuinely varies across span (∝ the family $V_m^2 = V_{m0}^2 - 2\Omega_f^2(r^2-r_0^2)$), so the one-point rule has a real profile to miss; the free vortex is spanwise-uniform and residue is the density/$r$-weighting curvature alone. Both are the meanline's own discretization, not solver error — the same $N_{sl}=1$ path is one assembler with no tier branch (AD-1), verified by `test_tier1_is_pure_data_switch_not_a_code_path` (V5).

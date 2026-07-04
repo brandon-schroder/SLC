@@ -141,10 +141,34 @@ def test_frozen_inputs_validation():
                      closures=ClosureFields(np.zeros((5, topo.n_qo))))
 
 
-def test_assembler_rejects_single_streamline():
+def test_tier1_meanline_requires_q_fixed():
+    # Tier 1 (n_sl = 1, section 8) is now supported, but the fixed mean-line
+    # position is frozen data (repositioning off), validated at the config
+    # boundary (AD-10): omitting q_fixed raises.
     topo = GridTopology(cylinder_path(), n_sl=1)
-    with pytest.raises(ConfigError, match="n_sl >= 2"):
-        ResidualAssembler(make_frozen(topo))
+    with pytest.raises(ConfigError, match="q_fixed"):
+        make_frozen(topo)
+
+
+def test_tier1_meanline_assembles_single_node():
+    # With q_fixed supplied, the assembler builds the single mid-psi node and
+    # the master ODE is trivial: Vm along the (one-node) q-o is exactly the
+    # boundary value, and the residual has n_qo continuity rows only (no
+    # interior position rows).
+    topo = GridTopology(cylinder_path(), n_sl=1)
+    q_fixed = initialize_positions(topo)           # area-rule mean line
+    fz = FrozenInputs(
+        topology=topo, fluid=GAS, fidelity=FidelityConfig.tier2(),
+        spec=MassFlowSpec(10.0),
+        transported=uniform_transport(1, topo.n_qo, rvt=8.0),
+        closures=ClosureFields(np.zeros((1, topo.n_qo))), q_fixed=q_fixed)
+    asm = ResidualAssembler(fz)
+    x = pack(np.full(topo.n_qo, 90.0), np.zeros((0, topo.n_qo)))
+    fields = asm.split(x)
+    assert fields.vm.shape == (1, topo.n_qo)
+    np.testing.assert_allclose(fields.vm[0, :], 90.0)   # trivial one-node ODE
+    r = asm.residual(x)
+    assert r.shape == (topo.n_qo,)                        # no position rows
 
 
 # --------------------------------------------------------------------------

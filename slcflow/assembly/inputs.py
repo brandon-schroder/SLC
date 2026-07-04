@@ -88,6 +88,13 @@ class FrozenInputs:
         when a lagged field is supplied. ``kappa_relax = 1`` (default) or
         ``kappa_lagged = None`` disables the blend. Curvature is the noise
         amplifier of SLC; drivers pass the previous iterate's field here.
+    q_fixed : the ``(1, n_qo)`` fixed mean-line q-positions for the Tier-1
+        meanline (``n_sl = 1``, section 8): repositioning is off, so the
+        single mid-``psi`` streamline sits at the area-rule position, which
+        is *not* a state variable and therefore enters as frozen data. The
+        driver supplies ``initialize_positions(topology)``. Required when
+        ``n_sl == 1`` and ignored otherwise (walls-plus-interior tiers rebuild
+        their positions from ``x``).
     metrics_config : streamline-fit settings forwarded to the grid layer.
     """
 
@@ -100,6 +107,7 @@ class FrozenInputs:
     vm_lagged: np.ndarray = None
     kappa_lagged: np.ndarray = None
     kappa_relax: float = 1.0
+    q_fixed: np.ndarray = None
     metrics_config: MetricsConfig = field(default_factory=MetricsConfig)
 
     def __post_init__(self):
@@ -132,6 +140,20 @@ class FrozenInputs:
                 raise ConfigError(
                     f"kappa_lagged shape {kl.shape} != (n_sl, n_qo) = {shape}")
             object.__setattr__(self, "kappa_lagged", kl)
+        # Tier-1 meanline (section 8): the fixed mean-line position is frozen
+        # data, not state. Validate it here at the config boundary (AD-10) so
+        # the assembler's split() never has to.
+        if self.topology.n_sl == 1:
+            if self.q_fixed is None:
+                raise ConfigError(
+                    "Tier-1 meanline (n_sl = 1) requires q_fixed, the "
+                    "area-rule mean-line position (section 8, repositioning "
+                    "off); the driver supplies initialize_positions(topology)")
+            qf = np.asarray(self.q_fixed, dtype=float)
+            if qf.shape != shape:
+                raise ConfigError(
+                    f"q_fixed shape {qf.shape} != (n_sl, n_qo) = {shape}")
+            object.__setattr__(self, "q_fixed", qf)
 
     @property
     def n_sl(self) -> int:

@@ -5,7 +5,10 @@ nothing in the kernel imports this package."""
 from .v1_analytic_ree import (V1Exact, V1ForcedVortex, V1FreeVortex,
                               annulus_topology)
 from .v2_curved_annulus import V2CurvedAnnulus, V2Exact
-from .v3_tier_consistency import v3_case_pair
+from .v3_tier_consistency import (mass_averaged_vm, v3_case_pair,
+                                  v3_tier1_pair)
+from .v5_axial_compressor import V5AxialRotor
 
 __all__ = ["V1Exact", "V1ForcedVortex", "V1FreeVortex", "V2CurvedAnnulus",
-           "V2Exact", "annulus_topology", "v3_case_pair"]
+           "V2Exact", "V5AxialRotor", "annulus_topology", "mass_averaged_vm",
+           "v3_case_pair", "v3_tier1_pair"]

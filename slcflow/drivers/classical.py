@@ -390,6 +390,7 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                               vm_lagged=vm_lagged,
                               kappa_lagged=kappa_prev,
                               kappa_relax=kappa_relax,
+                              q_fixed=q_full if n_sl == 1 else None,
                               metrics_config=metrics_config)
         asm = ResidualAssembler(frozen)
         x = pack(vm_q0, q_full[1:-1, :])
@@ -428,22 +429,30 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         fields = asm.split(pack(vm_q0, q_full[1:-1, :]))
 
         # (6.2.2.3) reposition streamlines: invert THE mass cumulative.
-        omega = _omega_sl(config, fields,
-                          curvature_on=fidelity.curvature_term > 0.0)
-        try:
-            q_target_cols = []
-            for j in range(n_qo):
-                cum = asm.mass_cumulative(j, fields.vm[:, j], fields)
-                q_target_cols.append(invert_cumulative(
-                    fields.q[:, j], cum, topology.psi * cum[-1]))
-        except ValueError as exc:
-            # Negative mass flux somewhere along a q-o (a negative-Vm
-            # transient): typed status, never a raw exception (AD-10).
-            status, reason = SolveStatus.NUMERICAL_FAILURE, (
-                f"repositioning failed at outer iteration {it}: {exc}")
-            break
-        q_target = np.stack(q_target_cols, axis=1)
-        q_next = q_full + omega * (q_target - q_full)   # walls map to selves
+        # Tier-1 meanline (n_sl = 1, section 8): repositioning is OFF — the
+        # single mid-psi streamline is fixed at its area-rule position, so
+        # there is nothing to invert (a one-node cumulative is degenerate).
+        # This is a topology no-op, not a tier branch in the physics (AD-1).
+        if n_sl > 1:
+            omega = _omega_sl(config, fields,
+                              curvature_on=fidelity.curvature_term > 0.0)
+            try:
+                q_target_cols = []
+                for j in range(n_qo):
+                    cum = asm.mass_cumulative(j, fields.vm[:, j], fields)
+                    q_target_cols.append(invert_cumulative(
+                        fields.q[:, j], cum, topology.psi * cum[-1]))
+            except ValueError as exc:
+                # Negative mass flux somewhere along a q-o (a negative-Vm
+                # transient): typed status, never a raw exception (AD-10).
+                status, reason = SolveStatus.NUMERICAL_FAILURE, (
+                    f"repositioning failed at outer iteration {it}: {exc}")
+                break
+            q_target = np.stack(q_target_cols, axis=1)
+            q_next = q_full + omega * (q_target - q_full)  # walls map to selves
+        else:
+            omega = 0.0
+            q_next = q_full
 
         # (6.2.2.4) lagged refreshes: closures re-evaluated from the current
         # iterate (AD-4), transported fields re-swept through the resulting
