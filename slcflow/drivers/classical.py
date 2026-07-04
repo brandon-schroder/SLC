@@ -69,6 +69,11 @@ class ClassicalConfig:
     # unstable at ANY omega_sl on station-dense curved paths (measured at
     # M3-1: the streamwise odd-even mode diverges even at omega = 0.05).
     kappa_relax: float = None
+    # Section 6.2.4: closure outputs are updated UNDER-RELAXED. Applied to
+    # the lagged per-row (exit rVt, delta_s) between outer iterates;
+    # measured at M4-3: flow-coupled swirl closures oscillate and blow up
+    # without it.
+    closure_relax: float = 0.5
     brentq_rtol: float = 1e-12
 
     def __post_init__(self):
@@ -147,9 +152,10 @@ def _resolve_rows(topology: GridTopology, rows):
     return resolved
 
 
-def _row_flow_view(topology, fluid, transported, fields, j, omega):
-    """Section 7.2 LE flow view at station j from the current iterate.
-    Relative-frame quantities use the section 2.4 convention
+def _row_flow_view(topology, fluid, transported, fields, j, j_te, omega):
+    """Section 7.2 LE flow view at station j from the current iterate,
+    with lagged TE quantities for iterative closures ("and TE where
+    iterative"). Relative-frame quantities use the section 2.4 convention
     (``W_theta = V_theta - omega r``, angles from the meridional)."""
     r = fields.metrics.r[:, j]
     vm = fields.vm[:, j]
@@ -160,7 +166,9 @@ def _row_flow_view(topology, fluid, transported, fields, j, omega):
                        w_theta=w_theta, alpha=np.arctan2(vtheta, vm),
                        beta=np.arctan2(w_theta, vm), h=h, s=s,
                        T=fields.T[:, j], rho=fields.rho[:, j],
-                       a=fluid.a(h, s), fluid=fluid)
+                       a=fluid.a(h, s), fluid=fluid,
+                       r_te=fields.metrics.r[:, j_te],
+                       vm_te=fields.vm[:, j_te])
 
 
 def _evaluate_rows(resolved, topology, fluid, transported, fields):
@@ -172,7 +180,7 @@ def _evaluate_rows(resolved, topology, fluid, transported, fields):
     exit_rvt, delta_s, validity = {}, {}, 1.0
     for spec, j_le, j_te in resolved:
         view = _row_flow_view(topology, fluid, transported, fields, j_le,
-                              spec.omega)
+                              j_te, spec.omega)
         row = RowView(row_id=spec.row_id, omega=spec.omega,
                       blade_count=spec.blade_count, geometry=spec.geometry)
         swirl = spec.swirl.exit_rvt(row, view)
@@ -234,7 +242,12 @@ def _solve_qo(asm: ResidualAssembler, j, fields, v_hi, rtol, v_prev=None):
     the fluid domain edge); they are mapped to -inf here, hence the local
     errstate."""
     def F_of(v):
-        return asm.continuity_F(j, v, fields)
+        # NaN-safe for root-finding: a non-finite F means the trial velocity
+        # left the fluid domain (h < 0 somewhere along the ODE) — map it to
+        # a huge mass deficit so brentq bisects back toward the physical
+        # branch instead of raising on an interior NaN.
+        return float(np.nan_to_num(asm.continuity_F(j, v, fields),
+                                   nan=-1e30, posinf=-1e30, neginf=-1e30))
 
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
         if v_prev is not None:
@@ -429,6 +442,25 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         if resolved_rows:
             steps, exit_rvt, delta_s_row, validity = _evaluate_rows(
                 resolved_rows, topology, fluid, transported, fields)
+            # Section 6.2.4: closure updates are under-relaxed against the
+            # previous lagged outputs (flow-coupled closures oscillate
+            # otherwise; measured at M4-3).
+            if closures.row_exit_rvt:
+                w_cl = config.closure_relax
+                exit_rvt = {k: closures.row_exit_rvt[k]
+                            + w_cl * (v - closures.row_exit_rvt[k])
+                            for k, v in exit_rvt.items()}
+                delta_s_row = {k: closures.row_delta_s[k]
+                               + w_cl * (v - closures.row_delta_s[k])
+                               for k, v in delta_s_row.items()}
+                # Rebuild the row steps from the RELAXED outputs so the
+                # sweep and ClosureFields stay consistent.
+                for rspec, j_le, _j_te in resolved_rows:
+                    steps[j_le] = row_steps(
+                        omega=rspec.omega,
+                        rvt_le=transported.rvt[:, j_le],
+                        rvt_te=exit_rvt[rspec.row_id],
+                        delta_s_row=delta_s_row[rspec.row_id])[0]
             closure_norm = _closure_norm(exit_rvt, delta_s_row,
                                          closures.row_exit_rvt,
                                          closures.row_delta_s)

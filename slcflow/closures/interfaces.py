@@ -60,6 +60,10 @@ class RowFlowView:
     rho: Array
     a: Array            # speed of sound [m/s]
     fluid: WorkingFluid = field(repr=False, default=None)
+    # Lagged TE-station quantities for iterative closures (section 7.2
+    # "and TE where iterative"): previous-iterate values at EDGE_TE.
+    r_te: Array = None
+    vm_te: Array = None
 
 
 @dataclass(frozen=True)
