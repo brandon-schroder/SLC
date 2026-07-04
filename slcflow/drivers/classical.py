@@ -70,10 +70,12 @@ class ClassicalConfig:
     # M3-1: the streamwise odd-even mode diverges even at omega = 0.05).
     kappa_relax: float = None
     # Section 6.2.4: closure outputs are updated UNDER-RELAXED. Applied to
-    # the lagged per-row (exit rVt, delta_s) between outer iterates;
-    # measured at M4-3: flow-coupled swirl closures oscillate and blow up
-    # without it.
-    closure_relax: float = 0.5
+    # the lagged per-row (exit rVt, delta_s) between outer iterates.
+    # Measured on the coupled Lieblein rotor (M4-4): the swirl-continuity
+    # Picard loop diverges at 0.5 and converges at <= 0.3 (the loop gain
+    # scales with tan(beta2), so highly staggered rows are the binding
+    # case); 0.25 keeps margin. Revisit against V5-class geometry.
+    closure_relax: float = 0.25
     brentq_rtol: float = 1e-12
 
     def __post_init__(self):
@@ -428,11 +430,18 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         # (6.2.2.3) reposition streamlines: invert THE mass cumulative.
         omega = _omega_sl(config, fields,
                           curvature_on=fidelity.curvature_term > 0.0)
-        q_target_cols = []
-        for j in range(n_qo):
-            cum = asm.mass_cumulative(j, fields.vm[:, j], fields)
-            q_target_cols.append(invert_cumulative(
-                fields.q[:, j], cum, topology.psi * cum[-1]))
+        try:
+            q_target_cols = []
+            for j in range(n_qo):
+                cum = asm.mass_cumulative(j, fields.vm[:, j], fields)
+                q_target_cols.append(invert_cumulative(
+                    fields.q[:, j], cum, topology.psi * cum[-1]))
+        except ValueError as exc:
+            # Negative mass flux somewhere along a q-o (a negative-Vm
+            # transient): typed status, never a raw exception (AD-10).
+            status, reason = SolveStatus.NUMERICAL_FAILURE, (
+                f"repositioning failed at outer iteration {it}: {exc}")
+            break
         q_target = np.stack(q_target_cols, axis=1)
         q_next = q_full + omega * (q_target - q_full)   # walls map to selves
 
