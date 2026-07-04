@@ -23,23 +23,29 @@ __all__ = ["ClosureFields", "FrozenInputs"]
 
 @dataclass(frozen=True)
 class ClosureFields:
-    """Lagged closure outputs entering assembly as data (AD-4, ARCH-3.3).
+    """Lagged closure outputs entering assembly/transport as data (AD-4,
+    ARCH-3.3).
 
-    M2 scope: nodal blockage only (consumed by the continuity integrand,
-    section 3.2). The per-row fields ARCH-3.3 also assigns here (delta_s_row,
-    exit rVt, in-blade schedules, mixing coefficients) are consumed by the
-    driver's transport sweep, not by the assembler, and land with the
-    correlation milestones (M4+) — recorded so their absence is deliberate.
+    ``blockage`` is consumed by the continuity integrand (section 3.2);
+    the per-row swirl/loss outputs are consumed by the driver's transport
+    sweep (sections 3.3-3.5), keyed by row id. In-blade schedules and
+    mixing coefficient fields join at M7/M8 (recorded deferral).
 
     Parameters
     ----------
     blockage : total aerodynamic blockage ``B(i, j)`` in [0, 1) (section 3.2).
+    row_exit_rvt : per-row lagged exit rVt, ``{row_id: (n_sl,)}``
+        (section 3.4, from the swirl closure).
+    row_delta_s : per-row lagged entropy rise, ``{row_id: (n_sl,)}``
+        (section 3.5, Appendix-B-converted by the loss model).
     validity : aggregate closure validity in [0, 1] (section 7.3.3).
     iteration_tag : outer-iterate counter that produced these fields, for
         convergence-record attribution (ARCH-3.3).
     """
 
     blockage: np.ndarray
+    row_exit_rvt: dict = field(default_factory=dict)
+    row_delta_s: dict = field(default_factory=dict)
     validity: float = 1.0
     iteration_tag: int = 0
 

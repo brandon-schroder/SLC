@@ -29,15 +29,19 @@ from scipy.optimize import brentq
 from ..assembly.assembler import AssembledFields, ResidualAssembler
 from ..assembly.inputs import ClosureFields, FrozenInputs
 from ..assembly.pack import pack
+from ..closures.interfaces import (LossModel, RowFlowView, RowView,
+                                   SwirlClosure)
 from ..diagnostics.record import (ConvergenceRecord, IterationRecord,
                                   SolveStatus)
 from ..errors import ConfigError
+from ..geometry.flowpath import StationType
 from ..grid.core import GridTopology, MetricsConfig, initialize_positions
 from ..grid.quadrature import invert_cumulative
-from ..transport.streamwise import TransportFields, TransportStep, sweep
+from ..transport.streamwise import (TransportFields, TransportStep,
+                                    row_steps, sweep)
 from ..types import FidelityConfig, MassFlowSpec
 
-__all__ = ["ClassicalConfig", "ClassicalResult", "solve_classical"]
+__all__ = ["ClassicalConfig", "ClassicalResult", "RowSpec", "solve_classical"]
 
 _TWO_PI = 2.0 * np.pi
 _BRACKET_SCAN = 64      # coarse-scan points for the 6.5 subsonic bracket
@@ -98,6 +102,111 @@ class ClassicalResult:
     @property
     def converged(self) -> bool:
         return self.status is SolveStatus.CONVERGED
+
+
+@dataclass(frozen=True)
+class RowSpec:
+    """One blade row for the solve: its identity, rotation, and closures
+    (sections 4.2, 7.1). The row's stations come from the topology
+    (StationDef.row_id); edge-only rows until INBLADE lands (M7)."""
+
+    row_id: str
+    omega: float
+    swirl: SwirlClosure
+    loss: LossModel
+    blade_count: int = 0
+    geometry: object = None     # BladeRowGeometry (section 4.1), M4-3
+
+
+def _resolve_rows(topology: GridTopology, rows):
+    """Map RowSpecs to (spec, j_le, j_te) via the station list; config
+    boundary (AD-10): raise on mismatches between rows and stations."""
+    stations = topology.flowpath.stations
+    by_id = {}
+    for j, st in enumerate(stations):
+        if st.row_id is not None:
+            by_id.setdefault(st.row_id, {})[st.stype] = j
+    declared = set(by_id)
+    specified = {r.row_id for r in rows}
+    if declared != specified:
+        raise ConfigError(
+            f"row/station mismatch: stations declare {sorted(declared)}, "
+            f"RowSpecs provide {sorted(specified)}")
+    resolved = []
+    for r in rows:
+        idx = by_id[r.row_id]
+        if StationType.EDGE_LE not in idx or StationType.EDGE_TE not in idx:
+            raise ConfigError(
+                f"row {r.row_id!r} needs EDGE_LE and EDGE_TE stations")
+        j_le, j_te = idx[StationType.EDGE_LE], idx[StationType.EDGE_TE]
+        if j_te != j_le + 1:
+            raise ConfigError(
+                f"row {r.row_id!r}: EDGE_TE must directly follow EDGE_LE "
+                "(INBLADE stations land at M7)")
+        resolved.append((r, j_le, j_te))
+    return resolved
+
+
+def _row_flow_view(topology, fluid, transported, fields, j, omega):
+    """Section 7.2 LE flow view at station j from the current iterate.
+    Relative-frame quantities use the section 2.4 convention
+    (``W_theta = V_theta - omega r``, angles from the meridional)."""
+    r = fields.metrics.r[:, j]
+    vm = fields.vm[:, j]
+    vtheta = transported.rvt[:, j] / r
+    w_theta = vtheta - omega * r
+    h, s = fields.h[:, j], transported.s[:, j]
+    return RowFlowView(psi=topology.psi, r=r, vm=vm, vtheta=vtheta,
+                       w_theta=w_theta, alpha=np.arctan2(vtheta, vm),
+                       beta=np.arctan2(w_theta, vm), h=h, s=s,
+                       T=fields.T[:, j], rho=fields.rho[:, j],
+                       a=fluid.a(h, s), fluid=fluid)
+
+
+def _evaluate_rows(resolved, topology, fluid, transported, fields):
+    """Lagged closure evaluation (section 6.2.2.4, AD-4): one swirl + loss
+    call per row from the current iterate's LE flow; returns the transport
+    steps and the per-row output dicts for ClosureFields/the closure norm."""
+    n_qo = topology.n_qo
+    steps = [TransportStep()] * (n_qo - 1)
+    exit_rvt, delta_s, validity = {}, {}, 1.0
+    for spec, j_le, j_te in resolved:
+        view = _row_flow_view(topology, fluid, transported, fields, j_le,
+                              spec.omega)
+        row = RowView(row_id=spec.row_id, omega=spec.omega,
+                      blade_count=spec.blade_count, geometry=spec.geometry)
+        swirl = spec.swirl.exit_rvt(row, view)
+        loss = spec.loss.evaluate(row, view)
+        rvt_te = np.broadcast_to(np.asarray(swirl.rvt, dtype=float),
+                                 view.vm.shape)
+        ds = np.broadcast_to(np.asarray(loss.delta_s, dtype=float),
+                             view.vm.shape)
+        # rvt_le is the SWEPT field arriving at EDGE_LE — the section 3.4
+        # consistency contract of transport.row_steps.
+        steps[j_le] = row_steps(omega=spec.omega,
+                                rvt_le=transported.rvt[:, j_le],
+                                rvt_te=rvt_te, delta_s_row=ds)[0]
+        exit_rvt[spec.row_id] = rvt_te
+        delta_s[spec.row_id] = ds
+        validity = min(validity, float(swirl.validity),
+                       float(loss.validity))
+    return steps, exit_rvt, delta_s, validity
+
+
+def _closure_norm(new_rvt, new_ds, old_rvt, old_ds):
+    """Closure-update norm (section 6.2.5, third convergence criterion):
+    max relative change of the lagged row outputs between outer iterates."""
+    worst = 0.0
+    for key in new_rvt:
+        if key not in old_rvt:
+            return 1.0          # first evaluation: closures just switched on
+        scale_rvt = float(np.max(np.abs(new_rvt[key]))) + 1e-30
+        scale_ds = float(np.max(np.abs(new_ds[key]))) + 1e-12
+        worst = max(
+            worst,
+            float(np.max(np.abs(new_rvt[key] - old_rvt[key]))) / scale_rvt,
+            float(np.max(np.abs(new_ds[key] - old_ds[key]))) / scale_ds)
+    return worst
 
 
 def _vm_upper_bound(frozen: FrozenInputs, fields: AssembledFields, j):
@@ -181,7 +290,7 @@ def _omega_sl(config: ClassicalConfig, fields: AssembledFields,
 
 def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                     spec: MassFlowSpec, inlet: TransportFields,
-                    steps=None, blockage=None,
+                    steps=None, rows=(), blockage=None,
                     metrics_config: MetricsConfig = None,
                     config: ClassicalConfig = ClassicalConfig()
                     ) -> ClassicalResult:
@@ -192,11 +301,24 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
     inlet : fields at station 0 as ``(n_sl,)`` columns of a
         :class:`TransportFields`-like bundle (only column 0 is read if 2-D);
         the station march re-sweeps them each outer iterate (section 6.2.2).
-    steps : per-interval :class:`TransportStep` sequence (default: all-duct,
-        the M2/V1 configuration; rows arrive with their closures, M4+).
+    steps : per-interval :class:`TransportStep` sequence for PRESCRIBED
+        transport (default: all-duct, the V1/V2 configuration). Mutually
+        exclusive with ``rows``.
+    rows : :class:`RowSpec` sequence — blade rows whose swirl/loss come
+        from closures, evaluated lagged per outer iterate (AD-4, section
+        6.2.2.4). The first iterate runs on a duct-only sweep (closures
+        need a flow field to evaluate against); rows join from the second.
     blockage : prescribed ``B(i, j)`` schedule (section 7.2), default zero.
     """
     n_sl, n_qo = topology.n_sl, topology.n_qo
+    if rows and steps is not None:
+        raise ConfigError("steps and rows are mutually exclusive: closure-fed"
+                          " rows build their own transport steps")
+    resolved_rows = _resolve_rows(topology, rows) if rows else []
+    if not rows and steps is None and any(
+            st.row_id is not None for st in topology.flowpath.stations):
+        raise ConfigError("topology declares blade rows: provide RowSpecs "
+                          "(closure-fed) or explicit transport steps")
     if steps is None:
         steps = [TransportStep()] * (n_qo - 1)
     if len(steps) != n_qo - 1:
@@ -301,18 +423,29 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         q_target = np.stack(q_target_cols, axis=1)
         q_next = q_full + omega * (q_target - q_full)   # walls map to selves
 
-        # (6.2.2.4) lagged refreshes: transported fields re-swept, Vm field
-        # for the dVm/dm term, closures static in M2 (closure norm 0).
+        # (6.2.2.4) lagged refreshes: closures re-evaluated from the current
+        # iterate (AD-4), transported fields re-swept through the resulting
+        # steps, Vm field lagged for the dVm/dm term.
+        if resolved_rows:
+            steps, exit_rvt, delta_s_row, validity = _evaluate_rows(
+                resolved_rows, topology, fluid, transported, fields)
+            closure_norm = _closure_norm(exit_rvt, delta_s_row,
+                                         closures.row_exit_rvt,
+                                         closures.row_delta_s)
+            closures = ClosureFields(blockage, row_exit_rvt=exit_rvt,
+                                     row_delta_s=delta_s_row,
+                                     validity=validity, iteration_tag=it)
+        else:
+            closure_norm = 0.0      # static closures: norm identically 0
+            closures = ClosureFields(blockage, iteration_tag=it)
         transported = sweep(inlet_h0, inlet_s, inlet_rvt, steps)
         vm_lagged = fields.vm
-        closures = ClosureFields(blockage, iteration_tag=it)
 
         # (6.2.2.5) all three norms, reported every iteration.
         pos_norm = float(np.max(np.abs(q_next - q_full)) / np.max(lengths))
         cont_norm = float(np.max(np.abs(
             [asm.continuity_F(j, vm_q0[j], fields) for j in range(n_qo)]
         )) / spec.mdot)
-        closure_norm = 0.0
         history.append(IterationRecord(iteration=it, cont_norm=cont_norm,
                                        pos_norm=pos_norm,
                                        closure_norm=closure_norm,
