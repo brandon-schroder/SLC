@@ -522,3 +522,20 @@ Section 8 requirement on the free-vortex (and forced-vortex) uniform-inlet strai
 | V1c forced vortex ($V_m(r)$ varies) | meanline $V_m$ vs. mass-avg Tier 2 | rtol 2e-3 | 1.34e-3 |
 
 The forced-vortex residue is larger because its $V_m$ genuinely varies across span (∝ the family $V_m^2 = V_{m0}^2 - 2\Omega_f^2(r^2-r_0^2)$), so the one-point rule has a real profile to miss; the free vortex is spanwise-uniform and residue is the density/$r$-weighting curvature alone. Both are the meanline's own discretization, not solver error — the same $N_{sl}=1$ path is one assembler with no tier branch (AD-1), verified by `test_tier1_is_pure_data_switch_not_a_code_path` (V5).
+
+### C.9 Operability — BC-switching + surge flag (bound at M5-4; `tests/test_v9_operability.py`, `tests/test_backpressure.py`)
+
+The M5 driver stack: global Newton over the pure residual (§6.3), continuation in $\dot m$ (§6.7), and the hysteretic exit-pressure BC-switch (§6.6). Bound as two behaviours on the two cases each is well-posed for (`slcflow/verification/v9_operability.py`).
+
+**Back-pressure residual form (§6.6), round trip vs. normal mode.** In choke-proximal mode $\dot m$ joins the state and the assembler appends one residual: static pressure at the $q=0$ node of the throttling station $= p_{exit}$. Solve normal at $\dot m_0$, read the produced $p_{exit}$, feed it back as a `BackPressureSpec`, and the back-pressure solve recovers the state from a *different* seed:
+
+| Check | Tolerance | Measured (2026-07, M5-3) |
+|---|---|---|
+| recovered $\dot m$ vs. $\dot m_0$ (V1c forced vortex, $N_{sl}=9$) | rtol 1e-4 | exact to solver tol |
+| recovered state $x$ vs. normal-mode $x$ | atol 1e-5 | — |
+| appended back-pressure row at the consistent state | $<10^{-3}\,p_{exit}$ | — |
+| monotonicity: higher $p_{exit}\Rightarrow$ lower $\dot m$ | sign | holds |
+
+**Stable BC-switching across choke** (swirling-duct testbed, clean annulus capacity): starting near choke ($c\approx0.07$), the traversal switches to the back-pressure branch below $c_{sw}=0.10$, throttles until $c$ clears $c_{sw}+\delta_{hys}=0.15$, switches back, and continues to stall — **exactly one out-and-back switch, no limit-cycling**, achieved $\dot m$ monotone throughout. Newton reaches the fixed point in ~3 iterations vs. ~15 for classical relaxation on V1c (§6.3 quadratic locally).
+
+**Surge-flag behaviour** (V5 meanline rotor): the operating line rises in PR and the traversal reports `pr_turnover` at the peak with the criterion recorded (§6.7 "report, don't solve through"). **[VERIFY]** point-by-point against a *reported* surge line (blocked on reference data, as for V5); and the *V5* choke-knee traversal itself is **[VERIFY]** — the single-node continuity Jacobian is singular at the capacity peak and the supersonic-$\dot m$ branch needs shock-loss closures the subsonic-Lieblein set lacks (M6). The BC-switch machinery is case-independent and is bound on the testbed, so this gap is a closure-library boundary, not a driver one.

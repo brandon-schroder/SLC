@@ -166,15 +166,37 @@ These are not suggestions; violating them is a bug even if tests pass.
   `FrozenInputs` for in-blade schedules; an `assert_valid_schedule`
   contract-test helper (§7.3.4) with the first non-default
   `DistributionSchedule`.
-- **M5** (Newton driver + continuation + BC switching, V9 choke traversal on
-  the V5 case) — **next**. See ARCH-5.3/5.4 and ARCH-8. Brings the
-  `scipy`-style Newton driver over `ResidualAssembler.residual` (colored-FD
-  Jacobian, warm start mandatory), the continuation/map driver (§6.7,
-  choke→stall ordering, driver escalation), and `BackPressureSpec`
-  BC-switching (the residual form is stubbed in `types.py`/`FrozenInputs` and
-  rejected until now). Closes the V5 `[VERIFY]` speedline/choke items and
-  binds V9 operability. The `machine/` facade's `warm_start` argument and the
-  reproducer-bundle serialization (ARCH-6) are the seams already left for it.
+- **M5** (Newton driver + continuation + BC switching, V9 operability) —
+  closed. Ran as four reviewed sub-steps on `main`: (1) `drivers/newton.py`
+  — global Newton over the pure `ResidualAssembler.residual` (§6.3): **dense**
+  forward-difference Jacobian (the correctness baseline the ARCH-5.3
+  colored-FD version must match column-for-column — recorded as the next
+  optimization, not a prerequisite), Armijo line search with the
+  crossing-streamline monotonicity guard folded in (closes the M2/M3 AD-10
+  carryover for the Newton path), warm start mandatory. Measured quadratic:
+  V1c in ~3 iterations vs. 15 classical. (2) `drivers/continuation.py`
+  `solve_speedline` (§6.7) + `solve_classical` `warm_start` seed — choke→stall
+  traversal, per-point warm start, cut-back, classical→Newton escalation,
+  §6.6 annulus choke margin + mass-averaged PR, stall flags with recorded
+  criterion (`solver_failure`/`pr_turnover`/`validity_saturated`). (3)
+  `BackPressureSpec` residual form (§6.6): `mdot` joins the state, the
+  assembler appends the throttling-station back-pressure row, `FrozenInputs`
+  accepts it (the M2 stub-and-reject lifted); Newton solves it — round-trip
+  verified against normal mode. Then the hysteretic choke↔normal BC-switch
+  wired into the traversal (auto + logged + `c_sw`/`δ_hys` band, no
+  limit-cycling). (4) `verification/v9_operability.py` (V9): surge-flag
+  behaviour demonstrated on the V5 rotor line (`pr_turnover`), stable
+  BC-switching-across-choke on a swirling-duct testbed (Appendix C.9). Two
+  honest `[VERIFY]`s remain, both closure-library boundaries not driver ones:
+  the V5 point-by-point surge-line match (reference data), and the *V5*
+  choke-knee traversal onto the supersonic-`mdot` branch (needs M6 shock-loss
+  closures — the single-node continuity Jacobian is singular at the capacity
+  peak). The `machine/` facade's `warm_start` argument and the ARCH-6
+  reproducer-bundle serialization remain seams for later.
+- **M6** (axial-turbine correlation set, V6) — **next**. See §7.1 (Kacker–
+  Okapuu / Craig–Cox), ARCH-8. First turbine closures behind the ARCH-4.2
+  interfaces (Appendix B.3 `Y` conversion already in `conversions.py`), plus
+  the shock-loss component the V5 choke-knee `[VERIFY]` is waiting on.
 
 ## Commands
 
