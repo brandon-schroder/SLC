@@ -538,6 +538,23 @@ The forced-vortex residue is larger because its $V_m$ genuinely varies across sp
 
 Tier 2 vs. Tier 3 agree to rtol 2e-3 (PR) / 1.5e-2 ($V_m$) — **not** the bit-identical V3 gate (C.4), because the throat-based exit swirl is spanwise-varying, so repositioning gives the streamlines slight meridional curvature and Tier 3's curvature term is small-but-nonzero. Tier 1 tracks the mass-averaged Tier 2 to rtol 5e-3 (the meanline clause, C.4).
 
+### C.7 V7 — Centrifugal impeller, structural (bound at M7-4; `tests/test_v7_centrifugal.py`)
+
+**Structural gate only** (as V5/V6), and the **first radial end-to-end**: a backswept centrifugal compressor impeller composed through the `Machine` facade with the centrifugal set (`slcflow/verification/v7_centrifugal.py`) — Wiesner slip + representative internal loss — on the parametric $\phi:0\to90°$ axial→radial path (M1), converging at all three tiers, **doing** real centrifugal work ($\Delta h_0>0$, PR $>1$) with real loss ($\Delta s>0$), spinning axial inflow ($rV_\theta=0$) up to a slipped exit swirl ($V_{\theta,2}<U_2$), and exiting radially ($r_{\text{exit}}=r_2$, i.e. $\phi=90°$). Reference geometry is a representative impeller (concentric 90°-bend walls, $r_2=0.25$ m, bend radii $0.08/0.18$ m, $\Omega=1450$ s⁻¹ → $U_2=362$ m/s, $\dot m=12$ kg/s, 18 blades, 30° backsweep), **not** a digitised Eckardt rotor.
+
+| Quantity | Tier 1 ($N_{sl}=1$) | Tier 2 ($N_{sl}=7$) | Tier 3 ($N_{sl}=7$) | Band / check |
+|---|---|---|---|---|
+| PR (total-to-total) | 2.458 | 2.433 | 2.454 | $(1.5, 4.0)$, $>1$ (compression) |
+| efficiency | 0.985 | 0.974 | 0.980 | $(0.6, 0.999)$ |
+| exit $rV_\theta$ (from inlet 0) | 61.6 | — | — | $>0$ (spun up) |
+| exit $V_\theta / U_2$ (slip) | 0.68 | — | — | $\in(0,1)$ (Wiesner $\sigma<1$) |
+| $r_{\text{exit}}$ [m] | 0.25 | 0.25 | 0.25 | $=r_2$ ($\phi=90°$) |
+| validity | 1.000 | 1.000 | 1.000 | $>0.5$ |
+
+The three tiers agree on PR to $<5\%$ (meanline vs. spanwise-resolved + repositioning, second-order here). **Efficiency reads high** (~0.98) because only incidence + skin-friction loss are modelled; blade-loading/clearance/disk-friction are deferred — so, as for V5/V6, point-by-point Eckardt reproduction and stage-map traversal are **[VERIFY]**, blocked on the reference library and the deferred loss components.
+
+**Measured (M7-4): Tier-3 radial repositioning needs in-blade subdivision.** Unlike the axial V5/V6 (straight annulus → Tier 3 ≡ Tier 2 bit-for-bit, C.4), V7 is the first curved path carrying a blade row *and* streamline repositioning. With edge-only stations the §6.4 odd-even streamwise mode diverges at any relaxation, and the M5 Newton driver inherits the same stiff seed and cannot recover it; **six INBLADE stations** (`n_inblade=6`, M7-3) keep the per-step curvature inside the envelope and converge all tiers — the concrete physical reason radial rows want in-blade stations. The stable pocket is narrow (odd counts near the edge still flake); a robust radial-repositioning stabilization is a carryover past M7.
+
 ### C.9 Operability — BC-switching + surge flag (bound at M5-4; `tests/test_v9_operability.py`, `tests/test_backpressure.py`)
 
 The M5 driver stack: global Newton over the pure residual (§6.3), continuation in $\dot m$ (§6.7), and the hysteretic exit-pressure BC-switch (§6.6). Bound as two behaviours on the two cases each is well-posed for (`slcflow/verification/v9_operability.py`).

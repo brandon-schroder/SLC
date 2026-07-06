@@ -9,9 +9,10 @@ from .v3_tier_consistency import (mass_averaged_vm, v3_case_pair,
                                   v3_tier1_pair)
 from .v5_axial_compressor import V5AxialRotor
 from .v6_axial_turbine import V6AxialTurbine
+from .v7_centrifugal import V7Centrifugal
 from .v9_operability import V9Operability
 
 __all__ = ["V1Exact", "V1ForcedVortex", "V1FreeVortex", "V2CurvedAnnulus",
-           "V2Exact", "V5AxialRotor", "V6AxialTurbine", "V9Operability",
-           "annulus_topology", "mass_averaged_vm", "v3_case_pair",
-           "v3_tier1_pair"]
+           "V2Exact", "V5AxialRotor", "V6AxialTurbine", "V7Centrifugal",
+           "V9Operability", "annulus_topology", "mass_averaged_vm",
+           "v3_case_pair", "v3_tier1_pair"]

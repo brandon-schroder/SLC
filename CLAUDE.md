@@ -227,9 +227,35 @@ These are not suggestions; violating them is a bug even if tests pass.
   and per-node Reynolds (a design-Re parameter stands in) are `[VERIFY]`
   deferrals; the `(1−Mm²)` relaxation factor recalibration stays open (M6+).
 - **M7** (centrifugal: parametric-φ path, INBLADE stations, slip, V7) —
-  **next**. See ARCH-8. Also carries the M4 deferrals: `t_stations`
-  validation into `ClosureFields`/`FrozenInputs` for in-blade schedules, and
-  the `assert_valid_schedule` §7.3.4 contract-test helper.
+  closed. Ran as four reviewed sub-steps on `main`: (1)
+  `closures/centrifugal/wiesner.py` — Wiesner slip σ = 1 − √(cos β₂ᵦ)/Z^0.7 +
+  `WiesnerSlip` swirl closure (σU₂ − Vₘtanβ₂ᵦ exit swirl; the inducer sgn/
+  backsweep sign resolved by probing to give compression, not the turbine
+  tangle). (2) `centrifugal/loss.py` — incidence + skin-friction internal
+  loss, each converted individually to Δs at the B.1-re-referenced exit
+  static T via the new `conversions.delta_s_enthalpy_loss` (cp·ln(1+Δh/cpT));
+  `CENTRIFUGAL` CorrelationSet. Blade-loading/clearance/disk-friction
+  deferred (why V7 η reads ~0.98). (3) **INBLADE stations** — the driver
+  `EDGE_TE=EDGE_LE+1` M7-stub lifted: `_resolve_rows` accepts EDGE_LE,
+  INBLADE*, EDGE_TE on contiguous indices and derives `t_stations` (topology-
+  fixed mean-anchor meridional fractions, AD-8), wiring the existing §3.4/3.5
+  `row_steps` distribution across sub-intervals (classical + Newton rebuild
+  sites); no residual-path change. `transport.assert_valid_schedule` (§7.3.4
+  contract gate) closes the M4 carryover. **A.8 in-blade force
+  `f_b,q = f_b,θ·tanλ` deferred** (zero for radial stacking; needs lean
+  geometry + a master-ODE streamwise-gradient term). (4) V7 centrifugal
+  entry point (`verification/v7_centrifugal.py`, backswept impeller,
+  U₂=362 m/s) — **structural** like V5/V6 and the **first radial end-to-end**:
+  converges all three tiers on the φ→90° path, does centrifugal work
+  (Δh0>0, PR≈2.46), slipped exit swirl (Vθ/U₂≈0.68), radial exit r=r₂
+  (Appendix C.7). **Measured finding**: Tier-3 full-SLC repositioning on the
+  90° bend *requires* the INBLADE subdivision (`n_inblade=6`) — edge-only
+  diverges the §6.4 odd-even mode at any relaxation and Newton inherits the
+  stiff seed; this is the concrete physical reason radial rows want in-blade
+  stations. Point-by-point Eckardt reproduction stays `[VERIFY]` (reference
+  library + deferred loss), as for V5/V6. Still open past M7: the A.8 force;
+  a robust radial-repositioning stabilization (the stable `n_inblade` pocket
+  is narrow); blade-loading/clearance/disk loss components.
 
 ## Commands
 
