@@ -35,7 +35,7 @@ from ..smoothmath import (abs_smooth, blend, blend_between, smooth_max,
 
 __all__ = ["profile_loss_am", "mach_profile_correction",
            "reynolds_correction", "secondary_loss", "trailing_edge_zeta",
-           "CALIBRATED"]
+           "shock_loss", "CALIBRATED"]
 
 # Calibrated input domain (lo, hi, transition width, mathematical floor) for
 # the validity windows + the hard floor the saturated value may not cross.
@@ -186,3 +186,28 @@ def trailing_edge_zeta(alpha1_deg, alpha2_deg, te_o_ratio, *, xp=None):
                       _TE_W, xp=xp)
     v = 1.0 - blend(x, 0.15, 0.05, xp=xp)
     return zeta, v
+
+
+# --- inlet shock loss (Kacker-Okapuu transonic component) -----------------
+_M_SHOCK, _SHOCK_W = 0.4, 0.05    # leading-edge shock onset Mach + knee width
+_SHOCK_C, _SHOCK_EXP = 0.75, 1.75  # K-O coefficient + exponent [VERIFY]
+
+
+def shock_loss(m1, *, xp=None):
+    """Kacker-Okapuu leading-edge / inlet shock-loss coefficient
+    ``Y_shock = 0.75 (M1 - 0.4)^1.75`` (B.3 exit-dynamic-head reference),
+    entering the K-O profile bracket ``0.914 (2/3 Y_p,AM K_p + Y_shock)``.
+
+    Written C1 via ``softplus`` on the Mach excess (the raw ``(M1 - 0.4)``
+    kinks at onset): near zero below ``M1 ~ 0.4``, growing smoothly above.
+    This is the transonic term the M5/V9 choke-knee note is about; per the
+    original K-O correlation it is strongest at the hub (highest ``U``), here
+    evaluated at the local relative Mach per streamtube. The K-O geometric
+    ``(r_hub/r_tip)`` and pressure-ratio factors are **[VERIFY]-deferred**
+    (they reduce the bare coefficient). Returns ``(Y_shock, validity)`` with
+    the calibration fading above ``M1 ~ 1.6``."""
+    xp = get_xp(xp)
+    excess = softplus(m1 - _M_SHOCK, _SHOCK_W, xp=xp)      # >= 0, smooth onset
+    y = _SHOCK_C * excess ** _SHOCK_EXP
+    v = 1.0 - blend(m1, 1.6, 0.2, xp=xp)
+    return y, v

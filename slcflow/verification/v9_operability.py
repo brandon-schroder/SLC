@@ -20,13 +20,27 @@ Status split (honest, and the same boundary V5 already sits on):
     capacity): the traversal enters the choke-proximal region, switches to the
     back-pressure branch, throttles, and switches back on recovery with no
     limit-cycling. The *V5* meanline cannot be driven onto its own choke knee:
-    the single-node continuity Jacobian is singular at the capacity peak, and
-    the supersonic-mdot branch needs shock-loss closures the subsonic-Lieblein
-    set does not have — that traversal is **[VERIFY]**, blocked on M6-class
-    closures, not on the BC-switch machinery (which is case-independent and
-    bound here on the testbed).
+    the single-node continuity Jacobian is singular at the capacity peak
+    (``dF/dVm = 0`` at the compressible mass-flux maximum; measured M6-4 —
+    V5 meanline chokes at mdot ~ 175 kg/s), so the mdot-parameterized problem
+    is singular there by construction, and the supersonic-mdot branch has no
+    physical entropy without a *compressor* shock-loss closure — that
+    traversal is **[VERIFY]**.
 
-Provenance: M5 sub-step 4, written with the implementation.
+    **M6-4 correction to the earlier diagnosis:** the blocker is NOT "M6
+    shock-loss closures". M6 delivered the *turbine* Kacker-Okapuu shock
+    term, which by AD-5 does not apply to the Lieblein *compressor* set that
+    V5 uses. Two distinct things are needed and neither is turbine work:
+    (i) mdot as a state unknown so the traversal is not mdot-parameterized at
+    the singular peak — that already exists (the M5-3 back-pressure mode);
+    (ii) a *compressor* shock-loss closure (Koch-Smith / Aungier shock term,
+    already a recorded deferral on the axial-compressor set) so the
+    supersonic branch carries real entropy. So the V5 choke-knee is a
+    compressor-set + continuation matter (V5 calibration / M8 revisit), not
+    the turbine milestone. The BC-switch machinery itself is case-independent
+    and bound here on the testbed.
+
+Provenance: M5 sub-step 4; V5-diagnosis correction M6 sub-step 4.
 """
 from __future__ import annotations
 

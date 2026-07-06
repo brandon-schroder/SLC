@@ -19,6 +19,7 @@ from slcflow.closures.axial_turbine import (KACKER_OKAPUU, AinleyTurbineSwirl,
                                             profile_loss_am,
                                             reynolds_correction,
                                             secondary_loss,
+                                            shock_loss,
                                             trailing_edge_zeta,
                                             throat_exit_angle)
 from slcflow.closures.interfaces import (CorrelationSet, LossModel,
@@ -156,6 +157,29 @@ def test_trailing_edge_zeta_grows_with_thickness_and_loading():
 
 
 # --------------------------------------------------------------------------
+# Section 4.3: inlet shock loss (transonic onset)
+# --------------------------------------------------------------------------
+def test_shock_loss_transonic_onset():
+    # Near-dormant below M1 ~ 0.4; grows smoothly through the transonic band.
+    assert float(shock_loss(0.2)[0]) < 1e-3
+    assert float(shock_loss(0.5)[0]) > float(shock_loss(0.2)[0])
+    assert float(shock_loss(1.0)[0]) > float(shock_loss(0.7)[0]) > 0.0
+    # Monotone in M1 and non-negative across the range.
+    m = np.linspace(0.0, 1.5, 400)
+    y = shock_loss(m)[0]
+    assert np.all(np.diff(y) >= -1e-12) and np.all(y >= 0.0)
+    # Validity fades above the calibrated transonic band.
+    assert float(shock_loss(0.8)[1]) > 0.9
+    assert float(shock_loss(1.9)[1]) < 0.1
+
+
+def test_shock_loss_c1_through_onset():
+    # Section 7.3: C1 through the M1 ~ 0.4 onset (the raw (M1-0.4) kinks;
+    # the softplus knee does not).
+    _assert_c1_continuous(lambda m: shock_loss(m)[0], 0.0, 1.5)
+
+
+# --------------------------------------------------------------------------
 # Section 4.4 / B.3: the full loss model on a synthetic rotor view
 # --------------------------------------------------------------------------
 def _rotor_view_and_row(vm=140.0, omega=500.0, r=0.45, rvt=30.0, vm_te=160.0,
@@ -191,9 +215,24 @@ def test_loss_band_positivity_and_validity():
     # exceeds the profile term alone (section 4.4; B.5.3 auditability).
     assert float(out.components["secondary_Y"][0]) > 0.0
     assert float(out.components["te_Y"][0]) > 0.0
+    assert float(out.components["shock_Y"][0]) >= 0.0
     assert float(out.components["Y_total"][0]) > Y
     assert float(out.delta_s[0]) > 0.0        # real loss (entropy rise)
     assert out.validity > 0.0
+
+
+def test_loss_shock_component_activates_transonically():
+    # A slow rotor (low blade speed -> M1 < 0.4) leaves the shock term
+    # dormant; a fast rotor (high blade speed -> transonic M1) lights it up
+    # and raises the total (section 4.3; the M6-4 transonic component). The
+    # relative inlet Mach is set mostly by the blade speed omega*r.
+    slow = KackerOkapuuLoss().evaluate(
+        *_rotor_view_and_row(vm=90.0, omega=150.0))
+    fast = KackerOkapuuLoss().evaluate(*_rotor_view_and_row(omega=800.0))
+    assert float(slow.components["shock_Y"][0]) < 1e-3
+    assert float(fast.components["shock_Y"][0]) > 0.02
+    assert float(fast.components["Y_total"][0]) \
+        > float(slow.components["Y_total"][0])
 
 
 def test_delta_s_matches_b3_conversion_of_native_coefficient():

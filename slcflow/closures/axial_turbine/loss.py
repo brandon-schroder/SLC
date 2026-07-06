@@ -29,7 +29,7 @@ from ..interfaces import LossBreakdown, RowFlowView, RowView
 from ..smoothmath import blend, smooth_min, soft_clip, softplus
 from .ainley import throat_exit_angle
 from .kacker_okapuu import (mach_profile_correction, profile_loss_am,
-                           reynolds_correction, secondary_loss,
+                           reynolds_correction, secondary_loss, shock_loss,
                            trailing_edge_zeta)
 
 __all__ = ["KackerOkapuuLoss"]
@@ -105,20 +105,23 @@ class KackerOkapuuLoss:
         m2 = w2 / a2
         p2 = p0r_2_id * (T2 / T0r_2) ** (fluid.gamma / (fluid.gamma - 1.0))
 
-        # Kacker-Okapuu subsonic loss components (shock deferred to M6-4).
-        # All exit-reference Y (B.3); the TE kinetic-energy coefficient is
-        # mapped to an equivalent Y before summing (see class docstring).
+        # Kacker-Okapuu loss components -- all exit-reference Y (B.3); the TE
+        # kinetic-energy coefficient is mapped to an equivalent Y before
+        # summing (see class docstring). Profile + inlet shock share the K-O
+        # bracket 0.914 (2/3 Y_p,AM K_p + Y_shock) f_Re; recorded separately.
         yp_am, v_p = profile_loss_am(s_c, b1_deg, alpha2_deg, tc, xp=xp)
         kp = mach_profile_correction(m1, m2, xp=xp)
-        f_re = reynolds_correction(self.reynolds, xp=xp)
-        y_profile = 0.914 * (2.0 / 3.0) * yp_am * kp * f_re
+        y_shock_raw, v_sh = shock_loss(m1, xp=xp)
+        env = 0.914 * reynolds_correction(self.reynolds, xp=xp)
+        y_profile = env * (2.0 / 3.0) * yp_am * kp
+        y_shock = env * y_shock_raw
         y_secondary, v_s = secondary_loss(b1_deg, alpha2_deg,
                                           self.aspect_ratio, xp=xp)
         zeta_te, v_te = trailing_edge_zeta(b1_deg, alpha2_deg,
                                            self.te_o_ratio, xp=xp)
         y_te = zeta_te / (1.0 - zeta_te)
 
-        y_raw = y_profile + y_secondary + y_te
+        y_raw = y_profile + y_shock + y_secondary + y_te
         Y = smooth_min(y_raw, _Y_CEIL, _Y_W, xp=xp)
         v_y = 1.0 - blend(y_raw, _Y_CEIL, 10.0 * _Y_W, xp=xp)
 
@@ -126,7 +129,8 @@ class KackerOkapuuLoss:
                                        xp=xp)
         # Components recorded individually for auditability (B.5.3).
         return LossBreakdown(
-            components={"profile_Y": y_profile, "secondary_Y": y_secondary,
-                        "te_Y": y_te, "te_zeta": zeta_te, "Y_total": Y},
+            components={"profile_Y": y_profile, "shock_Y": y_shock,
+                        "secondary_Y": y_secondary, "te_Y": y_te,
+                        "te_zeta": zeta_te, "Y_total": Y},
             delta_s=delta_s,
-            validity=float(xp.min(v_a * v_p * v_y * v_s * v_te)))
+            validity=float(xp.min(v_a * v_p * v_y * v_s * v_sh * v_te)))
