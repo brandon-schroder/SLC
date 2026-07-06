@@ -29,7 +29,8 @@ from .._namespace import get_xp
 
 __all__ = ["relative_stagnation", "ideal_exit_relative_stagnation",
            "delta_s_from_p0_deficit", "delta_s_compressor_omega_bar",
-           "delta_s_turbine_Y", "delta_s_kinetic_energy_zeta"]
+           "delta_s_turbine_Y", "delta_s_kinetic_energy_zeta",
+           "delta_s_enthalpy_loss"]
 
 
 def relative_stagnation(fluid, T, p, W, *, xp=None):
@@ -121,3 +122,18 @@ def delta_s_kinetic_energy_zeta(fluid, zeta, T2, V2, *, xp=None):
         "correlation failed to saturate its coefficient (section 7.3)")
     T2s = T2 - zeta * V2 * V2 / (2.0 * fluid.cp)
     return fluid.cp * xp.log(T2 / T2s)
+
+
+def delta_s_enthalpy_loss(fluid, dh_loss, T, *, xp=None):
+    """Enthalpy-loss -> entropy for component losses expressed directly as an
+    enthalpy rise ``dh_loss`` [J/kg] (the natural currency for centrifugal
+    impeller internal losses: incidence, skin friction, clearance, ...).
+
+    The dissipation ``dh_loss`` (>= 0) charged at the local temperature ``T``
+    generates ``Delta s = c_p ln(1 + dh_loss/(c_p T))`` (the reheat form; the
+    first-order limit is the textbook ``dh_loss / T``). Always finite and
+    non-negative for ``dh_loss >= 0``, ``T > 0`` -- no assert/clamp needed on
+    the residual path (AD-10), unlike the B.4 kinetic-energy guard. Convert
+    each component INDIVIDUALLY then sum the ``Delta s`` (B.5)."""
+    xp = get_xp(xp)
+    return fluid.cp * xp.log(1.0 + dh_loss / (fluid.cp * T))
