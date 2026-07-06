@@ -131,7 +131,8 @@ class Machine:
     def evaluate(self, spec: OperatingSpec, fidelity: FidelityConfig,
                  n_sl: int, *, warm_start: PerformanceResult = None,
                  config: ClassicalConfig = None,
-                 metrics_config: MetricsConfig = None) -> PerformanceResult:
+                 metrics_config: MetricsConfig = None,
+                 mixing=None) -> PerformanceResult:
         """Solve one operating point and reduce it to a PerformanceResult.
 
         ``n_sl`` is the spanwise resolution and the sole tier-1/2/3 topology
@@ -153,6 +154,8 @@ class Machine:
         kwargs = {} if config is None else {"config": config}
         if metrics_config is not None:
             kwargs["metrics_config"] = metrics_config
+        if mixing is not None:
+            kwargs["mixing"] = mixing
         res = solve_classical(topo, self.fluid, fidelity, spec, inlet,
                               rows=self.rows, blockage=blockage, **kwargs)
         return self._reduce(res, spec)

@@ -33,7 +33,19 @@ from .._namespace import get_xp
 from ..fluid.base import Array
 from .streamwise import TransportFields
 
-__all__ = ["GallimoreMixing", "spanwise_diffusion_step", "mix_transported"]
+__all__ = ["GallimoreMixing", "MixingFlow", "spanwise_diffusion_step",
+           "mix_transported"]
+
+
+@dataclass(frozen=True)
+class MixingFlow:
+    """Minimal flow view a :class:`MixingModel` consumes (section 3.6 is
+    machine-wide, so these are the full ``(n_sl, n_qo)`` nodal fields, not a
+    per-row view). Built by the driver from the current iterate (lagged)."""
+
+    rho: Array
+    vm: Array
+    r: Array
 
 
 # --------------------------------------------------------------------------

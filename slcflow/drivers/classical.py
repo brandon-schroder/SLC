@@ -37,6 +37,7 @@ from ..errors import ConfigError
 from ..geometry.flowpath import StationType
 from ..grid.core import GridTopology, MetricsConfig, initialize_positions
 from ..grid.quadrature import invert_cumulative
+from ..transport.mixing import GallimoreMixing, MixingFlow, mix_transported
 from ..transport.streamwise import (TransportFields, TransportStep,
                                     row_steps, sweep)
 from ..types import BackPressureSpec, FidelityConfig, MassFlowSpec
@@ -336,7 +337,8 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                     steps=None, rows=(), blockage=None,
                     metrics_config: MetricsConfig = None,
                     config: ClassicalConfig = ClassicalConfig(),
-                    warm_start: "ClassicalResult" = None
+                    warm_start: "ClassicalResult" = None,
+                    mixing=None
                     ) -> ClassicalResult:
     """Run the section 6.2 nested scheme to a converged operating point.
 
@@ -377,6 +379,12 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         blockage = np.zeros((n_sl, n_qo))
     if metrics_config is None:
         metrics_config = MetricsConfig()
+    # Section 3.6 spanwise mixing: on only when the fidelity flag opts in and
+    # the span has >1 node. Default to the documented Gallimore form. Applied
+    # in the lagged refresh below (AD-4), never on the residual path.
+    mixing_on = fidelity.mixing_term > 0.0 and n_sl > 1
+    if mixing_on and mixing is None:
+        mixing = GallimoreMixing()
 
     def col0(a):
         a = np.asarray(a, dtype=float)
@@ -549,6 +557,16 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
             closure_norm = 0.0      # static closures: norm identically 0
             closures = ClosureFields(blockage, iteration_tag=it)
         transported = sweep(inlet_h0, inlet_s, inlet_rvt, steps)
+        # Section 3.6: diffuse the re-swept fields spanwise, using this
+        # iterate's flow as the lagged coefficients (AD-4). At the fixed point
+        # the mixed fields the residual reads are self-consistent.
+        if mixing_on:
+            mu = mixing.mu_mix(MixingFlow(rho=fields.rho, vm=fields.vm,
+                                          r=fields.metrics.r))
+            transported = mix_transported(
+                transported, m=fields.metrics.m, r=fields.metrics.r,
+                blockage=blockage, rho=fields.rho, vm=fields.vm,
+                mu_mix=mu, strength=fidelity.mixing_term)
         vm_lagged = fields.vm
 
         # (6.2.2.5) all three norms, reported every iteration.

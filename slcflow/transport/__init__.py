@@ -5,7 +5,7 @@ The spanwise mixing operator (section 3.6) also lives here (``mixing.py``,
 M8): an implicit spanwise diffusion of h0/s/rVt applied in the driver's
 lagged field refresh, off the pure residual path.
 """
-from .mixing import (GallimoreMixing, mix_transported,
+from .mixing import (GallimoreMixing, MixingFlow, mix_transported,
                      spanwise_diffusion_step)
 from .schedules import (DistributionSchedule, SmoothRampSchedule,
                         assert_valid_schedule)
@@ -15,6 +15,7 @@ from .streamwise import (TransportFields, TransportStep, apply_step,
 __all__ = [
     "DistributionSchedule",
     "GallimoreMixing",
+    "MixingFlow",
     "SmoothRampSchedule",
     "assert_valid_schedule",
     "mix_transported",

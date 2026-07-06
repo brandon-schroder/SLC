@@ -150,3 +150,62 @@ def test_mix_transported_relaxes_stratification_downstream():
 
 def test_gallimore_is_mixing_model():
     assert isinstance(GallimoreMixing(), MixingModel)
+
+
+# --------------------------------------------------------------------------
+# M8-2: wired through the classical driver (lagged field refresh)
+# --------------------------------------------------------------------------
+from slcflow.drivers import solve_classical                       # noqa: E402
+from slcflow.fluid.perfectgas import PerfectGas                   # noqa: E402
+from slcflow.geometry import (FlowPath, StationDef, StationType,  # noqa: E402
+                              WallCurve)
+from slcflow.grid import GridTopology                             # noqa: E402
+from slcflow.types import FidelityConfig, MassFlowSpec            # noqa: E402
+
+_GAS = PerfectGas()
+
+
+def _duct_topology(n_sl=9, n_st=6):
+    z = np.linspace(0.0, 1.0, 8)
+    w0 = WallCurve.from_points(np.column_stack([z, np.full_like(z, 0.3)]))
+    w1 = WallCurve.from_points(np.column_stack([z, np.full_like(z, 0.6)]))
+    fr = np.linspace(0.0, 1.0, n_st)
+    fp = FlowPath(w0, w1, [StationDef(StationType.DUCT, f, f) for f in fr])
+    return GridTopology(fp, n_sl=n_sl)
+
+
+def _stratified_inlet(n_sl):
+    strat = np.linspace(-15.0, 15.0, n_sl)           # rVt varies across span
+    return TransportFields(h0=np.full(n_sl, 3.0e5), s=np.zeros(n_sl),
+                           rvt=20.0 + strat)
+
+
+def test_driver_mixing_smooths_stratified_duct():
+    topo = _duct_topology()
+    inlet = _stratified_inlet(topo.n_sl)
+    base = solve_classical(topo, _GAS, FidelityConfig.tier3(),
+                           MassFlowSpec(80.0), inlet)
+    mixed = solve_classical(topo, _GAS, FidelityConfig.tier3(mixing_term=1.0),
+                            MassFlowSpec(80.0), inlet,
+                            mixing=GallimoreMixing(c_mix=0.3))
+    assert base.converged and mixed.converged
+    b_rvt = base.frozen.transported.rvt[:, -1]
+    m_rvt = mixed.frozen.transported.rvt[:, -1]
+    # A duct conserves rVt per streamline, so the baseline exit stays fully
+    # stratified; mixing relaxes it toward the (flux-weighted) mean.
+    assert np.ptp(m_rvt) < 0.9 * np.ptp(b_rvt)
+
+
+def test_driver_mixing_off_is_bit_identical():
+    # mixing_term = 0 (tier3 default) disables the operator even if a model is
+    # supplied -> protects the section 8 tier degeneracy / V3 identity.
+    topo = _duct_topology()
+    inlet = _stratified_inlet(topo.n_sl)
+    a = solve_classical(topo, _GAS, FidelityConfig.tier3(),
+                        MassFlowSpec(80.0), inlet)
+    b = solve_classical(topo, _GAS, FidelityConfig.tier3(),
+                        MassFlowSpec(80.0), inlet, mixing=GallimoreMixing())
+    np.testing.assert_array_equal(a.frozen.transported.rvt,
+                                  b.frozen.transported.rvt)
+    np.testing.assert_array_equal(a.frozen.transported.h0,
+                                  b.frozen.transported.h0)
