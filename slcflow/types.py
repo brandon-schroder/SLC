@@ -31,13 +31,20 @@ class FidelityConfig:
     ----------
     curvature_term : multiplies ``Vm^2 kappa_m cos(eps)`` (section 3.1).
     lean_term : multiplies ``Vm (dVm/dm) sin(eps)`` (section 3.1).
+    mixing_term : scales the section 3.6 spanwise-mixing operator in the
+        lagged field refresh (0 = off, the Tier 1/2 default and the Tier 3
+        default too; multistage-axial cases opt in explicitly). It is NOT a
+        master-equation term -- it acts on the transported fields between
+        outer iterates (AD-4), not on the residual -- so it never breaks the
+        section 8 tier degeneracy or the V3 Tier 2 == Tier 3 identity.
     """
 
     curvature_term: float = 1.0
     lean_term: float = 1.0
+    mixing_term: float = 0.0
 
     def __post_init__(self):
-        for name in ("curvature_term", "lean_term"):
+        for name in ("curvature_term", "lean_term", "mixing_term"):
             v = getattr(self, name)
             if not (0.0 <= v <= 1.0):
                 raise ConfigError(f"{name} must be in [0, 1], got {v}")
@@ -48,9 +55,11 @@ class FidelityConfig:
         return cls(curvature_term=0.0, lean_term=0.0)
 
     @classmethod
-    def tier3(cls) -> "FidelityConfig":
-        """Full SLC: all master-equation terms active (section 8)."""
-        return cls(curvature_term=1.0, lean_term=1.0)
+    def tier3(cls, *, mixing_term: float = 0.0) -> "FidelityConfig":
+        """Full SLC: all master-equation terms active (section 8). Spanwise
+        mixing is opt-in (``mixing_term``) -- on for multistage axial, off by
+        default so the V3 Tier-consistency identity holds."""
+        return cls(curvature_term=1.0, lean_term=1.0, mixing_term=mixing_term)
 
     # Tier 1 (meanline) shares the Tier-2 flag set; its degeneration is the
     # single mid-psi streamline (n_sl = 1) plus repositioning-off, which are
