@@ -7,14 +7,24 @@ streamline-REE / full SLC) via grid collapse, not separate code paths.
 
 ## Status
 
-- **M0** (scaffold, `smoothmath`, `PerfectGas`) — closed.
-- **M1** (geometry/grid: `WallCurve`, `FlowPath`/q-o construction, streamline
-  init, metric evaluation) — closed.
-- **M2** (residual assembler + classical driver) — next.
+All milestones on the ARCH-8 verification ladder (**M0–M8**) are closed:
+geometry/grid, the pure residual assembler, the classical / Newton /
+continuation drivers, the axial-compressor, axial-turbine, and centrifugal
+correlation sets, all three fidelity tiers, and the §3.6 spanwise-mixing model.
+Suite: 347 tests, both lint gates green.
 
-See `CLAUDE.md` for the full milestone list and current focus.
+The verification ladder is largely **structural** (convergence + trends +
+plausibility bands), with pervasive `[VERIFY]` on the correlation
+coefficients — see [`docs/overview.md` §10](docs/overview.md) for an honest
+proven-vs-structural-vs-`[VERIFY]` breakdown before trusting any predicted
+performance number. See `CLAUDE.md` for the milestone-by-milestone log.
 
 ## Documentation
+
+**Start here:**
+[`docs/overview.md`](docs/overview.md) — a guided tour of what has been built
+and how a solve runs end to end, with an honest account of what is and isn't
+established.
 
 The formulation, architecture, and module-level specs are the source of
 truth for this codebase; code conforms to them, not the other way round.
