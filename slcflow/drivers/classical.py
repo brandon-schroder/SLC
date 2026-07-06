@@ -28,7 +28,7 @@ from scipy.optimize import brentq
 
 from ..assembly.assembler import AssembledFields, ResidualAssembler
 from ..assembly.inputs import ClosureFields, FrozenInputs
-from ..assembly.pack import pack
+from ..assembly.pack import pack, unpack
 from ..closures.interfaces import (LossModel, RowFlowView, RowView,
                                    SwirlClosure)
 from ..diagnostics.record import (ConvergenceRecord, IterationRecord,
@@ -307,7 +307,8 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                     spec: MassFlowSpec, inlet: TransportFields,
                     steps=None, rows=(), blockage=None,
                     metrics_config: MetricsConfig = None,
-                    config: ClassicalConfig = ClassicalConfig()
+                    config: ClassicalConfig = ClassicalConfig(),
+                    warm_start: "ClassicalResult" = None
                     ) -> ClassicalResult:
     """Run the section 6.2 nested scheme to a converged operating point.
 
@@ -324,6 +325,12 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         6.2.2.4). The first iterate runs on a duct-only sweep (closures
         need a flow field to evaluate against); rows join from the second.
     blockage : prescribed ``B(i, j)`` schedule (section 7.2), default zero.
+    warm_start : optional converged :class:`ClassicalResult` on the SAME
+        topology whose state (streamline positions and ``Vm_q0``) seeds the
+        initialization instead of the area rule (section 6.7 continuation:
+        each speedline point starts from its neighbour). Only the state
+        geometry is seeded — closures/transport re-init and re-converge — so
+        this is a pure convergence accelerant, never a change of answer.
     """
     n_sl, n_qo = topology.n_sl, topology.n_qo
     if rows and steps is not None:
@@ -360,6 +367,25 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                       for qo in topology.flowpath.qo_curves])
     vm_q0 = np.maximum(spec.mdot / (_TWO_PI * rho0 * r_mid * lengths), 1e-6)
     vm_lagged = np.tile(vm_q0[None, :], (n_sl, 1))
+
+    # Section 6.7 continuation warm start: seed the STATE geometry from a
+    # neighbouring converged point. Closures/transport stay cold (re-swept in
+    # the loop), so the seed only accelerates convergence, never the answer.
+    if warm_start is not None and warm_start.frozen is not None:
+        if warm_start.frozen.n_sl != n_sl or warm_start.frozen.n_qo != n_qo:
+            raise ConfigError(
+                "warm_start topology shape "
+                f"({warm_start.frozen.n_sl}, {warm_start.frozen.n_qo}) != "
+                f"({n_sl}, {n_qo}); a warm start must be on the same grid")
+        ws_vm_q0, ws_q_int = unpack(warm_start.x, n_sl, n_qo)
+        vm_q0 = np.array(ws_vm_q0, dtype=float)
+        if n_sl == 1:
+            q_full = np.array(warm_start.frozen.q_fixed, dtype=float)
+        else:
+            q_full = np.concatenate(
+                [np.zeros((1, n_qo)), np.array(ws_q_int, dtype=float),
+                 lengths.reshape(1, n_qo)], axis=0)
+        vm_lagged = np.array(warm_start.frozen.vm_lagged, dtype=float)
 
     closures = ClosureFields(blockage, iteration_tag=0)
     # Section 5.5 default resolution: curvature lag on whenever the
