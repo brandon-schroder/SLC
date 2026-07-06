@@ -347,12 +347,15 @@ def solve_newton(topology, fluid, fidelity: FidelityConfig,
                 delta_s_row = {k: closures.row_delta_s[k]
                                + w * (v - closures.row_delta_s[k])
                                for k, v in delta_s_row.items()}
-                for rspec, j_le, _j_te in resolved_rows:
-                    new_steps[j_le] = row_steps(
+                for rspec, j_le, _j_te, t_stations in resolved_rows:
+                    seq = row_steps(
                         omega=rspec.omega,
                         rvt_le=transported.rvt[:, j_le],
                         rvt_te=exit_rvt[rspec.row_id],
-                        delta_s_row=delta_s_row[rspec.row_id])[0]
+                        delta_s_row=delta_s_row[rspec.row_id],
+                        t_stations=t_stations)
+                    for k, stp in enumerate(seq):
+                        new_steps[j_le + k] = stp
             cnorm = _closure_norm(exit_rvt, delta_s_row,
                                   closures.row_exit_rvt, closures.row_delta_s)
             closures = ClosureFields(blockage, row_exit_rvt=exit_rvt,

@@ -126,13 +126,20 @@ class RowSpec:
 
 
 def _resolve_rows(topology: GridTopology, rows):
-    """Map RowSpecs to (spec, j_le, j_te) via the station list; config
-    boundary (AD-10): raise on mismatches between rows and stations."""
+    """Map RowSpecs to ``(spec, j_le, j_te, t_stations)`` via the station
+    list; config boundary (AD-10): raise on mismatches.
+
+    A row's stations are EDGE_LE, then zero or more INBLADE, then EDGE_TE, on
+    contiguous indices (no DUCT station interleaved). ``t_stations`` are the
+    topology-fixed meridional fractions of the INBLADE..TE stations from the
+    LE, consumed by the section 3.4/3.5 distribution schedules. Edge-only
+    rows resolve to the single ``(1.0,)`` the transport layer already expects.
+    """
     stations = topology.flowpath.stations
     by_id = {}
     for j, st in enumerate(stations):
         if st.row_id is not None:
-            by_id.setdefault(st.row_id, {})[st.stype] = j
+            by_id.setdefault(st.row_id, []).append((j, st))
     declared = set(by_id)
     specified = {r.row_id for r in rows}
     if declared != specified:
@@ -141,17 +148,36 @@ def _resolve_rows(topology: GridTopology, rows):
             f"RowSpecs provide {sorted(specified)}")
     resolved = []
     for r in rows:
-        idx = by_id[r.row_id]
-        if StationType.EDGE_LE not in idx or StationType.EDGE_TE not in idx:
+        entries = sorted(by_id[r.row_id], key=lambda e: e[0])
+        js = [j for j, _ in entries]
+        types = [st.stype for _, st in entries]
+        if (types[0] is not StationType.EDGE_LE
+                or types[-1] is not StationType.EDGE_TE
+                or any(t is not StationType.INBLADE for t in types[1:-1])):
             raise ConfigError(
-                f"row {r.row_id!r} needs EDGE_LE and EDGE_TE stations")
-        j_le, j_te = idx[StationType.EDGE_LE], idx[StationType.EDGE_TE]
-        if j_te != j_le + 1:
+                f"row {r.row_id!r}: stations must be EDGE_LE, INBLADE*, "
+                f"EDGE_TE in meridional order, got "
+                f"{[t.value for t in types]}")
+        if js != list(range(js[0], js[-1] + 1)):
             raise ConfigError(
-                f"row {r.row_id!r}: EDGE_TE must directly follow EDGE_LE "
-                "(INBLADE stations land at M7)")
-        resolved.append((r, j_le, j_te))
+                f"row {r.row_id!r}: EDGE_LE..EDGE_TE stations must be "
+                "contiguous (no DUCT station inside a row)")
+        resolved.append((r, js[0], js[-1], _t_stations(r.row_id, entries)))
     return resolved
+
+
+def _t_stations(row_id, entries):
+    """Topology-fixed meridional fractions of the INBLADE..TE stations from
+    the LE (mean wall-arc-length anchor; AD-8 frozen), last exactly 1.0 at
+    the TE. **[VERIFY the anchor-mean proxy vs a per-streamline arc-length
+    meridional fraction for strongly non-parallel walls.]**"""
+    a = [0.5 * (st.anchor_w0 + st.anchor_w1) for _, st in entries]
+    span = a[-1] - a[0]
+    if span <= 0.0:
+        raise ConfigError(
+            f"row {row_id!r}: EDGE_LE->EDGE_TE station anchors must increase "
+            f"meridionally, got means {a}")
+    return tuple((ak - a[0]) / span for ak in a[1:])
 
 
 def _row_flow_view(topology, fluid, transported, fields, j, j_te, omega):
@@ -180,7 +206,7 @@ def _evaluate_rows(resolved, topology, fluid, transported, fields):
     n_qo = topology.n_qo
     steps = [TransportStep()] * (n_qo - 1)
     exit_rvt, delta_s, validity = {}, {}, 1.0
-    for spec, j_le, j_te in resolved:
+    for spec, j_le, j_te, t_stations in resolved:
         view = _row_flow_view(topology, fluid, transported, fields, j_le,
                               j_te, spec.omega)
         row = RowView(row_id=spec.row_id, omega=spec.omega,
@@ -192,10 +218,12 @@ def _evaluate_rows(resolved, topology, fluid, transported, fields):
         ds = np.broadcast_to(np.asarray(loss.delta_s, dtype=float),
                              view.vm.shape)
         # rvt_le is the SWEPT field arriving at EDGE_LE — the section 3.4
-        # consistency contract of transport.row_steps.
-        steps[j_le] = row_steps(omega=spec.omega,
-                                rvt_le=transported.rvt[:, j_le],
-                                rvt_te=rvt_te, delta_s_row=ds)[0]
+        # consistency contract of transport.row_steps. The row occupies one
+        # interval per INBLADE..TE station (t_stations); each gets a step.
+        seq = row_steps(omega=spec.omega, rvt_le=transported.rvt[:, j_le],
+                        rvt_te=rvt_te, delta_s_row=ds, t_stations=t_stations)
+        for k, stp in enumerate(seq):
+            steps[j_le + k] = stp
         exit_rvt[spec.row_id] = rvt_te
         delta_s[spec.row_id] = ds
         validity = min(validity, float(swirl.validity),
@@ -502,12 +530,15 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                                for k, v in delta_s_row.items()}
                 # Rebuild the row steps from the RELAXED outputs so the
                 # sweep and ClosureFields stay consistent.
-                for rspec, j_le, _j_te in resolved_rows:
-                    steps[j_le] = row_steps(
+                for rspec, j_le, _j_te, t_stations in resolved_rows:
+                    seq = row_steps(
                         omega=rspec.omega,
                         rvt_le=transported.rvt[:, j_le],
                         rvt_te=exit_rvt[rspec.row_id],
-                        delta_s_row=delta_s_row[rspec.row_id])[0]
+                        delta_s_row=delta_s_row[rspec.row_id],
+                        t_stations=t_stations)
+                    for k, stp in enumerate(seq):
+                        steps[j_le + k] = stp
             closure_norm = _closure_norm(exit_rvt, delta_s_row,
                                          closures.row_exit_rvt,
                                          closures.row_delta_s)
