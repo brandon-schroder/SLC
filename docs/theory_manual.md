@@ -523,6 +523,21 @@ Section 8 requirement on the free-vortex (and forced-vortex) uniform-inlet strai
 
 The forced-vortex residue is larger because its $V_m$ genuinely varies across span (∝ the family $V_m^2 = V_{m0}^2 - 2\Omega_f^2(r^2-r_0^2)$), so the one-point rule has a real profile to miss; the free vortex is spanwise-uniform and residue is the density/$r$-weighting curvature alone. Both are the meanline's own discretization, not solver error — the same $N_{sl}=1$ path is one assembler with no tier branch (AD-1), verified by `test_tier1_is_pure_data_switch_not_a_code_path` (V5).
 
+### C.6 V6 — Axial turbine, structural (bound at M6-5; `tests/test_v6_axial_turbine.py`)
+
+**Structural gate only** (as V5): a pre-swirled axial-turbine rotor composed through the `Machine` facade with the Kacker–Okapuu set (`slcflow/verification/v6_axial_turbine.py`) — throat exit angle + profile/secondary/trailing-edge/shock loss — converges, **extracts** real work ($\Delta h_0<0$) with real loss ($\Delta s>0$), de-swirls toward an axial exit, and lands total-to-total expansion ratio and efficiency in physically sane bands. The bands are plausibility gates, **not** validation tolerances: point-by-point reproduction of a specific K–O validation case / published stage map, and speedline/choke traversal, are **[VERIFY]**, blocked on the reference-library correlation calibration (every K–O fit coefficient is `[VERIFY]`) — the same boundary as V5. Reference geometry is a representative reaction rotor ($r=0.35/0.50$ m, $\Omega=250$ s⁻¹, $\dot m=40$ kg/s, inlet $rV_\theta=30$, throat $o=0.030$ m), *not* a digitised K–O case.
+
+| Quantity | Tier 1 ($N_{sl}=1$) | Tier 2 ($N_{sl}=9$) | Tier 3 ($N_{sl}=9$) | Band / check |
+|---|---|---|---|---|
+| PR (total-to-total) | 0.9323 | 0.9337 | 0.9337 | $(0.85, 0.99)$, $<1$ (expansion) |
+| efficiency (facade, inverted; $\eta_t\approx1/\text{this}$) | 1.0467 | 1.0475 | 1.0475 | $(1.01, 1.15)$ |
+| $\Delta h_0$ across rotor [J/kg] | −5679 | −5542 | −5543 | $<0$ (work out) |
+| exit $rV_\theta$ (from inlet 30) | 7.28 | 7.83 | 7.83 | $< 0.5\times$ inlet (de-swirl) |
+| $\Delta s$ across rotor [J/(kg·K)] | 0.905 | 0.905 | — | $>0$ (loss) |
+| validity | 0.999 | 0.999 | 0.999 | $>0.5$ |
+
+Tier 2 vs. Tier 3 agree to rtol 2e-3 (PR) / 1.5e-2 ($V_m$) — **not** the bit-identical V3 gate (C.4), because the throat-based exit swirl is spanwise-varying, so repositioning gives the streamlines slight meridional curvature and Tier 3's curvature term is small-but-nonzero. Tier 1 tracks the mass-averaged Tier 2 to rtol 5e-3 (the meanline clause, C.4).
+
 ### C.9 Operability — BC-switching + surge flag (bound at M5-4; `tests/test_v9_operability.py`, `tests/test_backpressure.py`)
 
 The M5 driver stack: global Newton over the pure residual (§6.3), continuation in $\dot m$ (§6.7), and the hysteretic exit-pressure BC-switch (§6.6). Bound as two behaviours on the two cases each is well-posed for (`slcflow/verification/v9_operability.py`).
@@ -538,4 +553,4 @@ The M5 driver stack: global Newton over the pure residual (§6.3), continuation 
 
 **Stable BC-switching across choke** (swirling-duct testbed, clean annulus capacity): starting near choke ($c\approx0.07$), the traversal switches to the back-pressure branch below $c_{sw}=0.10$, throttles until $c$ clears $c_{sw}+\delta_{hys}=0.15$, switches back, and continues to stall — **exactly one out-and-back switch, no limit-cycling**, achieved $\dot m$ monotone throughout. Newton reaches the fixed point in ~3 iterations vs. ~15 for classical relaxation on V1c (§6.3 quadratic locally).
 
-**Surge-flag behaviour** (V5 meanline rotor): the operating line rises in PR and the traversal reports `pr_turnover` at the peak with the criterion recorded (§6.7 "report, don't solve through"). **[VERIFY]** point-by-point against a *reported* surge line (blocked on reference data, as for V5); and the *V5* choke-knee traversal itself is **[VERIFY]** — the single-node continuity Jacobian is singular at the capacity peak and the supersonic-$\dot m$ branch needs shock-loss closures the subsonic-Lieblein set lacks (M6). The BC-switch machinery is case-independent and is bound on the testbed, so this gap is a closure-library boundary, not a driver one.
+**Surge-flag behaviour** (V5 meanline rotor): the operating line rises in PR and the traversal reports `pr_turnover` at the peak with the criterion recorded (§6.7 "report, don't solve through"). **[VERIFY]** point-by-point against a *reported* surge line (blocked on reference data, as for V5); and the *V5* choke-knee traversal itself is **[VERIFY]** — the single-node continuity Jacobian is singular at the capacity peak (measured M6-4: V5 meanline chokes at $\dot m\approx175$ kg/s), a *continuity* feature no loss closure moves. **M6-4 correction:** M6 delivered the *turbine* shock term, which by AD-5 does not apply to the Lieblein *compressor* set V5 uses; the V5 supersonic-branch traversal needs (i) $\dot m$ as a state unknown — already built (M5-3 back-pressure mode) — and (ii) a *compressor* shock-loss closure (Koch–Smith/Aungier, a recorded compressor-set deferral). So this gap is a compressor-set + continuation boundary (V5 calibration / M8), not the turbine milestone; the BC-switch machinery is case-independent and bound on the testbed.

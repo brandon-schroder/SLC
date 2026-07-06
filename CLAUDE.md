@@ -189,14 +189,47 @@ These are not suggestions; violating them is a bug even if tests pass.
   BC-switching-across-choke on a swirling-duct testbed (Appendix C.9). Two
   honest `[VERIFY]`s remain, both closure-library boundaries not driver ones:
   the V5 point-by-point surge-line match (reference data), and the *V5*
-  choke-knee traversal onto the supersonic-`mdot` branch (needs M6 shock-loss
-  closures — the single-node continuity Jacobian is singular at the capacity
-  peak). The `machine/` facade's `warm_start` argument and the ARCH-6
-  reproducer-bundle serialization remain seams for later.
-- **M6** (axial-turbine correlation set, V6) — **next**. See §7.1 (Kacker–
-  Okapuu / Craig–Cox), ARCH-8. First turbine closures behind the ARCH-4.2
-  interfaces (Appendix B.3 `Y` conversion already in `conversions.py`), plus
-  the shock-loss component the V5 choke-knee `[VERIFY]` is waiting on.
+  choke-knee traversal onto the supersonic-`mdot` branch (the single-node
+  continuity Jacobian is singular at the capacity peak — *reclassified at
+  M6-4*, see M6 below: a compressor-shock + continuation matter, not the
+  turbine milestone). The `machine/` facade's `warm_start` argument and the
+  ARCH-6 reproducer-bundle serialization remain seams for later.
+- **M6** (axial-turbine correlation set, V6) — closed. Ran as five reviewed
+  sub-steps on `main`, mirroring M4's deviation→loss→set ordering: (1)
+  `closures/axial_turbine/ainley.py` — throat-based exit angle
+  `α2 = arccos(o/s)` (§4.5; the M2→1 limit of K-O), `AinleyTurbineSwirl`;
+  added the `throat` opening to the §4.1 geometry contract (its first
+  consumer; optional, raises loudly if a turbine closure asks and it's
+  unset). (2) `kacker_okapuu.py` + `loss.py` — K-O **profile loss** (AM
+  nozzle/impulse interpolation + t/c + Mach `K_p` + Reynolds `f_Re`), native
+  B.3 `Y` converted to entropy at the B.1-re-referenced exit state (the
+  exit-Mach/`p2` reference taken at the loss-free ideal exit state, no
+  flow-view contract change); `KACKER_OKAPUU` CorrelationSet. (3) **secondary
+  + trailing-edge loss** — K-O endwall `Y_s` (frame-safe signed-cascade
+  loading; aspect-ratio factor) + TE kinetic-energy coefficient mapped to an
+  equivalent `Y`; all components share the B.3 exit reference and sum to one
+  conversion (B.5-compliant; using B.3 not B.4 for TE keeps the residual path
+  exception-free, AD-10). `aspect_ratio`/`te_o_ratio` are row-scalar design
+  inputs (annulus-derived AR is a refinement). (4) **inlet shock loss** — K-O
+  transonic term `Y_shock = 0.75(M1−0.4)^1.75` in the profile bracket, C¹ via
+  softplus; **V5 choke-knee revisited and reclassified** (measured: V5
+  meanline chokes at `mdot ≈ 175` kg/s, a continuity-capacity singularity no
+  loss closure moves; by AD-5 the *turbine* shock term doesn't apply to the
+  Lieblein *compressor* set — the V5 traversal needs a *compressor* shock
+  closure + the M5-3 back-pressure mode, a compressor-set/M8 matter). (5) V6
+  axial-turbine entry point (`verification/v6_axial_turbine.py`, a pre-swirled
+  reaction rotor) — **structural** like V5: converges at all three tiers,
+  extracts real work (Δh0<0), de-swirls to near-axial exit, PR/η in sane
+  bands (Appendix C.6). Point-by-point K-O validation-case reproduction and
+  speedline/choke traversal are `[VERIFY]`, blocked on the reference-library
+  correlation calibration (every K-O coefficient is `[VERIFY]`), as for V5.
+  The K-O secondary Mach factor `K_s`, the shock geometric/pressure factors,
+  and per-node Reynolds (a design-Re parameter stands in) are `[VERIFY]`
+  deferrals; the `(1−Mm²)` relaxation factor recalibration stays open (M6+).
+- **M7** (centrifugal: parametric-φ path, INBLADE stations, slip, V7) —
+  **next**. See ARCH-8. Also carries the M4 deferrals: `t_stations`
+  validation into `ClosureFields`/`FrozenInputs` for in-blade schedules, and
+  the `assert_valid_schedule` §7.3.4 contract-test helper.
 
 ## Commands
 
