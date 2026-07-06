@@ -30,11 +30,12 @@ validity measure. No raw clamps, no exceptions.
 from __future__ import annotations
 
 from ..._namespace import get_xp
-from ..smoothmath import (blend, blend_between, smooth_max, smooth_min,
-                          soft_clip, softplus)
+from ..smoothmath import (abs_smooth, blend, blend_between, smooth_max,
+                          smooth_min, soft_clip, softplus)
 
 __all__ = ["profile_loss_am", "mach_profile_correction",
-           "reynolds_correction", "CALIBRATED"]
+           "reynolds_correction", "secondary_loss", "trailing_edge_zeta",
+           "CALIBRATED"]
 
 # Calibrated input domain (lo, hi, transition width, mathematical floor) for
 # the validity windows + the hard floor the saturated value may not cross.
@@ -114,3 +115,74 @@ def reynolds_correction(re, *, xp=None):
     hi = (re / 1.0e6) ** (-0.2)          # high-Re mild rise (<= 1)
     flat = blend_between(lre, lo, 1.0, xp.log10(2.0e5), 0.3, xp=xp)
     return blend_between(lre, flat, hi, xp.log10(1.0e6), 0.3, xp=xp)
+
+
+# --- secondary loss (Kacker-Okapuu / Ainley-Mathieson) --------------------
+_AR_FLOOR, _AR_W = 0.3, 0.1        # blade aspect-ratio floor / blend width
+_TAN_EPS = 1.0e-3                  # abs_smooth epsilon on the loading term
+_A1_CLIP = (-85.0, 85.0, 2.0)      # inlet-angle soft-clip (cos not -> 0)
+
+
+def _aspect_ratio_factor(ar, *, xp=None):
+    """Ainley-Mathieson aspect-ratio factor ``f_AR``:
+    ``(1 - 0.25 sqrt(2 - AR)) / AR`` for ``AR < 2``, ``1/AR`` for ``AR >= 2``
+    — the two branches blended C1 across ``AR = 2`` (continuous there, both
+    give ``0.5``). Low aspect ratio => larger secondary loss. [VERIFY]"""
+    xp = get_xp(xp)
+    a = smooth_max(ar, _AR_FLOOR, _AR_W, xp=xp)
+    lo = (1.0 - 0.25 * xp.sqrt(smooth_max(2.0 - a, 0.0, _AR_W, xp=xp))) / a
+    hi = 1.0 / a
+    return blend_between(a, lo, hi, 2.0, 0.1, xp=xp)
+
+
+def secondary_loss(alpha1_deg, alpha2_deg, aspect_ratio, *, xp=None):
+    """Kacker-Okapuu secondary (endwall) loss coefficient ``Y_s`` (B.3
+    exit-dynamic-head reference; [VERIFY coefficients]).
+
+    ``Y_s = 1.2 * 0.0334 * f_AR * (cos a2 / cos a1) * (C_L/(s/c))^2 *
+    cos^2 a2 / cos^3 a_m`` with the tangential loading
+    ``C_L/(s/c) = 2 |tan a2 - tan a1| cos a_m`` and mean angle
+    ``tan a_m = 1/2 (tan a1 + tan a2)`` — frame-safe in signed cascade
+    angles (the loading is the whirl change ``d(Vtheta)/Vm``). ``a1`` is
+    soft-clipped away from +-90 deg (cos not -> 0). The K-O secondary Mach
+    factor ``K_s`` is **[VERIFY]-deferred** (second order; K_s = 1 here).
+    Returns ``(Y_s, validity)``."""
+    xp = get_xp(xp)
+    a1 = xp.deg2rad(soft_clip(alpha1_deg, *_A1_CLIP, xp=xp))
+    a2 = xp.deg2rad(alpha2_deg)
+    t1, t2 = xp.tan(a1), xp.tan(a2)
+    tan_m = 0.5 * (t1 + t2)
+    cos_m = 1.0 / xp.sqrt(1.0 + tan_m * tan_m)
+    load = 2.0 * abs_smooth(t2 - t1, _TAN_EPS, xp=xp) * cos_m   # C_L/(s/c)
+    cos_a1, cos_a2 = xp.cos(a1), xp.cos(a2)
+    z = load * load * cos_a2 * cos_a2 / cos_m ** 3
+    ys = 1.2 * 0.0334 * _aspect_ratio_factor(aspect_ratio, xp=xp) \
+        * (cos_a2 / cos_a1) * z
+    v = blend(aspect_ratio, 0.8, 0.2, xp=xp) \
+        * (1.0 - blend(aspect_ratio, 8.0, 0.5, xp=xp))
+    return ys, v
+
+
+# --- trailing-edge loss (Kacker-Okapuu energy coefficient) ----------------
+_TE_CEIL, _TE_W = 0.3, 0.02       # kinetic-energy coefficient ceiling
+
+
+def trailing_edge_zeta(alpha1_deg, alpha2_deg, te_o_ratio, *, xp=None):
+    """Kacker-Okapuu trailing-edge kinetic-energy loss coefficient
+    ``dPhi^2_TE`` (interpolated between axial-entry and impulse blades on the
+    squared angle ratio, each a smooth function of TE-thickness/throat
+    ``t_TE/o``; [VERIFY coefficients]).
+
+    Returned as a kinetic-energy coefficient ``zeta`` (the caller maps it to
+    an exit-reference ``Y`` before summing with the profile/secondary terms).
+    Smoothly ceilinged; returns ``(zeta, validity)``."""
+    xp = get_xp(xp)
+    x = smooth_max(te_o_ratio, 0.0, 0.005, xp=xp)          # t_TE/o >= 0
+    phi2_ax = 0.4 * x + 2.0 * x * x
+    phi2_imp = 0.7 * x + 4.0 * x * x
+    a2 = smooth_max(alpha2_deg, 5.0, 1.0, xp=xp)           # avoid /0
+    r = soft_clip(alpha1_deg / a2, _R_LO, _R_HI, _R_W, xp=xp)
+    zeta = smooth_min(phi2_ax + r * r * (phi2_imp - phi2_ax), _TE_CEIL,
+                      _TE_W, xp=xp)
+    v = 1.0 - blend(x, 0.15, 0.05, xp=xp)
+    return zeta, v

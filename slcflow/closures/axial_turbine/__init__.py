@@ -6,7 +6,8 @@ with provenance. Lands in reviewed M6 steps — throat-based exit angle
 from ..interfaces import CorrelationSet
 from .ainley import AinleyTurbineSwirl, throat_exit_angle
 from .kacker_okapuu import (mach_profile_correction, profile_loss_am,
-                           reynolds_correction)
+                           reynolds_correction, secondary_loss,
+                           trailing_edge_zeta)
 from .loss import KackerOkapuuLoss
 
 KACKER_OKAPUU = CorrelationSet(
@@ -21,4 +22,5 @@ KACKER_OKAPUU = CorrelationSet(
 
 __all__ = ["KACKER_OKAPUU", "AinleyTurbineSwirl", "KackerOkapuuLoss",
            "mach_profile_correction", "profile_loss_am",
-           "reynolds_correction", "throat_exit_angle"]
+           "reynolds_correction", "secondary_loss", "trailing_edge_zeta",
+           "throat_exit_angle"]

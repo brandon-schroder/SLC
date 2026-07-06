@@ -29,7 +29,8 @@ from ..interfaces import LossBreakdown, RowFlowView, RowView
 from ..smoothmath import blend, smooth_min, soft_clip, softplus
 from .ainley import throat_exit_angle
 from .kacker_okapuu import (mach_profile_correction, profile_loss_am,
-                           reynolds_correction)
+                           reynolds_correction, secondary_loss,
+                           trailing_edge_zeta)
 
 __all__ = ["KackerOkapuuLoss"]
 
@@ -44,15 +45,28 @@ _Y_CEIL, _Y_W = 0.5, 0.05
 
 @dataclass(frozen=True)
 class KackerOkapuuLoss:
-    """LossModel (section 7.1): Kacker-Okapuu subsonic profile loss,
-    converted to entropy per B.3 at the B.1-re-referenced exit state.
+    """LossModel (section 7.1): Kacker-Okapuu subsonic loss (profile +
+    secondary + trailing-edge), converted to entropy per B.3 at the
+    B.1-re-referenced exit state.
+
+    All three components share the B.3 exit-dynamic-head reference: the
+    trailing-edge kinetic-energy coefficient is mapped to an equivalent
+    ``Y`` (``Y_TE = zeta/(1-zeta)``, [VERIFY]) so the family sums to one
+    exit-reference ``Y`` and one B.3 conversion (K-O standard; B.5-compliant
+    within the single-reference turbine family). Using B.3 rather than B.4
+    for the TE term keeps the residual path exception-free (AD-10) — B.4's
+    ``assert`` guard cannot bind.
 
     Requires ``row.geometry`` (section 4.1 contract, with a ``throat``) and
     the view's lagged TE fields. ``reynolds`` is the design chord Reynolds
-    number (per-node Re from a transport backend is deferred, ARCH-9); the
-    default sits in the flat band so ``f_Re = 1``."""
+    number (per-node Re deferred to a transport backend, ARCH-9; default in
+    the flat band so ``f_Re = 1``). ``aspect_ratio`` (blade height/chord)
+    and ``te_o_ratio`` (TE thickness/throat) are row-scalar design inputs;
+    deriving aspect ratio from the annulus span is a future refinement."""
 
     reynolds: float = 5.0e5
+    aspect_ratio: float = 3.0
+    te_o_ratio: float = 0.02
 
     def evaluate(self, row: RowView, flow: RowFlowView) -> LossBreakdown:
         xp = get_xp(None)
@@ -91,15 +105,28 @@ class KackerOkapuuLoss:
         m2 = w2 / a2
         p2 = p0r_2_id * (T2 / T0r_2) ** (fluid.gamma / (fluid.gamma - 1.0))
 
-        # Kacker-Okapuu subsonic profile loss (shock deferred to M6-4).
+        # Kacker-Okapuu subsonic loss components (shock deferred to M6-4).
+        # All exit-reference Y (B.3); the TE kinetic-energy coefficient is
+        # mapped to an equivalent Y before summing (see class docstring).
         yp_am, v_p = profile_loss_am(s_c, b1_deg, alpha2_deg, tc, xp=xp)
         kp = mach_profile_correction(m1, m2, xp=xp)
         f_re = reynolds_correction(self.reynolds, xp=xp)
-        y_raw = 0.914 * (2.0 / 3.0) * yp_am * kp * f_re
+        y_profile = 0.914 * (2.0 / 3.0) * yp_am * kp * f_re
+        y_secondary, v_s = secondary_loss(b1_deg, alpha2_deg,
+                                          self.aspect_ratio, xp=xp)
+        zeta_te, v_te = trailing_edge_zeta(b1_deg, alpha2_deg,
+                                           self.te_o_ratio, xp=xp)
+        y_te = zeta_te / (1.0 - zeta_te)
+
+        y_raw = y_profile + y_secondary + y_te
         Y = smooth_min(y_raw, _Y_CEIL, _Y_W, xp=xp)
         v_y = 1.0 - blend(y_raw, _Y_CEIL, 10.0 * _Y_W, xp=xp)
 
         delta_s, _ = delta_s_turbine_Y(fluid, Y, T0r_1, p0r_1, p2, u1, u2,
                                        xp=xp)
-        return LossBreakdown(components={"profile_Y": Y}, delta_s=delta_s,
-                             validity=float(xp.min(v_a * v_p * v_y)))
+        # Components recorded individually for auditability (B.5.3).
+        return LossBreakdown(
+            components={"profile_Y": y_profile, "secondary_Y": y_secondary,
+                        "te_Y": y_te, "te_zeta": zeta_te, "Y_total": Y},
+            delta_s=delta_s,
+            validity=float(xp.min(v_a * v_p * v_y * v_s * v_te)))

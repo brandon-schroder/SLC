@@ -18,6 +18,8 @@ from slcflow.closures.axial_turbine import (KACKER_OKAPUU, AinleyTurbineSwirl,
                                             mach_profile_correction,
                                             profile_loss_am,
                                             reynolds_correction,
+                                            secondary_loss,
+                                            trailing_edge_zeta,
                                             throat_exit_angle)
 from slcflow.closures.interfaces import (CorrelationSet, LossModel,
                                          RowFlowView, RowView)
@@ -119,6 +121,41 @@ def test_reynolds_correction_flat_band_and_tails():
 
 
 # --------------------------------------------------------------------------
+# Section 4.3: secondary (endwall) loss + trailing-edge loss
+# --------------------------------------------------------------------------
+def test_secondary_loss_loading_and_aspect_ratio():
+    # More turning (larger exit angle) => more secondary loss.
+    light = float(secondary_loss(20.0, 50.0, 3.0)[0])
+    heavy = float(secondary_loss(20.0, 68.0, 3.0)[0])
+    assert heavy > light > 0.0
+    # Lower aspect ratio (stubbier blade) => more secondary loss (f_AR up).
+    tall = float(secondary_loss(20.0, 60.0, 5.0)[0])
+    stub = float(secondary_loss(20.0, 60.0, 1.2)[0])
+    assert stub > tall > 0.0
+    # Typical magnitude band and validity in [0, 1].
+    assert 0.005 < float(secondary_loss(20.0, 60.0, 3.0)[0]) < 0.10
+    assert 0.0 <= float(secondary_loss(20.0, 60.0, 3.0)[1]) <= 1.0
+
+
+def test_secondary_loss_c1_in_exit_angle():
+    _assert_c1_continuous(lambda a: secondary_loss(20.0, a, 3.0)[0],
+                          25.0, 78.0)
+
+
+def test_trailing_edge_zeta_grows_with_thickness_and_loading():
+    # Thicker trailing edge (t_TE/o up) => more TE loss.
+    thin = float(trailing_edge_zeta(20.0, 60.0, 0.01)[0])
+    thick = float(trailing_edge_zeta(20.0, 60.0, 0.06)[0])
+    assert thick > thin > 0.0
+    # Impulse-like (b1/b2 -> 1) loses more than axial-entry (b1 -> 0).
+    axial = float(trailing_edge_zeta(0.0, 60.0, 0.03)[0])
+    impulse = float(trailing_edge_zeta(60.0, 60.0, 0.03)[0])
+    assert impulse > axial
+    _assert_c1_continuous(lambda x: trailing_edge_zeta(20.0, 60.0, x)[0],
+                          0.0, 0.12)
+
+
+# --------------------------------------------------------------------------
 # Section 4.4 / B.3: the full loss model on a synthetic rotor view
 # --------------------------------------------------------------------------
 def _rotor_view_and_row(vm=140.0, omega=500.0, r=0.45, rvt=30.0, vm_te=160.0,
@@ -150,6 +187,11 @@ def test_loss_band_positivity_and_validity():
     out = KackerOkapuuLoss().evaluate(row, view)
     Y = float(out.components["profile_Y"][0])
     assert 0.02 < Y < 0.2
+    # All three subsonic components are present, positive, and the total
+    # exceeds the profile term alone (section 4.4; B.5.3 auditability).
+    assert float(out.components["secondary_Y"][0]) > 0.0
+    assert float(out.components["te_Y"][0]) > 0.0
+    assert float(out.components["Y_total"][0]) > Y
     assert float(out.delta_s[0]) > 0.0        # real loss (entropy rise)
     assert out.validity > 0.0
 
@@ -159,7 +201,7 @@ def test_delta_s_matches_b3_conversion_of_native_coefficient():
     # linked by exactly the B.3 conversion at the loss model's exit state.
     row, view = _rotor_view_and_row()
     out = KackerOkapuuLoss().evaluate(row, view)
-    Y = out.components["profile_Y"]
+    Y = out.components["Y_total"]        # profile + secondary + TE, exit ref
 
     # Reconstruct the ideal exit state the loss model evaluated at.
     sgn = row.geometry.orientation
