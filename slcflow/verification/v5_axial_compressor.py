@@ -39,7 +39,7 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["V5AxialRotor"]
+__all__ = ["V5AxialRotor", "V5MultistageCompressor"]
 
 _DEG = np.pi / 180.0
 
@@ -108,3 +108,79 @@ class V5AxialRotor:
             fidelity = FidelityConfig.tier1()
         return self.machine().evaluate(MassFlowSpec(self.mdot), fidelity,
                                        n_sl=n_sl)
+
+
+@dataclass(frozen=True)
+class V5MultistageCompressor:
+    """Repeating-stage axial compressor for the M8 mixing revisit (section
+    9.5 / 3.6). ``n_stages`` rotor+stator pairs on a cylindrical annulus, all
+    fed by :data:`LIEBLEIN_NACA65`. Each rotor adds swirl and work; each
+    stator de-swirls back toward axial, so the stage repeats. Across several
+    rows the spanwise entropy stratification accumulates (loss varies with the
+    local span flow) -- the configuration section 3.6 mixing exists for. The
+    metal angles are a representative matched set, **not** a digitised design.
+    """
+
+    n_stages: int = 2
+    r0: float = 0.35
+    r1: float = 0.55
+    length: float = 1.0
+    omega: float = 300.0
+    mdot: float = 90.0
+    h0_in: float = 3.0e5
+    s_in: float = 0.0
+    rotor_beta_deg: tuple = (-48.0, -30.0)   # relative LE, TE (matched stage)
+    stator_beta_deg: tuple = (25.0, -5.0)    # absolute LE, TE (de-swirl to ~0)
+    solidity: float = 1.3
+    chord: float = 0.05
+    thickness: float = 0.08
+    blade_count: int = 35
+    gas: PerfectGas = field(default_factory=PerfectGas)
+
+    pr_band: tuple = (1.05, 3.0)
+    eta_band: tuple = (0.70, 0.999)
+
+    def _rows_and_stations(self):
+        n_rows = 2 * self.n_stages
+        # Blade stations occupy (0.05, 0.95); each row is an LE/TE pair.
+        edges = np.linspace(0.06, 0.94, 2 * n_rows)
+        stations = [StationDef(StationType.DUCT, 0.0, 0.0)]
+        specs = []
+        for k in range(n_rows):
+            is_rotor = (k % 2 == 0)
+            rid = f"{'r' if is_rotor else 's'}{k // 2 + 1}"
+            le, te = edges[2 * k], edges[2 * k + 1]
+            stations.append(StationDef(StationType.EDGE_LE, le, le, row_id=rid))
+            stations.append(StationDef(StationType.EDGE_TE, te, te, row_id=rid))
+            b1, b2 = (self.rotor_beta_deg if is_rotor
+                      else self.stator_beta_deg)
+            geom = ParamRowGeometry(
+                blade_count=self.blade_count, beta1=b1 * _DEG, beta2=b2 * _DEG,
+                chord_len=self.chord, solidity_val=self.solidity,
+                thickness=self.thickness)
+            specs.append(RowSpec(
+                row_id=rid, omega=(self.omega if is_rotor else 0.0),
+                swirl=LIEBLEIN_NACA65.swirl, loss=LIEBLEIN_NACA65.loss,
+                blade_count=self.blade_count, geometry=geom))
+        stations.append(StationDef(StationType.DUCT, 1.0, 1.0))
+        return specs, stations
+
+    def machine(self) -> Machine:
+        specs, stations = self._rows_and_stations()
+        z = np.linspace(0.0, self.length, 8)
+        w0 = WallCurve.from_points(
+            np.column_stack([z, np.full_like(z, self.r0)]))
+        w1 = WallCurve.from_points(
+            np.column_stack([z, np.full_like(z, self.r1)]))
+        return Machine(FlowPath(w0, w1, stations), self.gas,
+                       InletCondition(h0=self.h0_in, s=self.s_in, rvt=0.0),
+                       rows=specs)
+
+    def evaluate(self, n_sl: int = 9, fidelity: FidelityConfig = None,
+                 *, mixing=None) -> PerformanceResult:
+        """Solve the stack. Default Tier 3 with spanwise mixing on; pass
+        ``fidelity=FidelityConfig.tier3()`` (mixing off) for the comparison."""
+        if fidelity is None:
+            fidelity = FidelityConfig.tier3(mixing_term=1.0)
+        return self.machine().evaluate(MassFlowSpec(self.mdot), fidelity,
+                                       n_sl=n_sl, mixing=mixing)

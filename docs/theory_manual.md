@@ -523,6 +523,17 @@ Section 8 requirement on the free-vortex (and forced-vortex) uniform-inlet strai
 
 The forced-vortex residue is larger because its $V_m$ genuinely varies across span (∝ the family $V_m^2 = V_{m0}^2 - 2\Omega_f^2(r^2-r_0^2)$), so the one-point rule has a real profile to miss; the free vortex is spanwise-uniform and residue is the density/$r$-weighting curvature alone. Both are the meanline's own discretization, not solver error — the same $N_{sl}=1$ path is one assembler with no tier branch (AD-1), verified by `test_tier1_is_pure_data_switch_not_a_code_path` (V5).
 
+### C.5m V5 multistage — mixing revisit (bound at M8-3; `tests/test_multistage_mixing.py`)
+
+The M8 revisit of V5 in a **multistage** configuration (`V5MultistageCompressor`, two repeating rotor+stator pairs on a cylindrical annulus, matched Lieblein stage: rotor $\beta=(-48°,-30°)$, stator $(25°,-5°)$ de-swirling to near-axial). This is the configuration §3.6 exists for, and the result is categorical rather than incremental:
+
+| Configuration ($N_{sl}=9$, Tier 3) | Converged | PR (t-t) | efficiency | exit $\Delta s$ span spread |
+|---|---|---|---|---|
+| **mixing off** (max 800 outer iters) | **no** (NUMERICAL_FAILURE) | 1.007 | — | $\approx 40$ J/(kg·K) |
+| **mixing on** (default Gallimore, $c_{mix}=0.01$) | yes | 1.18 | 0.86 | $\approx 0.7$ J/(kg·K) |
+
+Without mixing the hub/tip entropy split **runs away** (a $\sim$40 J/(kg·K) spanwise spread) and the two-stage solve fails outright even at 800 iterations — §3.6's "unrealistic spanwise stratification" made concrete. The **shipped default** mixing constant is enough to bound it ($\approx$0.7 J/(kg·K) spread, a 50× reduction) and recover convergence and a physical PR $\approx$ 1.18. So for multistage axial, mixing is a **convergence prerequisite**, not a cosmetic smoother. Bands are structural plausibility gates as for single-stage V5; $c_{mix}$ stays **[VERIFY]** (calibration deferred, ARCH-9).
+
 ### C.6 V6 — Axial turbine, structural (bound at M6-5; `tests/test_v6_axial_turbine.py`)
 
 **Structural gate only** (as V5): a pre-swirled axial-turbine rotor composed through the `Machine` facade with the Kacker–Okapuu set (`slcflow/verification/v6_axial_turbine.py`) — throat exit angle + profile/secondary/trailing-edge/shock loss — converges, **extracts** real work ($\Delta h_0<0$) with real loss ($\Delta s>0$), de-swirls toward an axial exit, and lands total-to-total expansion ratio and efficiency in physically sane bands. The bands are plausibility gates, **not** validation tolerances: point-by-point reproduction of a specific K–O validation case / published stage map, and speedline/choke traversal, are **[VERIFY]**, blocked on the reference-library correlation calibration (every K–O fit coefficient is `[VERIFY]`) — the same boundary as V5. Reference geometry is a representative reaction rotor ($r=0.35/0.50$ m, $\Omega=250$ s⁻¹, $\dot m=40$ kg/s, inlet $rV_\theta=30$, throat $o=0.030$ m), *not* a digitised K–O case.
