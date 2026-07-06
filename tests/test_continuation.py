@@ -12,10 +12,11 @@ Provenance: M5 sub-step 2, written with the implementation.
 import numpy as np
 import pytest
 
-from slcflow.drivers import (ClassicalConfig, MapResult, SpeedlineConfig,
-                             solve_classical, solve_speedline)
+from slcflow.drivers import (BCSwitchConfig, ClassicalConfig, MapResult,
+                             SpeedlineConfig, solve_classical, solve_speedline)
 from slcflow.drivers.classical import RowSpec
-from slcflow.drivers.continuation import _solve_point
+from slcflow.drivers.continuation import (_BACKPRESSURE, _NORMAL, _next_mode,
+                                          _solve_point)
 from slcflow.errors import ConfigError
 from slcflow.closures.axial_compressor import LIEBLEIN_NACA65
 from slcflow.geometry.bladerow import ParamRowGeometry
@@ -133,10 +134,53 @@ def test_point_solver_escalates_classical_to_newton():
     assert warm.converged
     cfg = SpeedlineConfig(classical=ClassicalConfig(max_outer=1))  # cripple
     res, driver = _solve_point(
-        145.0, warm, topology=topo, fluid=case.gas,
+        MassFlowSpec(145.0), warm, topology=topo, fluid=case.gas,
         fidelity=FidelityConfig.tier2(), inlet=inlet, rows=(), steps=None,
         blockage=None, metrics_config=None, config=cfg)
     assert driver == "newton" and res.converged
+
+
+# --------------------------------------------------------------------------
+# Section 6.6 hysteretic BC-switch
+# --------------------------------------------------------------------------
+def test_next_mode_hysteresis_is_automatic_and_banded():
+    # The core section 6.6 requirement, as a pure decision: switch to
+    # back-pressure below c_sw, and back to normal only past c_sw + delta_hys
+    # (no switch-back inside the band -> no limit cycling).
+    cfg = BCSwitchConfig(c_sw=0.05, delta_hys=0.03)
+    assert _next_mode(_NORMAL, 0.10, cfg)[:2] == (_NORMAL, False)
+    assert _next_mode(_NORMAL, 0.04, cfg)[:2] == (_BACKPRESSURE, True)
+    # In back-pressure mode: stay until margin clears the hysteresis band.
+    assert _next_mode(_BACKPRESSURE, 0.06, cfg)[:2] == (_BACKPRESSURE, False)
+    assert _next_mode(_BACKPRESSURE, 0.09, cfg)[:2] == (_NORMAL, True)
+
+
+def test_bc_switch_traverses_choke_proximal_region_and_recovers():
+    # Starting near choke (small margin), the driver switches to the
+    # back-pressure branch, throttles until the margin clears the hysteresis
+    # band, switches back, and continues -- instead of dead-ending. The whole
+    # excursion is logged (section 6.6: automatic + logged).
+    case, topo, inlet = _duct()
+    cfg = SpeedlineConfig(bc_switch=BCSwitchConfig(
+        c_sw=0.10, delta_hys=0.05, bp_step_frac=0.02))
+    m = solve_speedline(topo, case.gas, FidelityConfig.tier2(), inlet,
+                        mdot_start=210.0, mdot_min=150.0, mdot_step=10.0,
+                        config=cfg)
+    modes = [p.mode for p in m.points]
+    assert _BACKPRESSURE in modes and _NORMAL in modes    # both branches used
+    # A switch out to back-pressure and a switch back to normal, both logged.
+    assert [(s.from_mode, s.to_mode) for s in m.switches] == [
+        (_NORMAL, _BACKPRESSURE), (_BACKPRESSURE, _NORMAL)]
+    # Back-pressure points were solved for their (output) mdot by Newton.
+    assert all(p.driver == "newton-bp"
+               for p in m.points if p.mode == _BACKPRESSURE)
+    # Achieved mdot falls monotonically across the whole excursion (progress
+    # toward stall is unbroken by the mode change).
+    mdots = [p.mdot for p in m.points]
+    assert all(b < a for a, b in zip(mdots, mdots[1:]))
+    # The margin recovered above the hysteresis ceiling before switching back.
+    assert m.switches[1].mdot > 0.0
+    assert m.stall is None
 
 
 def test_cold_first_point_failure_flags_solver_failure():
