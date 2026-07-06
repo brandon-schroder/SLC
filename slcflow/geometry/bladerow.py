@@ -13,10 +13,13 @@ nodes, interpolated monotone-cubic (PCHIP — C1). ``TabulatedRowGeometry``
 (from existing hardware geometry) is deferred until a real dataset needs it
 (ARCH-3.1; record: deliberate).
 
-Contract slots not yet consumed by any correlation — throat width, lean/
-sweep of the mean stream surface, tangential thickness — join with their
-consumers (sections 4.5, A.8, 3.2 blade blockage; M7). Adding them here
-early would be untestable speculation.
+Contract slots join with their consumers, not before (adding them early
+would be untestable speculation). ``throat`` (the throat opening ``o``,
+section 4.5) landed at M6 with its first consumer, the axial-turbine
+exit-angle closure; it is optional (compressor rows never set it) and
+raises loudly if a turbine closure asks for a throat that was not provided.
+Still deferred until their own consumers exist: lean/sweep of the mean
+stream surface, tangential thickness (sections A.8, 3.2 blade blockage; M7).
 """
 from __future__ import annotations
 
@@ -44,6 +47,7 @@ class BladeRowGeometry(Protocol):
     def stagger(self, y): ...          # [rad]
     def solidity(self, y): ...         # chord / pitch
     def thickness_ratio(self, y): ...  # max thickness / chord
+    def throat(self, y): ...           # throat opening o [m] (section 4.5)
     def tip_clearance(self) -> float: ...  # [m]
 
 
@@ -82,6 +86,7 @@ class ParamRowGeometry:
     solidity_val: object
     thickness: object = 0.10    # max t/c
     stagger_val: object = 0.0   # [rad]
+    throat_val: object = None   # throat opening o [m]; None = not provided
     clearance: float = 0.0      # [m]
     _f: dict = field(init=False, repr=False, compare=False)
 
@@ -105,6 +110,10 @@ class ParamRowGeometry:
             raise ConfigError("solidity must be > 0 across span")
         if np.any(np.asarray(f["thickness"](y), dtype=float) <= 0.0):
             raise ConfigError("thickness ratio must be > 0 across span")
+        if self.throat_val is not None:
+            f["throat"] = _spanwise(self.throat_val, "throat_val")
+            if np.any(np.asarray(f["throat"](y), dtype=float) <= 0.0):
+                raise ConfigError("throat must be > 0 across span")
         object.__setattr__(self, "_f", f)
 
     # --- section 4.1 contract ---------------------------------------------
@@ -125,6 +134,16 @@ class ParamRowGeometry:
 
     def thickness_ratio(self, y):
         return self._f["thickness"](y)
+
+    def throat(self, y):
+        """Throat opening ``o`` [m] (section 4.5). Config boundary (AD-10):
+        raises if no throat was provided for this row — a turbine
+        exit-angle closure asked for a throat a compressor row never set."""
+        if "throat" not in self._f:
+            raise ConfigError(
+                "throat opening not provided for this row (required by the "
+                "axial-turbine exit-angle closure; set throat_val)")
+        return self._f["throat"](y)
 
     def tip_clearance(self) -> float:
         return self.clearance
