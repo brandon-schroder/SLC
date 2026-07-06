@@ -1,7 +1,8 @@
-"""Solver drivers (ARCH-5.2/5.3/5.4). Classical nested scheme now; the
-Newton and continuation drivers land with M5 (ARCH-8)."""
+"""Solver drivers (ARCH-5.2/5.3/5.4). Classical nested scheme and the global
+Newton driver (M5); the continuation/map driver lands next (ARCH-8)."""
 from .classical import (ClassicalConfig, ClassicalResult, RowSpec,
                         solve_classical)
+from .newton import NewtonConfig, newton_solve, solve_newton
 
 __all__ = ["ClassicalConfig", "ClassicalResult", "RowSpec",
-           "solve_classical"]
+           "solve_classical", "NewtonConfig", "newton_solve", "solve_newton"]
