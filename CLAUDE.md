@@ -256,6 +256,31 @@ These are not suggestions; violating them is a bug even if tests pass.
   library + deferred loss), as for V5/V6. Still open past M7: the A.8 force;
   a robust radial-repositioning stabilization (the stable `n_inblade` pocket
   is narrow); blade-loading/clearance/disk loss components.
+- **M8** (spanwise mixing, multistage V5 revisit, mixed-flow V8) — closed.
+  Ran as four reviewed sub-steps on `main`: (1) `transport/mixing.py` — the
+  §3.6 spanwise-mixing operator: implicit (backward-Euler in m, tridiagonal
+  in q) diffusion of {h0,s,rVθ}, finite-volume with zero-flux walls so it
+  **conserves** the mass-flux-weighted total and is **unconditionally
+  stable**; `GallimoreMixing` default (`μ_mix = c_mix·ρ·Vm·r`, `c_mix=0.01`
+  `[VERIFY]`); `FidelityConfig.mixing_term` flag (default 0 in ALL tiers incl.
+  tier3(), so the §8 degeneracy / V3 identity is untouched). (2) wired into
+  the classical driver's lagged field refresh (§6.2.2.4, AD-4) — never the
+  residual path (AD-3); `mixing_term=0` is bit-identical to a plain solve even
+  with a model supplied. (3) `V5MultistageCompressor` (2 repeating
+  rotor+stator stages) — **measured: mixing is a convergence prerequisite for
+  multistage axial, not a smoother**: mixing-off runs away to a ~40 J/(kg·K)
+  spanwise entropy split and NUMERICAL_FAILUREs even at 800 iters; the shipped
+  default mixing converges it (PR≈1.18, 50× less stratified) (Appendix C.5m).
+  (4) `V8MixedFlow` (partial φ→55° bend, centrifugal set) — structural at
+  Tier 1+2 (converges, compresses PR≈1.56, exits mixed-flow with
+  r_LE<r_exit<r_c), Appendix C.8. **Measured: the V7 90°-bend Tier-3 pocket
+  does NOT transfer to intermediate angles** — Tier-3 mixed-flow repositioning
+  fails across a wide (n_sl,n_inblade,Ω) grid; pinned as a tripwire test. Open
+  past M8: the robust radial/mixed **repositioning stabilization** (now the
+  V8 Tier-3 blocker), `c_mix` calibration, the mixing entropy-production term
+  (the operator redistributes s; the Δs_mix irreversibility source is a
+  refinement), plus the standing M7 carryovers (A.8 force, centrifugal loss
+  components). Per ARCH-8 this was the last milestone on the ladder.
 
 ## Commands
 
