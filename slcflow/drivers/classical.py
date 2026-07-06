@@ -39,7 +39,7 @@ from ..grid.core import GridTopology, MetricsConfig, initialize_positions
 from ..grid.quadrature import invert_cumulative
 from ..transport.streamwise import (TransportFields, TransportStep,
                                     row_steps, sweep)
-from ..types import FidelityConfig, MassFlowSpec
+from ..types import BackPressureSpec, FidelityConfig, MassFlowSpec
 
 __all__ = ["ClassicalConfig", "ClassicalResult", "RowSpec", "solve_classical"]
 
@@ -377,7 +377,10 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                 "warm_start topology shape "
                 f"({warm_start.frozen.n_sl}, {warm_start.frozen.n_qo}) != "
                 f"({n_sl}, {n_qo}); a warm start must be on the same grid")
-        ws_vm_q0, ws_q_int = unpack(warm_start.x, n_sl, n_qo)
+        ws_vm_q0, ws_q_int, _ = unpack(warm_start.x, n_sl, n_qo,
+                                       backpressure=isinstance(
+                                           warm_start.frozen.spec,
+                                           BackPressureSpec))
         vm_q0 = np.array(ws_vm_q0, dtype=float)
         if n_sl == 1:
             q_full = np.array(warm_start.frozen.q_fixed, dtype=float)

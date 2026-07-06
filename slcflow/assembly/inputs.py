@@ -16,7 +16,8 @@ from ..errors import ConfigError
 from ..fluid.base import WorkingFluid
 from ..grid.core import GridTopology, MetricsConfig
 from ..transport.streamwise import TransportFields
-from ..types import FidelityConfig, MassFlowSpec, OperatingSpec
+from ..types import (BackPressureSpec, FidelityConfig, MassFlowSpec,
+                     OperatingSpec)
 
 __all__ = ["ClosureFields", "FrozenInputs"]
 
@@ -72,9 +73,10 @@ class FrozenInputs:
     topology : immutable grid topology (AD-8).
     fluid : thermodynamic backend (section 3.7).
     fidelity : tier term-flags (section 8, AD-1).
-    spec : operating specification. M2 supports ``MassFlowSpec``; the
-        BC-switched ``BackPressureSpec`` residual form lands with M5
-        (ARCH-4.3, ARCH-8) and is rejected here until then.
+    spec : operating specification. ``MassFlowSpec`` (normal mode) or, since
+        M5, ``BackPressureSpec`` (choke-proximal: ``mdot`` joins the state and
+        the assembler appends the section 6.6 back-pressure residual at the
+        throttling station).
     transported : lagged nodal (h0, s, rVt), each ``(n_sl, n_qo)``
         (section 6.1: transported fields are functions of the state updated
         by lagged sweeps).
@@ -119,10 +121,15 @@ class FrozenInputs:
             if np.shape(arr) != shape:
                 raise ConfigError(
                     f"{name} shape {np.shape(arr)} != (n_sl, n_qo) = {shape}")
-        if not isinstance(self.spec, MassFlowSpec):
+        if isinstance(self.spec, BackPressureSpec):
+            if not (0 <= self.spec.station < self.topology.n_qo):
+                raise ConfigError(
+                    f"BackPressureSpec.station {self.spec.station} out of "
+                    f"range [0, {self.topology.n_qo})")
+        elif not isinstance(self.spec, MassFlowSpec):
             raise ConfigError(
-                "only MassFlowSpec is supported until the M5 BC-switching "
-                f"milestone (ARCH-8), got {type(self.spec).__name__}")
+                "spec must be MassFlowSpec or BackPressureSpec, got "
+                f"{type(self.spec).__name__}")
         if self.vm_lagged is None:
             object.__setattr__(self, "vm_lagged", np.zeros(shape))
         else:

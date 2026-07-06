@@ -119,7 +119,7 @@ def test_crossing_streamline_is_infeasible_and_rejected():
     case = V1ForcedVortex()
     topo, inlet, _ = _setup(case, 17)
     res_c = _tier2(topo, case, inlet)
-    vm_q0, q_int = unpack(res_c.x, 17, topo.n_qo)
+    vm_q0, q_int, _ = unpack(res_c.x, 17, topo.n_qo)
     q_bad = q_int.copy()
     q_bad[[0, 5]] = q_bad[[5, 0]]                        # cross two streamlines
     x_bad = pack(vm_q0, q_bad)
@@ -145,7 +145,7 @@ def test_newton_line_search_recovers_from_a_crossing_full_step():
     asm = ResidualAssembler(res_c.frozen)
     # Warm start: compress all interior streamlines toward one wall so the
     # first Newton correction is large and position-heavy.
-    vm_q0, q_int = unpack(res_c.x, 17, topo.n_qo)
+    vm_q0, q_int, _ = unpack(res_c.x, 17, topo.n_qo)
     lengths = np.array([qo.length for qo in topo.flowpath.qo_curves])
     q_squeezed = 0.03 * lengths[None, :] + 0.94 * q_int
     x0 = pack(vm_q0 * 1.1, q_squeezed)

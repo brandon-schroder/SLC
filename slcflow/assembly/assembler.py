@@ -32,6 +32,7 @@ from scipy.optimize import minimize_scalar
 from ..errors import ConfigError
 from ..grid.core import GridMetrics, evaluate_metrics
 from ..grid.quadrature import cumulative
+from ..types import BackPressureSpec
 from .inputs import FrozenInputs
 from .pack import unpack
 
@@ -303,11 +304,20 @@ class ResidualAssembler:
     # ------------------------------------------------------------------
     # ARCH-5.1 public assembly
     # ------------------------------------------------------------------
+    @property
+    def backpressure(self) -> bool:
+        """Choke-proximal mode (section 6.6): the spec fixes exit pressure and
+        ``mdot`` is a state unknown carrying one extra residual."""
+        return isinstance(self.frozen.spec, BackPressureSpec)
+
     def split(self, x) -> AssembledFields:
         """Assembled per-q-o picture from the state vector: metrics, the
-        eliminated ``Vm`` field, and thermodynamics (ARCH-5.1)."""
+        eliminated ``Vm`` field, and thermodynamics (ARCH-5.1). The
+        back-pressure-mode ``mdot`` unknown does not enter the field picture
+        (it is a continuity *target*), so it is ignored here."""
         fz = self.frozen
-        vm_q0, q_int = unpack(x, fz.n_sl, fz.n_qo)
+        vm_q0, q_int, _ = unpack(x, fz.n_sl, fz.n_qo,
+                                 backpressure=self.backpressure)
         q_full = self._full_q(q_int)
         metrics = evaluate_metrics(fz.topology, q_full, fz.metrics_config)
         dists = self._build_dists(q_full, metrics)
@@ -325,10 +335,15 @@ class ResidualAssembler:
         """The section 6.1 residual vector — pure in ``(x, FrozenInputs)``
         (AD-3). Rows: ``R_cont_j`` (section 5.4) for all j, then
         ``R_pos_ij`` (streamtube mass-fraction error) for interior i in
-        C-order, matching ``assembly.pack``."""
+        C-order, matching ``assembly.pack``. In back-pressure mode (section
+        6.6) ``mdot`` is read from the trailing state component and ONE more
+        row is appended: the throttling-station back-pressure condition."""
         fz = self.frozen
         fields = self.split(x)
-        mdot = fz.spec.mdot
+        if self.backpressure:
+            _, _, mdot = unpack(x, fz.n_sl, fz.n_qo, backpressure=True)
+        else:
+            mdot = fz.spec.mdot
         cums = [self.mass_cumulative(j, fields.vm[:, j], fields)
                 for j in range(fz.n_qo)]
         r_cont = np.array([_TWO_PI * c[-1] - mdot for c in cums])
@@ -336,4 +351,23 @@ class ResidualAssembler:
         r_pos = np.stack(
             [c[1:-1] - psi_int * (mdot / _TWO_PI) for c in cums],
             axis=1) if fz.n_sl > 2 else np.zeros((0, fz.n_qo))
-        return np.concatenate([r_cont, np.ravel(r_pos)])
+        rows = [r_cont, np.ravel(r_pos)]
+        if self.backpressure:
+            rows.append(self._backpressure_residual(fields))
+        return np.concatenate(rows)
+
+    def _backpressure_residual(self, fields: AssembledFields):
+        """Section 6.6 back-pressure condition: the static pressure at the
+        ``q = 0`` node of the throttling station equals the specified exit
+        pressure. This is the "hub-velocity level at the throttling station"
+        handle — one scalar residual balancing the added ``mdot`` unknown.
+        (Which physical wall is ``q = 0`` is the A.1.1 orientation, AD-9.)"""
+        fz = self.frozen
+        st = fz.spec.station
+        vm0 = fields.vm[0, st]
+        r0 = fields.metrics.r[0, st]
+        vt0 = fz.transported.rvt[0, st] / r0
+        h = (fz.transported.h0[0, st]
+             - 0.5 * (vm0 * vm0 + vt0 * vt0))
+        p_static = fz.fluid.p(h, fz.transported.s[0, st])
+        return np.array([p_static - fz.spec.p_exit])

@@ -38,13 +38,13 @@ import numpy as np  # driver layer: orchestration, not residual path  # ad6: all
 
 from ..assembly.assembler import ResidualAssembler
 from ..assembly.inputs import ClosureFields, FrozenInputs
-from ..assembly.pack import unpack
+from ..assembly.pack import n_unknowns, pack, unpack
 from ..diagnostics.record import (ConvergenceRecord, IterationRecord,
                                   SolveStatus)
 from ..errors import ConfigError
 from ..grid.core import MetricsConfig
 from ..transport.streamwise import TransportFields, TransportStep, row_steps, sweep
-from ..types import FidelityConfig, MassFlowSpec
+from ..types import BackPressureSpec, FidelityConfig, MassFlowSpec, OperatingSpec
 from .classical import (ClassicalResult, _closure_norm, _evaluate_rows,
                         _resolve_rows)
 
@@ -94,12 +94,16 @@ class NewtonConfig:
 # ---------------------------------------------------------------------------
 # State geometry helpers (independent of the assembler's spline-raising path)
 # ---------------------------------------------------------------------------
+def _is_bp(frozen: FrozenInputs) -> bool:
+    return isinstance(frozen.spec, BackPressureSpec)
+
+
 def _q_full_from_x(x, frozen: FrozenInputs):
     """Reconstruct the nodal q-positions from ``x`` WITHOUT building the
     section 5.3 interpolants — so the monotonicity guard can inspect a trial
     step that the assembler's PCHIP construction would reject by raising."""
     n_sl, n_qo = frozen.n_sl, frozen.n_qo
-    _, q_int = unpack(x, n_sl, n_qo)
+    _, q_int, _ = unpack(x, n_sl, n_qo, backpressure=_is_bp(frozen))
     if n_sl == 1:
         return frozen.q_fixed                    # meanline: single fixed node
     lengths = np.array([qo.length
@@ -118,11 +122,26 @@ def _is_feasible_q(x, frozen: FrozenInputs) -> bool:
 
 
 def _residual_scale(frozen: FrozenInputs):
-    """Per-row scale making continuity (``~mdot``) and position (``~mdot/2pi``)
-    residual rows dimensionless-comparable (section 6.2.5 in one norm)."""
+    """Per-row scale making continuity (``~mdot``), position (``~mdot/2pi``),
+    and the back-pressure (``~p_exit``) residual rows dimensionless-comparable
+    (section 6.2.5 in one norm). In back-pressure mode ``mdot`` is a state
+    unknown, so a representative flow scale is taken from the specified exit
+    pressure and inlet stagnation state instead of ``spec.mdot``."""
     n_sl, n_qo = frozen.n_sl, frozen.n_qo
-    mdot = frozen.spec.mdot
     n_pos = max(n_sl - 2, 0) * n_qo
+    if _is_bp(frozen):
+        # Flow scale from a mid-annulus 1-D estimate at the specified exit
+        # pressure: mdot ~ rho * a * area is only a NORMALISER, not physics.
+        rho = float(np.mean(frozen.fluid.rho(np.mean(frozen.transported.h0),
+                                             np.mean(frozen.transported.s))))
+        a = float(np.mean(frozen.fluid.a(np.mean(frozen.transported.h0),
+                                         np.mean(frozen.transported.s))))
+        r = float(np.mean(frozen.topology.flowpath.qo_curves[0].point(0.5)[1]))
+        mdot = max(_TWO_PI * rho * a * r * 0.1, 1.0)
+        return np.concatenate([np.full(n_qo, mdot),
+                               np.full(n_pos, mdot / _TWO_PI),
+                               np.array([frozen.spec.p_exit])])
+    mdot = frozen.spec.mdot
     return np.concatenate([np.full(n_qo, mdot),
                            np.full(n_pos, mdot / _TWO_PI)])
 
@@ -229,7 +248,7 @@ def _rec(it, rnorm, alpha) -> IterationRecord:
 # Outer driver (mandatory warm start + quasi-Newton closure lagging)
 # ---------------------------------------------------------------------------
 def solve_newton(topology, fluid, fidelity: FidelityConfig,
-                 spec: MassFlowSpec, inlet: TransportFields, *,
+                 spec: OperatingSpec, inlet: TransportFields, *,
                  warm_start: ClassicalResult,
                  rows=(), steps=None, blockage=None,
                  metrics_config: MetricsConfig = None,
@@ -241,6 +260,11 @@ def solve_newton(topology, fluid, fidelity: FidelityConfig,
     inner solve and its lagged transport/closures seed the outer loop. Returns
     a :class:`ClassicalResult` (same shape as the classical driver, so the
     facade/continuation layers consume both identically).
+
+    ``spec`` may be a :class:`MassFlowSpec` (normal mode) or a
+    :class:`BackPressureSpec` (choke-proximal, section 6.6). In the latter the
+    ``mdot`` state unknown is appended to the seed if the warm start does not
+    already carry it (a normal-mode seed switching into back-pressure mode).
     """
     if warm_start is None or warm_start.frozen is None:
         raise ConfigError(
@@ -266,6 +290,18 @@ def solve_newton(topology, fluid, fidelity: FidelityConfig,
 
     # Seed from the warm start (ARCH-5.3): its state and lagged fields.
     x = np.array(warm_start.x, dtype=float)
+    # Back-pressure mode: ensure the state carries the mdot unknown. If the
+    # seed is a normal-mode iterate (the choke-proximal SWITCH, section 6.6),
+    # append the seed's mass flow as the initial mdot; if it already carries
+    # one (BP -> BP continuation), keep it.
+    if isinstance(spec, BackPressureSpec):
+        if x.size == n_unknowns(n_sl, n_qo, backpressure=False):
+            ws_spec = warm_start.frozen.spec
+            mdot0 = (ws_spec.mdot if isinstance(ws_spec, MassFlowSpec)
+                     else unpack(warm_start.x, n_sl, n_qo,
+                                 backpressure=True)[2])
+            x = pack(x[:n_qo], np.reshape(x[n_qo:], (max(n_sl - 2, 0), n_qo)),
+                     float(mdot0))
     transported = warm_start.frozen.transported
     closures = warm_start.frozen.closures
     vm_lagged = warm_start.frozen.vm_lagged

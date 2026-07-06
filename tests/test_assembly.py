@@ -98,7 +98,7 @@ def test_pack_unpack_round_trip():
     vm, qi = rng.uniform(10, 100, 5), rng.uniform(0, 1, (3, 5))
     x = pack(vm, qi)
     assert x.shape == (n_unknowns(5, 5),)
-    vm2, qi2 = unpack(x, n_sl=5, n_qo=5)
+    vm2, qi2, _ = unpack(x, n_sl=5, n_qo=5)
     assert np.array_equal(vm2, vm) and np.array_equal(qi2, qi)
     # Ordering is normative: vm block first.
     assert np.array_equal(x[:5], vm)
@@ -134,11 +134,19 @@ def test_frozen_inputs_validation():
         make_frozen(topo, transported=uniform_transport(4, topo.n_qo))
     with pytest.raises(ConfigError, match="0 <= B < 1"):
         make_frozen(topo, blockage=1.0)
-    with pytest.raises(ConfigError, match="M5"):
-        FrozenInputs(topology=topo, fluid=GAS, fidelity=FidelityConfig.tier2(),
-                     spec=BackPressureSpec(p_exit=1e5, station=0),
-                     transported=uniform_transport(5, topo.n_qo),
-                     closures=ClosureFields(np.zeros((5, topo.n_qo))))
+
+    def _bp(station):
+        return FrozenInputs(
+            topology=topo, fluid=GAS, fidelity=FidelityConfig.tier2(),
+            spec=BackPressureSpec(p_exit=1e5, station=station),
+            transported=uniform_transport(5, topo.n_qo),
+            closures=ClosureFields(np.zeros((5, topo.n_qo))))
+
+    # BackPressureSpec is accepted since M5 (choke-proximal mode, section 6.6);
+    # an out-of-range throttling station is a config-boundary error (AD-10).
+    assert _bp(0).n_qo == topo.n_qo
+    with pytest.raises(ConfigError, match="station"):
+        _bp(topo.n_qo)
 
 
 def test_tier1_meanline_requires_q_fixed():
