@@ -78,14 +78,18 @@ def test_inblade_station_holds_scheduled_values():
     # Columns: 0 DUCT, 1 LE, 2 INBLADE, 3 TE, 4 DUCT.
     f = float(SmoothRampSchedule()(0.5))             # = 0.5 (quintic)
     rvt_ib_expected = (1.0 - f) * 6.0 + f * 20.0     # = 13.0
-    np.testing.assert_allclose(tr.rvt[:, 2], rvt_ib_expected, rtol=1e-12)
-    np.testing.assert_allclose(tr.rvt[:, 3], 20.0, rtol=1e-12)   # TE exact
+    # Closure-lag tolerance: the section 6.2.4 under-relaxation now also
+    # ramps the FIRST closure application from the duct baseline (2026-07
+    # Tier-3 stabilization), so prescribed-constant closure values are
+    # approached to ~tol_closure/closure_relax, not hit exactly.
+    np.testing.assert_allclose(tr.rvt[:, 2], rvt_ib_expected, rtol=1e-7)
+    np.testing.assert_allclose(tr.rvt[:, 3], 20.0, rtol=1e-7)   # TE value
     # Euler work follows the swept rVt (section 3.3); entropy follows the
     # same schedule (B.5.1): half the row's delta_s by the INBLADE station.
     np.testing.assert_allclose(tr.h0[:, 2] - H0,
-                               500.0 * (rvt_ib_expected - 6.0), rtol=1e-10)
-    np.testing.assert_allclose(tr.s[:, 2] - S0, f * 2.0, rtol=1e-12)
-    np.testing.assert_allclose(tr.s[:, 3] - S0, 2.0, rtol=1e-12)
+                               500.0 * (rvt_ib_expected - 6.0), rtol=1e-7)
+    np.testing.assert_allclose(tr.s[:, 2] - S0, f * 2.0, rtol=1e-7)
+    np.testing.assert_allclose(tr.s[:, 3] - S0, 2.0, rtol=1e-7)
 
 
 def test_inblade_rvt_monotone_through_row():

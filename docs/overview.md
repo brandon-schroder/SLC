@@ -317,14 +317,22 @@ many *structural* ones. Be precise about which is which.
   is a refinement) are `[VERIFY]`.
 
 **Known limitations (measured, honest):**
-- **Tier-3 radial/mixed repositioning is fragile.** V7 (full 90° bend)
-  converges Tier 3 only in a narrow `(n_sl, n_inblade)` pocket; V8 (partial
-  bend) does **not** converge Tier 3 anywhere found — the pocket is
-  *angle-specific*, not merely narrow. A robust radial/mixed repositioning
-  stabilization is the single biggest open item. It is a *driver* gap (the
-  §6.4 odd-even mode), independent of closures. Pinned by
-  `tests/test_v8_mixed_flow.py::test_tier3_is_the_known_repositioning_carryover`
-  as a tripwire.
+- **Tier-3 radial/mixed is slow (stabilized 2026-07; the fragility is
+  resolved).** The original "narrow, angle-specific pocket" story was
+  diagnosed as a driver artifact — the master ODE's `Vm = 0` singularity
+  reached from stale boundary values (chiefly the unrelaxed closure
+  switch-on), a fatal boundary check on a repairable state, and continuity
+  roots accepted on spurious negative-`Vm` branches — **not** the §6.4
+  odd-even repositioning mode (Appendix C.7/C.8, revised). Post-
+  stabilization V7 (edge-only *and* subdivided) and V8 all converge at
+  Tier 3, pinned by the flipped tripwires. What remains is speed: the §6.4
+  relaxation throttle holds ω_sl ≈ 0.07 on these bends (V8 Tier 3 ≈ 400
+  iterations); Newton finishing and a §6.4 recalibration on
+  blade-row-coupled bends (C.3 was duct-calibrated, possibly
+  artifact-contaminated) are the follow-ups. The M8-3 "mixing is a
+  convergence prerequisite" claim fell with the same artifact — the
+  surviving §3.6 claim is the measured ~25× spanwise entropy stratification
+  without mixing.
 - Real-gas backend, JAX/AD backend, closure-in-Newton, endwall
   boundary-layer *model*, cooling/bleed flows: all deliberately deferred
   (ARCH-9).
@@ -348,7 +356,7 @@ plausibility bands are wide by intent. The right adversarial question is
 | **V5** | Axial compressor (single + **multistage**) | Structural; multistage shows mixing is a **convergence prerequisite** |
 | **V6** | Axial turbine (K-O set) | Structural |
 | **V7** | Centrifugal impeller (first radial end-to-end) | Structural; Tier-3 needs INBLADE subdivision |
-| **V8** | Mixed-flow (partial-φ bend) | Structural at Tier 1/2; Tier 3 is the open carryover |
+| **V8** | Mixed-flow (partial-φ bend) | Structural at all tiers (Tier 3 since the 2026-07 stabilization) |
 | **V9** | Operability: surge flag + BC-switching | Structural (behaviour demonstrated) |
 
 The multistage-V5 result (M8-3) is worth highlighting: **without mixing, the

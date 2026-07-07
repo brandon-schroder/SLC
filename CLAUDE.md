@@ -327,6 +327,44 @@ These are not suggestions; violating them is a bug even if tests pass.
   (`n_inblade=0`, Tier 3 → must NOT converge; flip the assertion when a
   robust radial repositioning stabilization lands). C.7 updated to name it.
   Suite 373.
+- **Post-M8 Tier-3 radial/mixed stabilization (2026-07).** The top post-ladder
+  open item, closed via diagnosis-first (scratchpad probes, root cause in
+  memory). **The M7-4/M8-4 failure attribution was wrong**: not the §6.4
+  odd-even repositioning mode (streamlines barely moved before death; pure
+  repositioning+curvature on the V8 bend is stable; density irrelevant). The
+  real chain: master-ODE $V_m=0$ singularity when a q-o integrates from
+  vm_q0 stale vs. the transported fields (the *unrelaxed closure switch-on*
+  being the main producer, amplified by the REE swirl term ~ rVθ/r² at
+  low-radius mid-bend stations) → the driver fatally boundary-checked the
+  stale-guess split the solves were about to repair (killed states proven
+  solvable: cold re-solve |F|/ṁ = 4e-15) → `_solve_qo` accepted roots on
+  spurious negative-Vm branches / at the −1e30 cliff. The V7 "pocket" and V8
+  "angle-specificity" were chaos in whether transient garbage stayed finite.
+  **Fixes (drivers/classical.py + assembler capacity guard):** (1) AD-10
+  flow-field check moved to the *solved* state (broken metrics stay fatal);
+  (2) continuity roots validated onto the strictly-positive branch (root
+  validation, not endpoint vetting — endpoint vetting was measured to
+  destabilize the V7 closure-lag trajectory); (3) transiently root-less q-o's
+  freeze their boundary value, CHOKE_LIMITED only after `choke_patience=15`
+  consecutive deficient iterations (window ≈ 2/closure_relax, measured 8 on
+  V8); (4) the **first closure application relaxes from the duct baseline**
+  through the same §6.2.4 rule as later ones. **Results:** V8 Tier 3
+  converges (396 it, PR 1.587, few-% off Tier 2); V7 edge-only converges
+  (173 it, PR 2.4433 vs. pocket 2.4540) — *the INBLADE-necessity claim is
+  refuted* (stations remain the in-blade resolution choice); V7 pocket
+  reproduces its old fixed point (197 it, PR 2.4540); multistage V5
+  mixing-off now *converges* — **the M8-3 "mixing is a convergence
+  prerequisite" claim was the same artifact**; the surviving physical claim
+  (25× exit-entropy stratification without mixing, 17.6 vs 0.69 J/(kg·K)) is
+  what `test_multistage_mixing` now pins. Both tripwires flipped; C.5m/C.7/
+  C.8 revised; prescribed-closure exactness tests moved to closure-lag
+  tolerance (ramp residual ~ tol_closure/closure_relax ≈ 4e-9 rel). Open
+  follow-ups: Tier-3 radial/mixed is *slow* (ω_sl ≈ 0.066 throttle; Newton
+  finishing / §6.4 recalibration on the blade-row-coupled family — C.3 was
+  duct-calibrated and possibly artifact-contaminated); Newton path has no
+  positive-branch guard yet (negative-Vm finite garbage passes its
+  feasibility check); ln-Vm positivity-safe integration is the recorded
+  principled root fix if new cases resurface it.
 
 ## Commands
 

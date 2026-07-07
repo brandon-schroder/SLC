@@ -86,7 +86,10 @@ def test_all_three_tiers_converge_and_agree():
              ("t3", FidelityConfig.tier3(), n)]
     prs = []
     for _name, fid, nsl in specs:
-        res = m.evaluate(MassFlowSpec(case.mdot), fid, n_sl=nsl)
+        # Tier 3 measured at 197 iterations post-stabilization (the closure
+        # switch-on ramp adds a few): give headroom over the default 200.
+        res = m.evaluate(MassFlowSpec(case.mdot), fid, n_sl=nsl,
+                         config=ClassicalConfig(max_outer=400))
         assert res.converged, f"{_name} did not converge"
         assert res.pressure_ratio > 1.0
         prs.append(res.pressure_ratio)
@@ -95,22 +98,23 @@ def test_all_three_tiers_converge_and_agree():
     assert max(prs) - min(prs) < 0.05 * np.mean(prs)
 
 
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")
-def test_tier3_edge_only_is_the_measured_inblade_necessity():
-    # TRIPWIRE (M7-3/M7-4, Appendix C.7; pinned at the 2026-07 audit
-    # follow-up -- the claim was previously narrative-only, asymmetric with
-    # the V8 tripwire): WITHOUT the INBLADE subdivision (n_inblade = 0,
-    # edge-only row) Tier-3 full-SLC repositioning on the 90-degree bend
-    # fails -- the section 6.4 odd-even streamwise mode. This is the
-    # negative half of the "six INBLADE stations are measured-necessary"
-    # finding; the positive half is test_all_three_tiers_converge_and_agree
-    # above (same case, n_inblade = 6, converges). When a robust radial
-    # repositioning stabilization lands, this assertion flips and the test
-    # fails LOUDLY -- flip it to `assert r.converged` then, and update C.7.
-    # max_outer is bounded so a future slow-divergence mode cannot stall
-    # the suite; today it NUMERICAL_FAILUREs on the first repositioning.
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # switch-on transient
+def test_tier3_edge_only_converges_after_stabilization():
+    # TRIPWIRE FLIPPED (2026-07): C.7's M7-4 finding -- that Tier-3
+    # repositioning on the 90-degree bend REQUIRES the INBLADE subdivision
+    # (edge-only "diverges the section 6.4 odd-even mode at any
+    # relaxation") -- was refuted by the diagnosis: the edge-only failure
+    # was the driver accepting a spurious negative-Vm continuity branch
+    # (decreasing mass cumulative), the same artifact family as V8 Tier 3,
+    # not a repositioning envelope. Post-stabilization the edge-only row
+    # converges (measured 173 iterations) to the same PR as the subdivided
+    # case to <1%. INBLADE stations remain the RESOLUTION choice for
+    # in-blade quantities (sections 2.5, 4.5) -- they are just not a
+    # convergence crutch anymore (Appendix C.7, revised).
     case = V7Centrifugal(n_inblade=0)
     r = case.machine().evaluate(MassFlowSpec(case.mdot),
                                 FidelityConfig.tier3(), n_sl=case.n_sl_rep,
-                                config=ClassicalConfig(max_outer=60))
-    assert not r.converged
+                                config=ClassicalConfig(max_outer=400))
+    assert r.converged
+    lo, hi = case.pr_band
+    assert lo < r.pressure_ratio < hi

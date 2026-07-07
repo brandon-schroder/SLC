@@ -1,13 +1,20 @@
 """Multistage-compressor mixing revisit (Theory Manual sections 9.5, 3.6;
-Appendix C.5m; M8 sub-step 3).
+Appendix C.5m; M8 sub-step 3, REVISED at the 2026-07 Tier-3 stabilization).
 
 Section 3.6's stated motivation is that multistage machines "develop
 unrealistic spanwise stratification of h0, s and rVt without a mixing model."
 This case makes that concrete on a two-stage axial compressor: with the
-default Gallimore mixing it converges and compresses; with mixing OFF the
-spanwise entropy stratification runs away and the solve fails outright. So
-mixing here is not cosmetic -- it is a convergence prerequisite for the
-multistage configuration.
+default Gallimore mixing the exit entropy profile is nearly uniform; with
+mixing OFF the machine converges to a HEAVILY STRATIFIED state (~25x the
+spanwise entropy spread) -- section 3.6's "unrealistic stratification" made
+measurable.
+
+Historical note: M8-3 originally recorded mixing as a *convergence
+prerequisite* (mixing-off NUMERICAL_FAILURE at 800 iterations). The 2026-07
+diagnosis showed that non-convergence was the driver's stale-split /
+spurious-branch artifact, not physics; post-stabilization the un-mixed case
+converges fine. The surviving (physical) claim is the stratification, and
+that is what this file pins.
 
 Structural gate (bands, not V5 validation tolerances -- [VERIFY], as the
 single-stage V5). Provenance: M8 sub-step 3, written with the case.
@@ -36,7 +43,7 @@ def without_mixing(case):
     from slcflow.drivers.classical import ClassicalConfig
     return case.machine().evaluate(
         MassFlowSpec(case.mdot), FidelityConfig.tier3(), n_sl=9,
-        config=ClassicalConfig(max_outer=800))
+        config=ClassicalConfig(max_outer=300))
 
 
 # --------------------------------------------------------------------------
@@ -64,14 +71,19 @@ def test_multistage_with_mixing_deswirls_and_is_unstratified(with_mixing):
 
 
 # --------------------------------------------------------------------------
-# Section 3.6: WITHOUT mixing the stratification runs away
+# Section 3.6: WITHOUT mixing the machine converges but heavily stratified
 # --------------------------------------------------------------------------
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # runaway is the point
-def test_without_mixing_stratification_runs_away(without_mixing, with_mixing):
+def test_without_mixing_converges_heavily_stratified(without_mixing,
+                                                     with_mixing):
+    # REVISED 2026-07 (Tier-3 stabilization): the original M8-3 claim that
+    # mixing is a *convergence prerequisite* was the driver's stale-split
+    # artifact -- un-mixed, the two-stage now converges. The PHYSICAL
+    # section 3.6 claim stands and is what this pins: without mixing the
+    # exit entropy profile is dramatically stratified (measured 17.6 vs
+    # 0.69 J/(kg K), ~25x; asserted at >10x with a >5 J/(kg K) floor).
     base, mix = without_mixing, with_mixing
-    # Even at 800 outer iterations the un-mixed two-stage does not converge:
-    # the hub/tip entropy split diverges (the section 3.6 failure mode).
-    assert not base.converged
+    assert base.converged
     s_base = np.ptp(base.result.frozen.transported.s[:, -1])
     s_mix = np.ptp(mix.result.frozen.transported.s[:, -1])
     assert s_base > 10.0 * s_mix                     # dramatically worse
+    assert s_base > 5.0                              # and absolutely large

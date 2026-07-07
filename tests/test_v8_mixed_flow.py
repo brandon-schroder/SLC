@@ -1,21 +1,25 @@
 """V8 mixed-flow compressor structural tests (Theory Manual section 9.8;
-Appendix C.8; M8 sub-step 4).
+Appendix C.8; M8 sub-step 4, Tier 3 flipped at the 2026-07 stabilization).
 
-Structural verification at Tier 1 (meanline) and Tier 2 (REE): a mixed-flow
-impeller on a partial axial->radial bend converges, compresses (PR > 1) with
-real loss, and exits at an intermediate meridional angle with a radius rise
-(r_LE < r_exit < rc, the signature of 0 < phi < 90). Point-by-point
-reproduction is [VERIFY].
+Structural verification: a mixed-flow impeller on a partial axial->radial
+bend converges, compresses (PR > 1) with real loss, and exits at an
+intermediate meridional angle with a radius rise (r_LE < r_exit < rc, the
+signature of 0 < phi < 90). Point-by-point reproduction is [VERIFY].
 
-Tier 3 (full-SLC repositioning) does NOT converge on the mixed-flow bend --
-the M7-4 radial-repositioning pocket is angle-specific and does not transfer.
-That is pinned here as an explicit tripwire, not hidden.
+Tier 3 (full-SLC repositioning) originally did NOT converge here and was
+pinned as a tripwire (M8-4 attributed it to an angle-specific repositioning
+pocket). The 2026-07 diagnosis refuted that story: the failure was the
+driver's stale-split boundary check, spurious negative-Vm continuity
+branches, and the unrelaxed closure switch-on. Post-stabilization Tier 3
+converges on this bend; the flipped tripwire below now pins THAT.
 
-Provenance: M8 sub-step 4, written with the V8 case.
+Provenance: M8 sub-step 4, written with the V8 case; Tier-3 test revised
+2026-07.
 """
 import numpy as np
 import pytest
 
+from slcflow.drivers.classical import ClassicalConfig
 from slcflow.types import FidelityConfig, MassFlowSpec
 from slcflow.verification.v8_mixed_flow import V8MixedFlow
 
@@ -62,7 +66,7 @@ def test_exit_swirl_is_slipped(meanline):
 
 
 # --------------------------------------------------------------------------
-# One kernel: Tier 2 converges; Tier 3 is the documented carryover
+# One kernel, three tiers (AD-1): all converge post-stabilization
 # --------------------------------------------------------------------------
 def test_tier2_ree_converges():
     case = V8MixedFlow()
@@ -72,14 +76,26 @@ def test_tier2_ree_converges():
     assert r.pressure_ratio > 1.0
 
 
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")
-def test_tier3_is_the_known_repositioning_carryover():
-    # TRIPWIRE (M8-4): Tier-3 full-SLC repositioning on the mixed-flow bend is
-    # beyond the current stabilization -- the V7 90-degree pocket does not
-    # transfer to intermediate angles (module docstring / Appendix C.8). When
-    # a robust radial/mixed repositioning stabilization lands, this assertion
-    # flips and the test fails LOUDLY -- flip it to `assert r.converged` then.
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # switch-on transient
+def test_tier3_converges_after_stabilization():
+    # TRIPWIRE FLIPPED (2026-07): M8-4 recorded Tier-3 mixed-flow
+    # repositioning as "beyond the current stabilization" (an angle-specific
+    # pocket). The diagnosis showed the failure was never a repositioning
+    # envelope: the driver boundary-checked the stale-guess split before the
+    # continuity solves could repair it, accepted spurious negative-Vm
+    # branches, and applied the first closure evaluation unrelaxed. With
+    # those fixed, Tier 3 converges on the mixed-flow bend -- measured 396
+    # iterations at the section 6.4 throttle omega_sl ~ 0.066 (slow, hence
+    # the explicit budget; acceleration is a recorded follow-up) -- and
+    # agrees with Tier 2 on PR to a few percent (Appendix C.8, revised).
     case = V8MixedFlow()
     r = case.machine().evaluate(MassFlowSpec(case.mdot),
-                                FidelityConfig.tier3(), n_sl=case.n_sl_rep)
-    assert not r.converged
+                                FidelityConfig.tier3(), n_sl=case.n_sl_rep,
+                                config=ClassicalConfig(max_outer=600))
+    assert r.converged
+    lo, hi = case.pr_band
+    assert lo < r.pressure_ratio < hi
+    r2 = case.machine().evaluate(MassFlowSpec(case.mdot),
+                                 FidelityConfig.tier2(), n_sl=case.n_sl_rep)
+    assert r2.converged
+    assert r.pressure_ratio == pytest.approx(r2.pressure_ratio, rel=5e-2)

@@ -73,8 +73,14 @@ def test_rotor_row_euler_work_and_entropy_via_closures():
                                rvt_inlet=rvt_in)
     assert res.converged
     tr = res.frozen.transported
-    # Section 3.4: TE rVt is the closure value exactly; ducts conserve it.
-    np.testing.assert_array_equal(tr.rvt[:, 2], np.full(topo.n_sl, rvt_out))
+    # Section 3.4: TE rVt converges to the closure value to the closure-lag
+    # tolerance (the section 6.2.4 under-relaxation now also ramps the FIRST
+    # application from the duct baseline -- 2026-07 Tier-3 stabilization --
+    # so a prescribed-constant closure is approached geometrically, residual
+    # ~ tol_closure/closure_relax, rather than hit exactly on switch-on).
+    # Ducts still conserve it exactly.
+    np.testing.assert_allclose(tr.rvt[:, 2], np.full(topo.n_sl, rvt_out),
+                               rtol=1e-7)
     np.testing.assert_array_equal(tr.rvt[:, 3], tr.rvt[:, 2])
     np.testing.assert_array_equal(tr.rvt[:, 1], np.full(topo.n_sl, rvt_in))
     # rvt_le CONSISTENCY (section 3.4 carryover): the h0 rise equals the
@@ -83,8 +89,9 @@ def test_rotor_row_euler_work_and_entropy_via_closures():
     np.testing.assert_allclose(
         tr.h0[:, 2] - tr.h0[:, 1],
         omega * (tr.rvt[:, 2] - tr.rvt[:, 1]), rtol=1e-14)
-    # Section 3.5: entropy rises by the loss model's delta_s, only in-row.
-    np.testing.assert_allclose(tr.s[:, 2] - tr.s[:, 1], ds, rtol=1e-14)
+    # Section 3.5: entropy rises by the loss model's delta_s, only in-row
+    # (closure-lag tolerance, as for rVt above).
+    np.testing.assert_allclose(tr.s[:, 2] - tr.s[:, 1], ds, rtol=1e-7)
     np.testing.assert_array_equal(tr.s[:, 1], tr.s[:, 0])
     np.testing.assert_array_equal(tr.s[:, 3], tr.s[:, 2])
     # Rothalpy conserved through the rotor (section 3.3).
@@ -100,7 +107,8 @@ def test_stator_row_conserves_h0():
     assert res.converged
     tr = res.frozen.transported
     np.testing.assert_allclose(tr.h0, H0, rtol=1e-14)  # stator: h0 const
-    np.testing.assert_array_equal(tr.rvt[:, 2], np.full(topo.n_sl, 2.0))
+    np.testing.assert_allclose(tr.rvt[:, 2], np.full(topo.n_sl, 2.0),
+                               rtol=1e-7)   # closure-lag tolerance
 
 
 def test_closure_outputs_recorded_in_frozen_inputs():
@@ -110,8 +118,9 @@ def test_closure_outputs_recorded_in_frozen_inputs():
                             PrescribedLoss(delta_s=0.5))
     cf = res.frozen.closures
     assert set(cf.row_exit_rvt) == {"r1"} and set(cf.row_delta_s) == {"r1"}
-    np.testing.assert_array_equal(cf.row_exit_rvt["r1"],
-                                  np.full(res.frozen.n_sl, 20.0))
+    np.testing.assert_allclose(cf.row_exit_rvt["r1"],
+                               np.full(res.frozen.n_sl, 20.0),
+                               rtol=1e-7)   # closure-lag tolerance
     # result.frozen is the bundle that PRODUCED the final iterate, so its
     # closures carry the previous iterate's tag (lagged, AD-4).
     assert cf.iteration_tag == res.record.n_iterations - 1

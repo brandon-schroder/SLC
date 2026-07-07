@@ -22,19 +22,24 @@ The reference geometry is a representative backswept impeller, not a digitised
 Eckardt rotor; efficiency reads high (~0.98) because only incidence + skin
 friction are modelled (blade-loading/clearance/disk-friction deferred).
 
-**Measured finding (M7-4).** Unlike the axial V5/V6 (where a straight annulus
-makes Tier 3 == Tier 2 bit-for-bit, V3), this is the first curved-path case
-carrying a blade row AND streamline repositioning. Tier-3 full SLC on the
-90-degree bend **requires the in-blade subdivision** (``n_inblade = 6``): with
-edge-only stations the section 6.4 odd-even streamwise mode diverges at any
-relaxation, and the M5 Newton driver inherits the same stiff seed and cannot
-recover it. Subdividing the passage keeps the per-step curvature inside the
-envelope -- the concrete physical reason radial rows want in-blade stations
-(M7-3). The stable pocket is narrow (odd ``n_inblade`` counts near the edge
-still flake); a robust radial-repositioning stabilization is a carryover past
-M7.
+**Measured finding (M7-4), REVISED 2026-07.** Unlike the axial V5/V6 (where
+a straight annulus makes Tier 3 == Tier 2 bit-for-bit, V3), this is the
+first curved-path case carrying a blade row AND streamline repositioning.
+M7-4 originally recorded that Tier-3 full SLC on the 90-degree bend
+*requires* the in-blade subdivision (``n_inblade = 6``; edge-only "diverges
+the section 6.4 odd-even mode at any relaxation", a narrow pocket). The
+2026-07 diagnosis refuted that story: the edge-only failure was the
+classical driver accepting a spurious negative-Vm continuity branch (and,
+family-wide, boundary-checking the stale-guess split before the solves
+could repair it, and applying the first closure evaluation unrelaxed) -- a
+driver-robustness artifact, not a repositioning envelope. Post-
+stabilization the edge-only Tier-3 case converges to the same answer
+(Appendix C.7, revised); ``n_inblade`` stays at 6 as the sensible
+RESOLUTION choice for in-blade quantities (sections 2.5, 4.5), not as a
+convergence crutch.
 
-Provenance: M7 sub-step 4, written with the centrifugal set.
+Provenance: M7 sub-step 4, written with the centrifugal set; stability
+finding revised at the 2026-07 Tier-3 stabilization.
 """
 from __future__ import annotations
 
@@ -78,11 +83,10 @@ class V7Centrifugal:
     solidity: float = 2.0
     chord: float = 0.08
     blade_count: int = 18
-    # Six INBLADE stations subdivide the passage: MEASURED-necessary for
-    # Tier-3 full-SLC repositioning on this 90-degree bend (n_inblade = 0
-    # diverges the section 6.4 odd-even streamwise mode; the subdivision keeps
-    # the per-step curvature inside the envelope). This is the physical reason
-    # radial rows want in-blade stations -- see the module docstring.
+    # Six INBLADE stations subdivide the passage: the in-blade RESOLUTION
+    # choice (sections 2.5, 4.5). Originally recorded as measured-necessary
+    # for Tier-3 convergence (M7-4); refuted at the 2026-07 stabilization --
+    # edge-only converges too (see the module docstring).
     n_inblade: int = 6
     n_sl_rep: int = 7              # spanwise nodes for Tier 2/3 (measured pocket)
     gas: PerfectGas = field(default_factory=PerfectGas)
@@ -103,10 +107,10 @@ class V7Centrifugal:
         a_le, a_te = 0.12, 0.90
         stations = [StationDef(StationType.DUCT, 0.0, 0.0),
                     StationDef(StationType.EDGE_LE, a_le, a_le, row_id="imp")]
-        # INBLADE stations evenly subdivide the LE->TE passage: on a sharp
-        # radial bend they keep the per-step curvature within the section 6.4
-        # repositioning envelope (M7-3), the physical reason radial rows want
-        # in-blade stations at all.
+        # INBLADE stations evenly subdivide the LE->TE passage, resolving the
+        # in-blade work/loss distribution on the bend (sections 2.5, 3.4).
+        # (The M7-3 claim that they were needed for repositioning stability
+        # was refuted at the 2026-07 stabilization -- module docstring.)
         for k in range(self.n_inblade):
             f = a_le + (k + 1) / (self.n_inblade + 1) * (a_te - a_le)
             stations.append(StationDef(StationType.INBLADE, f, f,

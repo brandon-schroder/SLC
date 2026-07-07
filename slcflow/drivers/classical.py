@@ -78,10 +78,23 @@ class ClassicalConfig:
     # case); 0.25 keeps margin. Revisit against V5-class geometry.
     closure_relax: float = 0.25
     brentq_rtol: float = 1e-12
+    # Section 6.6 choke declaration patience: a q-o can TRANSIENTLY fail to
+    # pass mdot on the positive branch while the lagged fields relax (V8
+    # Tier-3 diagnosis, 2026-07) -- its boundary value is frozen for the
+    # iterate instead. CHOKE_LIMITED is declared only when some q-o stays
+    # capacity-deficient for this many consecutive outer iterations:
+    # genuine choke persists indefinitely, while the switch-on transient
+    # clears within the closure ramp-in window (~2/closure_relax iterations;
+    # measured 8 on V8 Tier 3). 15 covers that window with margin at the
+    # default closure_relax = 0.25.
+    choke_patience: int = 15
 
     def __post_init__(self):
         if self.max_outer < 1:
             raise ConfigError(f"max_outer must be >= 1, got {self.max_outer}")
+        if self.choke_patience < 1:
+            raise ConfigError(
+                f"choke_patience must be >= 1, got {self.choke_patience}")
         if not (0.0 < self.omega_sl_max <= 1.0):
             raise ConfigError(
                 f"omega_sl_max must be in (0, 1], got {self.omega_sl_max}")
@@ -258,7 +271,8 @@ def _vm_upper_bound(frozen: FrozenInputs, fields: AssembledFields, j):
 
 
 def _solve_qo(asm: ResidualAssembler, j, fields, v_hi, rtol, v_prev=None):
-    """Solve F_j(Vm_q0) = 0 on the subsonic branch (sections 6.5, 5.4).
+    """Solve F_j(Vm_q0) = 0 on the POSITIVE subsonic branch (sections 6.5,
+    5.4).
 
     F rises from -mdot at Vm_q0 -> 0 to the capacity peak (A.7), so the
     subsonic root is bracketed between the scan point below the peak where
@@ -266,40 +280,91 @@ def _solve_qo(asm: ResidualAssembler, j, fields, v_hi, rtol, v_prev=None):
     ``None`` when the peak stays negative: the q-o cannot pass mdot
     (choke-limited, section 6.6).
 
+    **Positive-branch validation (V8 Tier-3 diagnosis, 2026-07):** the
+    master ODE's RHS ~ core/Vm is singular at Vm = 0; a profile that
+    crossed zero is on a spurious branch whose mass integral can balance by
+    sign cancellation. Accepting such roots (or the discontinuity
+    pseudo-roots where F jumps from the -1e30 out-of-domain plateau to a
+    positive value) is what produced the negative-interior-Vm fields,
+    decreasing mass cumulatives, and vm_q0 decay of the V7/V8 Tier-3
+    failures. Rather than vetting bracket ENDPOINTS (measured to change the
+    happy-path dynamics and destabilize the closure lag), every bracket the
+    pre-guard code would have tried is still tried — and the returned ROOT
+    is validated: its own integrated profile must be strictly positive and
+    finite and its |F| a genuine zero. Every root the old code legitimately
+    found passes unchanged; cliff pseudo-roots and spurious-branch roots
+    are rejected, falling through to the next bracket candidate and finally
+    to ``None`` — which the driver treats as a transient deficiency, not an
+    instant choke.
+
     ``v_prev`` warm-starts the bracket from the previous outer iterate
     (streamlines move little per iteration under section 6.4 relaxation);
-    the full scan is the cold-start / fallback path. Out-of-domain trial
-    velocities produce non-finite F by design (AD-10 saturation happens at
-    the fluid domain edge); they are mapped to -inf here, hence the local
-    errstate."""
+    the full scan is the cold-start / fallback path."""
+    mdot = asm.frozen.spec.mdot
+
+    def eval_at(v):
+        # One integration per trial: the continuity mismatch F (same
+        # arithmetic as continuity_F) plus positive-branch feasibility.
+        # Out-of-domain / spurious-branch trials read as a huge mass
+        # deficit so bracketing keeps the old walk-back-toward-the-
+        # physical-branch semantics.
+        vm = asm.integrate_master_ode(j, v, fields)
+        if not bool(np.all(np.isfinite(vm)) and np.all(vm > 0.0)):
+            return -1e30, False
+        F = float(_TWO_PI * asm.mass_cumulative(j, vm, fields)[-1] - mdot)
+        if not np.isfinite(F):
+            return -1e30, False
+        return F, True
+
     def F_of(v):
-        # NaN-safe for root-finding: a non-finite F means the trial velocity
-        # left the fluid domain (h < 0 somewhere along the ODE) — map it to
-        # a huge mass deficit so brentq bisects back toward the physical
-        # branch instead of raising on an interior NaN.
-        return float(np.nan_to_num(asm.continuity_F(j, v, fields),
-                                   nan=-1e30, posinf=-1e30, neginf=-1e30))
+        return eval_at(v)[0]
+
+    def rooted(lo, hi):
+        """brentq on [lo, hi] if it is a sign-change bracket, with the root
+        validated onto the positive branch; None otherwise."""
+        F_lo, F_hi = F_of(lo), F_of(hi)
+        if not (F_lo < 0.0 < F_hi):
+            return None
+        root = float(brentq(F_of, lo, hi, rtol=rtol))
+        F_root, ok = eval_at(root)
+        if ok and abs(F_root) < 1e-2 * mdot:
+            return root
+        return None
 
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
         if v_prev is not None:
-            lo, hi = 0.7 * v_prev, min(1.3 * v_prev, v_hi)
-            F_lo, F_hi = F_of(lo), F_of(hi)
-            if np.isfinite(F_lo) and np.isfinite(F_hi) \
-                    and F_lo < 0.0 < F_hi:
-                return float(brentq(F_of, lo, hi, rtol=rtol))
+            v = rooted(0.7 * v_prev, min(1.3 * v_prev, v_hi))
+            if v is not None:
+                return v
 
         grid = np.linspace(v_hi / _BRACKET_SCAN, v_hi, _BRACKET_SCAN)
-        F = np.array([F_of(v) for v in grid])
-        F = np.where(np.isfinite(F), F, -np.inf)
+        evals = [eval_at(v) for v in grid]
+        feas = np.array([ok for _, ok in evals])
+        F = np.where(feas, np.array([f for f, _ in evals]), -np.inf)
+        if not np.any(feas):
+            return None                    # no positive branch anywhere
         k_peak = int(np.argmax(F))
         if F[k_peak] < 0.0:
-            return None
-        k_up = int(np.argmax(F[:k_peak + 1] >= 0.0))  # first F >= 0 below peak
-        if k_up == 0:
-            lo = 1e-12 * v_hi  # root below the first scan point
-        else:
-            lo = grid[k_up - 1]
-        return float(brentq(F_of, lo, grid[k_up], rtol=rtol))
+            return None                    # capacity below target (6.6)
+        k_up = int(np.argmax(F[:k_peak + 1] >= 0.0))  # first F >= 0
+        v = rooted(grid[k_up - 1] if k_up > 0 else 1e-12 * v_hi, grid[k_up])
+        if v is not None:
+            return v
+        # Root hemmed between the infeasibility edge and the first feasible
+        # F >= 0 point: bisect the gap for a feasible F < 0 bracket end.
+        a = grid[k_up - 1] if k_up > 0 else 1e-12 * v_hi
+        b = grid[k_up]
+        for _ in range(60):
+            mid = 0.5 * (a + b)
+            F_mid, ok_mid = eval_at(mid)
+            if ok_mid and F_mid < 0.0:
+                v = rooted(mid, b)
+                return v            # validated root, or give up (None)
+            if ok_mid:
+                b = mid                    # feasible, F >= 0: root is lower
+            else:
+                a = mid                    # infeasible: edge is higher
+        return None   # no genuine root on the positive branch this iterate
 
 
 def _omega_sl(config: ClassicalConfig, fields: AssembledFields,
@@ -432,6 +497,7 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
     kappa_relax = config.kappa_relax if config.kappa_relax is not None \
         else (0.3 if fidelity.curvature_term > 0.0 else 1.0)
     kappa_prev = None      # section 5.5 lag; None on the first iterate
+    deficit_run = 0        # consecutive capacity-deficient iterations (6.6)
     history = []
     status, reason = SolveStatus.MAX_ITER, ""
     frozen = asm = fields = x = None
@@ -459,7 +525,22 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                               metrics_config=metrics_config)
         asm = ResidualAssembler(frozen)
         x = pack(vm_q0, q_full[1:-1, :])
-        fields = asm.split(x)
+        # This split still carries the PREVIOUS iterate's vm_q0, which the
+        # scalar solves below exist to replace — after a transport/closure
+        # change (or from the cold-start guess) its flow fields can be far
+        # out of domain by design, so NaN there is expected and recoverable
+        # (measured: the V8 Tier-3 diagnosis, 2026-07). Only its geometry
+        # (metrics + interpolants) is consumed downstream; the AD-10
+        # boundary check on the flow fields moves to the SOLVED state.
+        with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+            fields = asm.split(x)
+        if not all(np.all(np.isfinite(a)) for a in
+                   (fields.metrics.kappa_m, fields.metrics.eps,
+                    fields.metrics.m, fields.metrics.r)):
+            status, reason = SolveStatus.NUMERICAL_FAILURE, (
+                f"non-finite grid metrics at outer iteration {it} "
+                "(AD-10 boundary check: broken streamline fit)")
+            break
         # Section 5.5 lag is recursive (blend against the previously USED
         # field): replicate the assembler's blend to carry the EMA forward.
         if kappa_prev is None:
@@ -468,30 +549,43 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
             kappa_prev = (kappa_relax * fields.metrics.kappa_m
                           + (1.0 - kappa_relax) * kappa_prev)
 
-        if not all(np.all(np.isfinite(a)) for a in
-                   (fields.vm, fields.rho, fields.mach_m)):
-            status, reason = SolveStatus.NUMERICAL_FAILURE, (
-                f"non-finite assembled fields at outer iteration {it} "
-                "(AD-10 boundary check)")
-            break
-
         # (6.2.2.2) station-march scalar solves on the subsonic branch.
         vm_new = np.empty(n_qo)
-        choked_j = None
+        deficient_j = None
         for j in range(n_qo):
             v = _solve_qo(asm, j, fields, _vm_upper_bound(frozen, fields, j),
                           config.brentq_rtol, v_prev=float(vm_q0[j]))
             if v is None:
-                choked_j = j
+                # No genuine root on the positive branch THIS iterate:
+                # freeze the station's boundary value (no kick into the
+                # repositioning targets) and let the lagged fields relax;
+                # only persistence distinguishes real choke from the
+                # transient (section 6.6, V8 Tier-3 diagnosis 2026-07).
+                deficient_j = j
+                vm_new[j] = vm_q0[j]
+            else:
+                vm_new[j] = v
+        if deficient_j is None:
+            deficit_run = 0
+        else:
+            deficit_run += 1
+            if deficit_run >= config.choke_patience:
+                status, reason = SolveStatus.CHOKE_LIMITED, (
+                    f"q-o {deficient_j} cannot pass mdot = {spec.mdot} "
+                    f"({deficit_run} consecutive capacity-deficient "
+                    "iterations, section 6.6)")
                 break
-            vm_new[j] = v
-        if choked_j is not None:
-            status, reason = SolveStatus.CHOKE_LIMITED, (
-                f"q-o {choked_j} cannot pass mdot = {spec.mdot} "
-                f"(capacity below target, section 6.6)")
-            break
         vm_q0 = vm_new
         fields = asm.split(pack(vm_q0, q_full[1:-1, :]))
+        # AD-10 boundary check at the SOLVED state (moved from the stale
+        # split above): with the per-q-o solves done — and restricted to the
+        # positive branch — a non-finite field here is genuinely fatal.
+        if not all(np.all(np.isfinite(a)) for a in
+                   (fields.vm, fields.rho, fields.mach_m)):
+            status, reason = SolveStatus.NUMERICAL_FAILURE, (
+                f"non-finite assembled fields at the solved state, outer "
+                f"iteration {it} (AD-10 boundary check)")
+            break
 
         # (6.2.2.3) reposition streamlines: invert THE mass cumulative.
         # Tier-1 meanline (n_sl = 1, section 8): repositioning is OFF — the
@@ -527,26 +621,37 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                 resolved_rows, topology, fluid, transported, fields)
             # Section 6.2.4: closure updates are under-relaxed against the
             # previous lagged outputs (flow-coupled closures oscillate
-            # otherwise; measured at M4-3).
+            # otherwise; measured at M4-3). The FIRST application relaxes
+            # from the duct baseline (swept LE rVt, zero loss) by the same
+            # rule: an unrelaxed switch-on is a violent one-iterate
+            # transport change that can transiently leave stations without
+            # a positive-branch continuity root and destabilize the lag
+            # trajectory (V8 Tier-3 diagnosis, 2026-07).
+            w_cl = config.closure_relax
             if closures.row_exit_rvt:
-                w_cl = config.closure_relax
-                exit_rvt = {k: closures.row_exit_rvt[k]
-                            + w_cl * (v - closures.row_exit_rvt[k])
-                            for k, v in exit_rvt.items()}
-                delta_s_row = {k: closures.row_delta_s[k]
-                               + w_cl * (v - closures.row_delta_s[k])
-                               for k, v in delta_s_row.items()}
-                # Rebuild the row steps from the RELAXED outputs so the
-                # sweep and ClosureFields stay consistent.
-                for rspec, j_le, _j_te, t_stations in resolved_rows:
-                    seq = row_steps(
-                        omega=rspec.omega,
-                        rvt_le=transported.rvt[:, j_le],
-                        rvt_te=exit_rvt[rspec.row_id],
-                        delta_s_row=delta_s_row[rspec.row_id],
-                        t_stations=t_stations)
-                    for k, stp in enumerate(seq):
-                        steps[j_le + k] = stp
+                prev_rvt = closures.row_exit_rvt
+                prev_ds = closures.row_delta_s
+            else:
+                prev_rvt = {rs.row_id: np.asarray(transported.rvt[:, j_le],
+                                                  dtype=float)
+                            for rs, j_le, _j, _t in resolved_rows}
+                prev_ds = {rs.row_id: np.zeros(n_sl)
+                           for rs, _i, _j, _t in resolved_rows}
+            exit_rvt = {k: prev_rvt[k] + w_cl * (v - prev_rvt[k])
+                        for k, v in exit_rvt.items()}
+            delta_s_row = {k: prev_ds[k] + w_cl * (v - prev_ds[k])
+                           for k, v in delta_s_row.items()}
+            # Rebuild the row steps from the RELAXED outputs so the
+            # sweep and ClosureFields stay consistent.
+            for rspec, j_le, _j_te, t_stations in resolved_rows:
+                seq = row_steps(
+                    omega=rspec.omega,
+                    rvt_le=transported.rvt[:, j_le],
+                    rvt_te=exit_rvt[rspec.row_id],
+                    delta_s_row=delta_s_row[rspec.row_id],
+                    t_stations=t_stations)
+                for k, stp in enumerate(seq):
+                    steps[j_le + k] = stp
             closure_norm = _closure_norm(exit_rvt, delta_s_row,
                                          closures.row_exit_rvt,
                                          closures.row_delta_s)

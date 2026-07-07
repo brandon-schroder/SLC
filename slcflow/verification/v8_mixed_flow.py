@@ -9,27 +9,35 @@ the impeller does centrifugal-plus-axial work: exit ``rV_theta`` rises from ~0
 to the slipped value and ``dh0 > 0`` (compression, PR > 1), exiting at ``phi
 ~ phi_max``.
 
-**Status (M8 entry point).** Structural gate at **Tier 1 (meanline) and Tier
-2 (REE)**: converges on the partial-phi path, does real work with real loss,
-exits at the intended intermediate angle with a radius rise, PR/efficiency in
-sane bands. Point-by-point reproduction of a specific mixed-flow rotor is
-**[VERIFY]** (reference-library calibration + deferred loss); the geometry is
-representative, not a digitised design. Efficiency reads high for the same
-reason as V7 (only incidence + skin friction modelled).
+**Status (M8 entry point; Tier 3 added 2026-07).** Structural gate at all
+three tiers: converges on the partial-phi path, does real work with real
+loss, exits at the intended intermediate angle with a radius rise,
+PR/efficiency in sane bands. Point-by-point reproduction of a specific
+mixed-flow rotor is **[VERIFY]** (reference-library calibration + deferred
+loss); the geometry is representative, not a digitised design. Efficiency
+reads high for the same reason as V7 (only incidence + skin friction
+modelled).
 
-**Measured (M8-4): Tier-3 mixed-flow repositioning is beyond the current
-stabilization.** V7 converges Tier 3 on the *full* 90-degree bend in a narrow
-``(n_sl, n_inblade)`` pocket (M7-4); that pocket does **not** transfer to the
-partial mixed-flow bend -- across a wide ``(n_sl, n_inblade, omega)`` grid at
-``phi_max`` in 45-70 deg, Tier-3 full-SLC repositioning fails to converge
-(the section 6.4 odd-even mode again, but the working pocket is not just
-narrow, it is *angle-specific*). So the robust radial/mixed repositioning
-stabilization carried past M7 (see the module-level stability notes) is the
-V8 Tier-3 blocker; it is a driver-stabilization gap, not a closure or
-geometry one. ``test_tier3_is_the_known_repositioning_carryover`` pins this as
-a tripwire: it will flag the day a stabilization makes Tier 3 converge.
+**Measured (M8-4), REVISED 2026-07: the Tier-3 failure was a driver
+artifact, not a repositioning envelope.** M8-4 originally recorded Tier-3
+full-SLC repositioning as failing across a wide ``(n_sl, n_inblade, omega)``
+grid at ``phi_max`` in 45-70 deg ("the section 6.4 odd-even mode again",
+with the V7 pocket "angle-specific"). The 2026-07 diagnosis refuted the
+attribution: the failure chain was (i) the master ODE crossing its Vm = 0
+singularity when integrated from boundary values stale relative to the
+transported fields (the unrelaxed closure switch-on being the big producer,
+amplified by the REE swirl term ~ rVt/r^2 at the low-radius mid-bend
+stations), (ii) the driver fatally boundary-checking the stale-guess split
+that the per-q-o solves were about to repair, and (iii) continuity roots
+accepted on spurious negative-Vm branches. With the stabilization (solved-
+state check, positive-branch root validation with freeze-and-patience
+choke handling, and the closure switch-on ramped through the section 6.2.4
+under-relaxation) Tier 3 converges on this bend -- slowly, at the section
+6.4 throttle (~400 iterations; acceleration is the recorded follow-up).
+``test_tier3_converges_after_stabilization`` pins the flipped behaviour.
 
-Provenance: M8 sub-step 4, written with the mixed-flow case.
+Provenance: M8 sub-step 4, written with the mixed-flow case; Tier-3 status
+revised at the 2026-07 stabilization.
 """
 from __future__ import annotations
 

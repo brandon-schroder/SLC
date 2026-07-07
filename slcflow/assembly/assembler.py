@@ -289,14 +289,22 @@ class ResidualAssembler:
             2.0 * fz.transported.h0[0, j] - vt0 * vt0, 1e-12))
 
         def neg_mdot(v):
-            val = _TWO_PI * self.mass_cumulative(
-                j, self._integrate(d, v), fields)[-1]
+            vm = self._integrate(d, v)
+            # Positive-branch guard (matching the driver's _solve_qo
+            # feasibility rule, V8 Tier-3 diagnosis 2026-07): a profile that
+            # crossed the master ODE's Vm = 0 singularity is a spurious
+            # branch and carries no physical capacity.
+            if not bool(np.all(np.isfinite(vm)) and np.all(vm > 0.0)):
+                return np.inf
+            val = _TWO_PI * self.mass_cumulative(j, vm, fields)[-1]
             return float(np.nan_to_num(-val, nan=np.inf, posinf=np.inf,
                                        neginf=np.inf))
 
         grid = np.linspace(vm_hi / _CAPACITY_SCAN, vm_hi, _CAPACITY_SCAN)
         scan = np.array([neg_mdot(v) for v in grid])
         k = int(np.nanargmin(scan))
+        if not np.isfinite(scan[k]):
+            return 0.0      # no positive branch anywhere: zero capacity
         lo, hi = grid[max(k - 1, 0)], grid[min(k + 1, grid.size - 1)]
         res = minimize_scalar(neg_mdot, bounds=(lo, hi), method="bounded")
         return -min(float(res.fun), float(scan[k]))
