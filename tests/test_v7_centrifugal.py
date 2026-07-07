@@ -12,6 +12,7 @@ Provenance: M7 sub-step 4, written with the V7 case.
 import numpy as np
 import pytest
 
+from slcflow.drivers.classical import ClassicalConfig
 from slcflow.types import FidelityConfig, MassFlowSpec
 from slcflow.verification.v7_centrifugal import V7Centrifugal
 
@@ -92,3 +93,24 @@ def test_all_three_tiers_converge_and_agree():
     # Tier consistency: the three PRs agree to a few percent (meanline vs.
     # spanwise-resolved + repositioning differ only at second order here).
     assert max(prs) - min(prs) < 0.05 * np.mean(prs)
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+def test_tier3_edge_only_is_the_measured_inblade_necessity():
+    # TRIPWIRE (M7-3/M7-4, Appendix C.7; pinned at the 2026-07 audit
+    # follow-up -- the claim was previously narrative-only, asymmetric with
+    # the V8 tripwire): WITHOUT the INBLADE subdivision (n_inblade = 0,
+    # edge-only row) Tier-3 full-SLC repositioning on the 90-degree bend
+    # fails -- the section 6.4 odd-even streamwise mode. This is the
+    # negative half of the "six INBLADE stations are measured-necessary"
+    # finding; the positive half is test_all_three_tiers_converge_and_agree
+    # above (same case, n_inblade = 6, converges). When a robust radial
+    # repositioning stabilization lands, this assertion flips and the test
+    # fails LOUDLY -- flip it to `assert r.converged` then, and update C.7.
+    # max_outer is bounded so a future slow-divergence mode cannot stall
+    # the suite; today it NUMERICAL_FAILUREs on the first repositioning.
+    case = V7Centrifugal(n_inblade=0)
+    r = case.machine().evaluate(MassFlowSpec(case.mdot),
+                                FidelityConfig.tier3(), n_sl=case.n_sl_rep,
+                                config=ClassicalConfig(max_outer=60))
+    assert not r.converged

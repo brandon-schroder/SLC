@@ -320,6 +320,13 @@ These are not suggestions; violating them is a bug even if tests pass.
   limits (recorded, not enforced): raw `if` on flow arrays is not textually
   detectable (human review per ARCH-4.2); `qo_capacity`-style np use in
   `assembly/` stays outside R1 by design (driver-facing, not residual path).
+- **Post-M8 V7 tripwire (2026-07, audit follow-up).** The C.7 "edge-only
+  Tier-3 diverges without INBLADE" measured finding was narrative-only
+  (asymmetric with the V8 tripwire); now pinned in-suite:
+  `test_v7_centrifugal.py::test_tier3_edge_only_is_the_measured_inblade_necessity`
+  (`n_inblade=0`, Tier 3 → must NOT converge; flip the assertion when a
+  robust radial repositioning stabilization lands). C.7 updated to name it.
+  Suite 373.
 
 ## Commands
 
