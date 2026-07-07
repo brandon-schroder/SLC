@@ -34,7 +34,7 @@ navigate it.
 |---|---|---|---|
 | 0 | `00_reading_guide.md` | This index. | current |
 | 1 | `01_life_of_a_solve.md` | One real `Machine.evaluate` call traced end to end — every stage, every data structure, with actual numbers from two converged runs and one instructive failure. | current |
-| 2 | `02_theory_companion.md` | Pedagogical twin of the theory manual: the master q-o ODE derived and explained term by term, the elimination form, Appendix B loss→entropy conversions with worked numbers. | planned |
+| 2 | `02_theory_companion.md` | Pedagogical twin of the theory manual: the master q-o ODE derived and explained term by term, the elimination form, Appendix B loss→entropy conversions with worked numbers. | current |
 | 3 | `03_numerics_and_stability.md` | The solution algorithms and the *measured* findings that shaped them: the curvature lag, the calibrated Wilkinson envelope, closure under-relaxation, mixing as a multistage convergence prerequisite, the INBLADE repositioning pockets, Newton/continuation. | planned |
 | 4 | `04_module_reference.md` | Package-by-package narrative reference: purpose, public API and contracts, spec traceability, key invariants, pinning tests. | planned |
 | 5 | `05_closures_compendium.md` | Per correlation set (Lieblein, Kacker–Okapuu, Centrifugal/Wiesner): physical basis, equations as implemented, coefficient provenance and `[VERIFY]` status, C¹-smoothing choices. | planned |
