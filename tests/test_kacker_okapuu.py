@@ -183,9 +183,11 @@ def test_shock_loss_c1_through_onset():
 # Section 4.4 / B.3: the full loss model on a synthetic rotor view
 # --------------------------------------------------------------------------
 def _rotor_view_and_row(vm=140.0, omega=500.0, r=0.45, rvt=30.0, vm_te=160.0,
-                        throat=0.030, blade_count=50, beta1_metal_deg=35.0):
+                        throat=0.030, blade_count=50, beta1_metal_deg=35.0,
+                        beta2_metal_deg=60.0):
     geom = ParamRowGeometry(blade_count=blade_count,
-                            beta1=beta1_metal_deg * DEG, beta2=60 * DEG,
+                            beta1=beta1_metal_deg * DEG,
+                            beta2=beta2_metal_deg * DEG,
                             chord_len=0.03, solidity_val=1.2, thickness=0.12,
                             throat_val=throat)
     vtheta = rvt / r
@@ -218,6 +220,26 @@ def test_loss_band_positivity_and_validity():
     assert float(out.components["shock_Y"][0]) >= 0.0
     assert float(out.components["Y_total"][0]) > Y
     assert float(out.delta_s[0]) > 0.0        # real loss (entropy rise)
+    assert out.validity > 0.0
+
+
+def test_loss_reaction_rotor_opposite_sign_metal_angles():
+    # 2026-07 audit regression: a reaction rotor with co-rotating relative
+    # inflow has LE/TE metal angles of OPPOSITE sign. The cascade frame is
+    # the TE turning direction (orientation_te), so the inlet flow angle
+    # maps to a NEGATIVE cascade angle (beyond-nozzle; the AM fits soft-clip
+    # b1/b2 >= -1). The loss chain must stay in-domain there: finite,
+    # positive delta_s with nonzero validity — previously this geometry was
+    # framed by the LE sign and mis-charged as impulse-like loading.
+    row, view = _rotor_view_and_row(rvt=110.0, omega=300.0,
+                                    beta1_metal_deg=15.0,
+                                    beta2_metal_deg=-60.0)
+    assert float(view.w_theta[0]) > 0.0          # co-rotating relative inflow
+    assert row.geometry.orientation_te == -1.0   # opposite to sign(beta1)
+    out = KackerOkapuuLoss().evaluate(row, view)
+    assert np.all(np.isfinite(np.asarray(out.delta_s)))
+    assert float(out.delta_s[0]) > 0.0           # real loss, right sign
+    assert float(out.components["Y_total"][0]) > 0.0
     assert out.validity > 0.0
 
 

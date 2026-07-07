@@ -15,10 +15,16 @@ blend, against the library copies of Ainley-Mathieson / Kacker-Okapuu.]**
 
 Frame convention (section 2.4 + the [VERIFY per correlation] remap duty):
 the exit-angle magnitude ``arccos(o/s)`` is measured from the meridional;
-it is signed by the BLADE orientation (geometry data, constant per solve —
-branching on it is topology branching, ARCH-4.2) and mapped through the
-relative->absolute velocity triangle (``V_theta = W_theta + omega r``),
-which degenerates to the absolute frame for stators (``omega = 0``).
+it is signed by the blade's EXIT turning direction — the sign of the TE
+metal angle (``geometry.orientation_te``; geometry data, constant per
+solve, so branching on it is topology branching, ARCH-4.2) — and mapped
+through the relative->absolute velocity triangle
+(``V_theta = W_theta + omega r``), which degenerates to the absolute frame
+for stators (``omega = 0``). The TE sign matters: a reaction rotor with
+co-rotating relative inflow has LE and TE metal angles of OPPOSITE sign,
+and signing the exit angle by the LE orientation flips the exit swirl and
+turns work extraction into work input (2026-07 audit finding; the
+regression is ``test_ainley.py::test_reaction_rotor_corotating_inflow``).
 
 Smoothness (section 7.3): the ``o/s`` ratio is soft-clipped into the
 arccos domain (``arccos'`` blows up at +-1, so the argument is kept
@@ -76,10 +82,11 @@ class AinleyTurbineSwirl:
     count (a config constant, taken from ``row.geometry.blade_count`` which
     is validated >= 1 at construction); throat ``o`` from
     ``row.geometry.throat`` (section 4.5). The exit gas-angle magnitude is
-    ``arccos(o/s)``, signed by the blade orientation, applied to the lagged
-    TE meridional velocity (section 7.2). Relative frame for rotors
-    (``omega != 0``), absolute for stators, unified via
-    ``V_theta = W_theta + omega r`` (section 2.4).
+    ``arccos(o/s)``, signed by the TE turning direction
+    (``geometry.orientation_te`` — NOT the LE orientation, see module
+    docstring), applied to the lagged TE meridional velocity (section 7.2).
+    Relative frame for rotors (``omega != 0``), absolute for stators,
+    unified via ``V_theta = W_theta + omega r`` (section 2.4).
 
     Requires ``row.geometry`` implementing the section 4.1 contract with a
     ``throat`` opening, and the view's ``r_te``/``vm_te`` fields
@@ -89,7 +96,7 @@ class AinleyTurbineSwirl:
         xp = get_xp(None)
         g = row.geometry
         y = flow.psi                      # span fraction ~ mass fraction
-        sgn = g.orientation               # geometry constant (ARCH-4.2)
+        sgn = g.orientation_te            # TE turning direction (ARCH-4.2)
 
         pitch = 2.0 * xp.pi * flow.r_te / g.blade_count
         os_ratio = g.throat(y) / pitch

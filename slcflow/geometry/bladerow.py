@@ -73,10 +73,15 @@ class ParamRowGeometry:
     """Design-parameter row geometry (ARCH-3.1 ``ParamRowGeometry``).
 
     Every spanwise quantity is a scalar or an array at uniform span nodes.
-    Metal angles must be single-signed across span (the cascade-frame
-    mapping in correlations keys off the blade orientation; rows whose
-    metal angles cross zero — impulse-like — are out of the M4 correlation
-    scope and rejected here, loudly).
+    The LE metal angle must be nonzero and single-signed across span
+    (:attr:`orientation`, the inlet-keyed cascade-frame sign, is derived
+    from it — rejected here, loudly, at construction). The TE metal angle
+    carries no construction-time sign constraint: compressor rows
+    legitimately turn to (or slightly past) axial. Closures that key off
+    the TE turning direction instead use :attr:`orientation_te`, which
+    validates lazily on first use (the ``throat`` precedent) — a turbine
+    row's beta1 and beta2 routinely have OPPOSITE signs (reaction rotor
+    with co-rotating relative inflow), which is in scope.
     """
 
     blade_count: int
@@ -150,7 +155,30 @@ class ParamRowGeometry:
 
     @property
     def orientation(self) -> float:
-        """Sign of the blade's tangential orientation (+1 or -1), from the
-        LE metal angle — geometry data, constant per solve, safe to branch
-        on (ARCH-4.2)."""
+        """Sign of the blade's INLET tangential orientation (+1 or -1),
+        from the LE metal angle — geometry data, constant per solve, safe
+        to branch on (ARCH-4.2). This is the frame sign for inlet-keyed
+        closures (Lieblein incidence/deviation, Wiesner slip, incidence
+        loss). It is NOT the exit turning direction: use
+        :attr:`orientation_te` to sign exit-angle quantities — a turbine
+        rotor's LE and TE angles routinely have opposite signs."""
         return 1.0 if float(self._f["beta1"](0.5)) > 0.0 else -1.0
+
+    @property
+    def orientation_te(self) -> float:
+        """Sign of the blade's EXIT turning direction (+1 or -1), from the
+        TE metal angle — the sign for throat-based exit angles (section 4.5)
+        and the turbine cascade frame. Validated lazily like ``throat``
+        (AD-10 config boundary): compressor rows may carry a near-axial or
+        sign-crossing TE angle and never ask; a closure that keys off the
+        exit direction needs it well-defined, so an axial or span-sign-
+        crossing TE angle raises loudly here."""
+        y = np.linspace(0.0, 1.0, 33)
+        b2 = np.asarray(self._f["beta2"](y), dtype=float)
+        if np.any(b2 == 0.0) or (np.any(b2 > 0.0) and np.any(b2 < 0.0)):
+            raise ConfigError(
+                "beta2 metal angle must be nonzero and single-signed across "
+                "span to define the exit turning direction (orientation_te, "
+                "required by throat-based turbine exit-angle/loss closures); "
+                "got a zero or sign-crossing TE angle")
+        return 1.0 if float(b2[0]) > 0.0 else -1.0

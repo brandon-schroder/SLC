@@ -281,6 +281,26 @@ These are not suggestions; violating them is a bug even if tests pass.
   (the operator redistributes s; the Δs_mix irreversibility source is a
   refinement), plus the standing M7 carryovers (A.8 force, centrifugal loss
   components). Per ARCH-8 this was the last milestone on the ladder.
+- **Post-M8 independent audit + turbine-sign fix (2026-07).** A cold audit
+  per `docs/audit_charter.md` independently confirmed the kernel numerics
+  (A.5 master ODE, RK2 step, A.7 choke identity, V1d order 1.94 all
+  reproduced) and found one correctness bug: the axial-turbine closures
+  signed the exit angle by `orientation` = sign(**LE** metal angle), which
+  flips the exit swirl — work *input* instead of extraction — for a reaction
+  rotor with co-rotating relative inflow (β1 > 0, β2 < 0; LE/TE metal-angle
+  signs legitimately differ, that is what turning is). Fixed:
+  `ParamRowGeometry.orientation_te` (the **TE** turning direction, validated
+  lazily like `throat` — β2 must be nonzero and single-signed across span
+  only when a TE-keyed closure asks) now signs `AinleyTurbineSwirl` and the
+  `KackerOkapuuLoss` cascade frame. `orientation` (LE-keyed) stays for
+  Lieblein/Wiesner/incidence loss — **do not swap them**: Wiesner keyed to
+  the TE would mis-handle forward-sweep (audited correct as-is).
+  Behavior-preserving for every existing case (V6 has both angles negative;
+  all turbine test geometries same-signed). Physics-anchored regressions
+  (assert work extraction, not the closure's own formula):
+  `test_ainley.py::test_reaction_rotor_corotating_inflow`,
+  `test_kacker_okapuu.py::test_loss_reaction_rotor_opposite_sign_metal_angles`,
+  plus `orientation_te` guard tests. Suite 351, gates green.
 
 ## Commands
 

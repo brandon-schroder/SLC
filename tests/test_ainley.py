@@ -77,6 +77,40 @@ def test_geometry_throat_nonpositive_rejected():
 
 
 # --------------------------------------------------------------------------
+# Section 4.1 / 4.5: the TE turning-direction slot (orientation_te)
+# --------------------------------------------------------------------------
+def test_orientation_te_is_the_te_sign_not_the_le_sign():
+    # 2026-07 audit: the exit turning direction is the TE metal angle's
+    # sign; LE and TE may legitimately disagree (reaction rotor). Both
+    # combinations construct and report the TE sign.
+    g = ParamRowGeometry(blade_count=40, beta1=12 * DEG, beta2=-65 * DEG,
+                         chord_len=0.04, solidity_val=1.5, throat_val=0.03)
+    assert g.orientation == 1.0
+    assert g.orientation_te == -1.0
+    g2 = ParamRowGeometry(blade_count=40, beta1=5 * DEG, beta2=65 * DEG,
+                          chord_len=0.04, solidity_val=1.5, throat_val=0.03)
+    assert g2.orientation_te == 1.0
+
+
+def test_orientation_te_guard_is_lazy_like_throat():
+    # An axial or span-sign-crossing TE angle is legal to CONSTRUCT (a
+    # compressor row turning to/past axial never asks for a turning
+    # direction) and raises loudly only when a TE-keyed closure asks —
+    # mirroring the optional-throat contract (AD-10 config boundary).
+    g_axial = ParamRowGeometry(blade_count=40, beta1=-40 * DEG, beta2=0.0,
+                               chord_len=0.04, solidity_val=1.5)
+    assert g_axial.orientation == -1.0          # LE-keyed slot still fine
+    with pytest.raises(ConfigError, match="beta2"):
+        g_axial.orientation_te
+    g_cross = ParamRowGeometry(
+        blade_count=40, beta1=-40 * DEG,
+        beta2=np.array([0.2, -0.1]),            # crosses zero across span
+        chord_len=0.04, solidity_val=1.5)
+    with pytest.raises(ConfigError, match="beta2"):
+        g_cross.orientation_te
+
+
+# --------------------------------------------------------------------------
 # Section 4.5: throat_exit_angle cosine rule (structural anchors) [VERIFY]
 # --------------------------------------------------------------------------
 def test_throat_exit_angle_cosine_anchors():
@@ -120,9 +154,9 @@ def test_throat_exit_angle_c1_and_finite():
 # Section 3.4 / 7.1: AinleyTurbineSwirl on a synthetic view
 # --------------------------------------------------------------------------
 def _view_and_row(vm=120.0, omega=0.0, r=0.45, rvt=0.0, throat=0.03,
-                  blade_count=40, beta2_deg=65.0):
+                  blade_count=40, beta2_deg=65.0, beta1_deg=5.0):
     """Single-streamtube view + turbine row (nozzle by default: omega=0)."""
-    geom = ParamRowGeometry(blade_count=blade_count, beta1=5 * DEG,
+    geom = ParamRowGeometry(blade_count=blade_count, beta1=beta1_deg * DEG,
                             beta2=beta2_deg * DEG, chord_len=0.04,
                             solidity_val=1.5, throat_val=throat)
     vtheta = rvt / r
@@ -176,6 +210,38 @@ def test_rotor_relative_to_absolute_mapping():
     w_theta_2 = float(view.vm_te[0]) * np.tan(alpha2)
     vtheta_2 = w_theta_2 + row.omega * r
     assert float(out.rvt[0]) == pytest.approx(r * vtheta_2, rel=1e-9)
+
+
+def test_reaction_rotor_corotating_inflow():
+    # 2026-07 audit regression (sections 2.4, 3.3, A.5): a reaction rotor
+    # whose relative inflow CO-ROTATES (Vtheta1 > U so beta1_flow > 0) while
+    # the blade turns the flow the other way (beta2 < 0) — LE and TE metal
+    # angles of OPPOSITE sign, the normal reaction-rotor geometry. The exit
+    # angle must be signed by the TE turning direction (orientation_te);
+    # signing it by the LE orientation flipped the exit swirl and made the
+    # "turbine" ADD +16 kJ/kg of work. Physics-anchored, not formula-
+    # anchored: assert the turbine sense of the answer, independent of how
+    # the closure computes it.
+    row, view = _view_and_row(omega=300.0, rvt=72.0,       # U = 135 m/s
+                              beta1_deg=12.0, beta2_deg=-65.0)
+    r = float(view.r_te[0])
+    assert float(view.w_theta[0]) > 0.0        # co-rotating relative inflow
+    assert row.geometry.orientation == 1.0     # LE sign...
+    assert row.geometry.orientation_te == -1.0  # ...opposite to TE sign
+
+    out = AinleyTurbineSwirl().exit_rvt(row, view)
+    vtheta_2 = float(out.rvt[0]) / r
+    w_theta_2 = vtheta_2 - row.omega * r
+    # Relative exit swirl opposes rotation (section 2.4 turbine sense) ...
+    assert w_theta_2 < 0.0
+    # ... its magnitude is the throat cosine rule (branch-independent) ...
+    pitch = 2.0 * np.pi * r / row.geometry.blade_count
+    alpha2 = np.deg2rad(float(throat_exit_angle(0.03 / pitch)[0]))
+    assert abs(w_theta_2) == pytest.approx(
+        float(view.vm_te[0]) * np.tan(alpha2), rel=1e-9)
+    # ... and rVt DROPS across the row: Euler work is extracted (section
+    # 3.3, dh0 = omega * d(rVt) < 0).
+    assert float(out.rvt[0]) < float(view.r[0] * view.vtheta[0])
 
 
 def test_swirl_c1_in_flow_input():

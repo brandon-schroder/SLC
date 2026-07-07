@@ -72,7 +72,12 @@ class KackerOkapuuLoss:
         xp = get_xp(None)
         g = row.geometry
         y = flow.psi
-        sgn = g.orientation              # geometry constant (ARCH-4.2)
+        # Cascade frame = the blade's EXIT turning direction (the frame in
+        # which the throat exit angle is positive), so the inlet flow angle
+        # is signed consistently with the exit-angle chain below. A reaction
+        # rotor with co-rotating relative inflow maps to a NEGATIVE cascade
+        # inlet angle (beyond-nozzle; the AM fits soft-clip b1/b2 >= -1).
+        sgn = g.orientation_te           # geometry constant (ARCH-4.2)
 
         # Exit gas angle from the shared throat chain (same CorrelationSet).
         pitch = 2.0 * xp.pi * flow.r_te / g.blade_count
