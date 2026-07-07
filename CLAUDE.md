@@ -301,6 +301,25 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_ainley.py::test_reaction_rotor_corotating_inflow`,
   `test_kacker_okapuu.py::test_loss_reaction_rotor_opposite_sign_metal_angles`,
   plus `orientation_te` guard tests. Suite 351, gates green.
+- **Post-M8 checker hardening (2026-07, audit follow-up).** The audit found
+  both CI lint gates weaker than the decisions they claim to enforce; no
+  live violations existed (the discipline held by convention), but the gates
+  are now made real. `tools/check_ad6.py`: R1 patterns now match the
+  injected **`xp.` spelling** as well as `np.` (the old patterns never
+  matched the namespace the kernel routes through); R1 now covers
+  **`transport/`** (flow-array schedules/mixing, §7.3 discipline), not just
+  `closures/`; and a bare `# ad6: allow` with no justification text is
+  itself a violation (R0) — waivers stay auditable. `tools/check_imports.py`:
+  new **AD-5 firewall** on top of the direction rule — outside `closures/`
+  only `closures.interfaces` and `closures.smoothmath` are importable
+  (direction alone let `assembly` import Lieblein constants). Both tools'
+  scan cores are pure functions with negative controls in
+  `tests/test_lint_tools.py` (the CLAUDE.md checker rule applied to the
+  checkers themselves: each rule proven to reject a known violation, plus
+  end-to-end positive controls). Suite 372, gates green. Known remaining
+  limits (recorded, not enforced): raw `if` on flow arrays is not textually
+  detectable (human review per ARCH-4.2); `qo_capacity`-style np use in
+  `assembly/` stays outside R1 by design (driver-facing, not residual path).
 
 ## Commands
 

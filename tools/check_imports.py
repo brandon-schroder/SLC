@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-direction check (Architecture Spec ARCH-2, AD-5).
+"""Dependency-direction + AD-5 firewall check (Architecture Spec ARCH-2, AD-5).
 
 Enforces the layered import order:
 
@@ -9,6 +9,15 @@ Enforces the layered import order:
 
 A module may import only from layers <= its own. ``verification`` and tests
 are exempt (may import anything). Exit code 1 on violation; prints offenders.
+
+Additionally the **AD-5 firewall** (2026-07 audit): the layer order alone
+would let kernel modules import closure IMPLEMENTATIONS -- ``closures``
+sits below ``assembly``/``drivers``, so e.g. the assembler importing
+Lieblein constants passed the direction rule. Machine-type knowledge must
+not leak (AD-5: "the kernel imports interfaces, never implementations"),
+so from outside ``closures/`` only the interface-grade closure modules in
+``AD5_ALLOWED`` are importable. The per-edge verdict is a pure function
+(``violation_for``) with negative controls in tests/test_lint_tools.py.
 
 Run:  python tools/check_imports.py
 """
@@ -40,6 +49,14 @@ LAYERS = {
     f"{PKG}": 8,  # bare package __init__ may import anything (facade)
 }
 EXEMPT_PREFIXES = (f"{PKG}.verification",)
+
+# AD-5 firewall: closure modules importable from OUTSIDE closures/. Interfaces
+# and the C1 toolbox are contract-grade; everything else in closures/ is a
+# machine-type implementation (correlation constants) the kernel must not see.
+AD5_ALLOWED = {
+    f"{PKG}.closures.interfaces",
+    f"{PKG}.closures.smoothmath",
+}
 
 
 def layer_of(modname: str) -> int | None:
@@ -90,26 +107,55 @@ def imported_modules(path: Path, importer: str):
                 yield node.module, node.lineno
 
 
+def ad5_violation(importer: str, imported: str) -> str | None:
+    """AD-5 firewall verdict for one import edge, or None if clean.
+
+    Closures internals (and the bare-package facade, layer 8) are exempt;
+    any other module importing from ``slcflow.closures`` must hit the
+    ``AD5_ALLOWED`` interface set exactly. A bare ``slcflow.closures``
+    import is rejected too -- the checker cannot see which names it binds.
+    """
+    closures = f"{PKG}.closures"
+    if importer == PKG or importer == closures \
+            or importer.startswith(closures + "."):
+        return None
+    if imported != closures and not imported.startswith(closures + "."):
+        return None
+    if imported in AD5_ALLOWED:
+        return None
+    return (f"{importer} imports {imported} -- AD-5 firewall: outside "
+            f"closures/ only {sorted(AD5_ALLOWED)} are importable "
+            "(interfaces, never implementations)")
+
+
+def violation_for(importer: str, imported: str) -> str | None:
+    """Combined direction + AD-5 verdict for one import edge (the pure,
+    unit-testable core; negative controls in tests/test_lint_tools.py)."""
+    my_layer = layer_of(importer)
+    their_layer = layer_of(imported)
+    if my_layer is None:
+        return f"unlayered module {importer!r}: add to LAYERS"
+    if their_layer is None:
+        return f"import of unlayered {imported!r}"
+    if their_layer > my_layer:
+        return (f"{importer} (layer {my_layer}) imports {imported} "
+                f"(layer {their_layer}) -- wrong direction")
+    return ad5_violation(importer, imported)
+
+
 def main() -> int:
     violations = []
     for path in sorted((ROOT / PKG).rglob("*.py")):
         importer = module_name(path)
         if importer.startswith(EXEMPT_PREFIXES):
             continue
-        my_layer = layer_of(importer)
-        if my_layer is None:
+        if layer_of(importer) is None:
             violations.append((path, 0, f"unlayered module {importer!r}: add to LAYERS"))
             continue
         for imported, lineno in imported_modules(path, importer):
-            their_layer = layer_of(imported)
-            if their_layer is None:
-                violations.append((path, lineno, f"import of unlayered {imported!r}"))
-            elif their_layer > my_layer:
-                violations.append(
-                    (path, lineno,
-                     f"{importer} (layer {my_layer}) imports {imported} "
-                     f"(layer {their_layer}) -- wrong direction")
-                )
+            msg = violation_for(importer, imported)
+            if msg:
+                violations.append((path, lineno, msg))
     for path, lineno, msg in violations:
         print(f"{path}:{lineno}: {msg}")
     if not violations:
