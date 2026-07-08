@@ -421,9 +421,20 @@ These are not suggestions; violating them is a bug even if tests pass.
   §6.6 patience fallback distorts its own repositioning targets and never
   gains the missing capacity (ib=2: false choke, 1200 patience-off iters
   sane-but-unconverged; ib=12: persistent ~3% deficiency with converged
-  closures → Vm-singularity rupture at it 161). Candidate fix recorded in
-  C.3: best-effort capacity-peak vm_q0 for deficient stations instead of
-  freezing (it is the true choked-station solution at genuine choke).
+  closures → Vm-singularity rupture at it 161). **Candidate fix
+  (capacity-peak vm_q0) implemented, measured, REVERTED** — no-op on all
+  passing cases, non-curative on the wedge. Deeper diagnosis (C.3,
+  revised): these layouts settle into self-consistent lag states whose
+  exit station has NO positive-branch root at mdot — ib=2 a stationary
+  24.8% deficit that persists even with the ib=6 fixed point's closures
+  PRESCRIBED (suspect: coarse-fit end-condition curvature at the exit);
+  ib=12 a stationary surplus (lag-settled stratification, h0 span 22
+  kJ/kg, s span 3→15 J/kgK, forces an REE shear whose MINIMUM feasible
+  mass ≈ 28.8 > 12 kg/s at any boundary value). Recorded next attacks:
+  closure-in-Newton on such states, an end-condition-aware/compact-support
+  streamline fit, or documenting ib≈6 as the supported radial/mixed
+  layout. Until then 55°-class bends with ib far from 6 are a
+  known-unsupported region, honestly reported by typed statuses.
 
 ## Commands
 
