@@ -510,7 +510,22 @@ V2 curved-annulus case, Tier 3, κ-lag 0.3, fixed-ω sweep; ω\* = largest conve
 
 Key facts: thresholds independent of $N_{sl}$ (5/9/17 identical at fixed stations); the fitted model passes within 2% of the measured-unstable (9,19) point, hence the mandatory 0.6× margin in the shipped default $K = 4.4$; without the §5.5 κ-lag the mode diverges at any ω (measured at 13 stations down to ω = 0.02). All measurements at peak $M_m \approx 0.3$; the $(1-M_m^2)$ factor is retained from theory, not independently calibrated. Rerun the tool after any repositioning/curvature-lag change.
 
-**Blade-row-family headroom probe (2026-07, post-stabilization).** On the blade-row-coupled bends (V7 90°, V8 55°, both Tier 3) the duct-calibrated envelope is measured **2–3× over-conservative**: V8 converges to the identical fixed point (PR 1.5873) at $K = 8.8$ (216 iters) and $K = 13.2$ (152 iters, vs. 396 at the default 4.4) and diverges at $K = 22$ — this family's threshold sits in $(13.2, 22)$ vs. the duct's ≈7.3; V7 halves its iteration count at $K = 13.2$ with an unchanged answer. The shipped default stays 4.4 (margin discipline is against a *calibrated* threshold; two cases are a probe, not a family sweep — and pre-stabilization anecdotes in this appendix may have conflated driver artifacts with the genuine mode). A proper multi-family recalibration extending `tools/calibrate_wilkinson.py` beyond the V2 duct is the recorded route to shipping a faster default; until then, per-case `wilkinson_c` overrides are safe up to ~13 on V7/V8-class geometry.
+**Multi-family recalibration (2026-07, post-stabilization; rerunnable via `tools/calibrate_wilkinson.py [duct|bladerow|all]`).**
+
+*Duct rerun (the tool's own instruction after the repositioning changes):* the fit **reproduces exactly** — $p = 1.50$, $K = 7.3$, with every ω\* in the table above unchanged. Two near-threshold *classifications* shifted from "diverges" to "slow-stable within 150 iterations" ((9,19) at ω = 0.10; (17,13) at the previously-marginal 0.20): the positive-branch root validation now prevents the garbage-branch deaths that used to mark instability onset, while the mode itself (and hence the threshold and fit) is unchanged.
+
+*Blade-row family* (V8 parametric bend, centrifugal set, Tier 3, $n_{sl} = 7$; sweeping `wilkinson_c` itself because fixed-ω sweeps die in the closure switch-on transient that the adaptive $(1-M_m^2)$ factor rides out in production; `n_inblade` barely moves $x = \Delta m_{min}/L_{qo}$ — the duct-adjacent station gaps pin it — so these points probe the threshold *constant*, not the exponent):
+
+| point | $x$ | $c^*$ (largest converged) | iters at $c^*$ |
+|---|---|---|---|
+| $\phi=55°$, `n_inblade=2` | 0.077 | — (see open item) | — |
+| $\phi=55°$, `n_inblade=6` | 0.077 | 13.2 (17.6 fails) | 152 |
+| $\phi=55°$, `n_inblade=12` | 0.046 | — (see open item) | — |
+| $\phi=90°$, `n_inblade=2` | 0.126 | ≥ 30 (scan cap) | 75 |
+| $\phi=90°$, `n_inblade=6` | 0.126 | 13.2 (17.6 fails) | 98 |
+| $\phi=90°$, `n_inblade=12` | 0.075 | 8.8 (13.2 fails) | 159 |
+
+**Conclusions:** every converging blade-row point's threshold ($c^* \in [8.8, \ge 30]$) sits above the duct threshold (≈7.3), so **the duct family remains binding and the shipped default $K = 4.4$ stands** (0.6× of the binding threshold). Per-case `wilkinson_c` overrides remain safe to ~13 on `n_inblade=6`-class layouts (2–2.6× fewer iterations, identical answers). The two 55° non-converging points are **not envelope failures** (their adaptive ω is the *smallest* in the family): diagnosed as the residual **freeze-fallback wedge** — a capacity-deficient exit-duct station is frozen by the §6.6 patience fallback, its repositioning targets distort, and its spanwise positions never adapt to gain the missing capacity. At `n_inblade=2` this reads as false choke (patience-off runs 1200 iterations, PR sane, no rupture, no convergence); at `n_inblade=12` a persistent ~3% deficiency survives fully converged closures and ends in a Vm-singularity rupture at iteration 161. The recorded candidate fix (next work item, not yet implemented): return the feasible **capacity-peak** $V_{m,q0}$ for a deficient station — the physically-meaningful best effort, and the actual choked-station solution at genuine choke — instead of freezing, so repositioning stays consistent while the deficiency relaxes.
 
 ### C.4 V3 — Tier consistency (bound at M3-4 / M4-5; `tests/test_v3_tier_consistency.py`)
 

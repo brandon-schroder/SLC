@@ -405,6 +405,25 @@ These are not suggestions; violating them is a bug even if tests pass.
   mixed Tier 3 therefore stays gated (the 4× hoped-for pass-cost cut is
   physically unavailable on curved paths without closure-in-Newton or a
   compact-support streamline fit — both recorded).
+- **Post-M8 §6.4 multi-family recalibration (2026-07; C.3 revised,
+  `tools/calibrate_wilkinson.py` extended with `[duct|bladerow|all]`).**
+  Duct rerun post-stabilization **reproduces the C.3 fit exactly** (p=1.50,
+  K=7.3; two near-threshold classifications softened x→slow-stable — the
+  positive-branch guard removed the garbage-branch deaths at onset, mode
+  unchanged). Blade-row family (V8 parametric bend, sweeping `wilkinson_c`
+  itself — fixed-ω dies in the switch-on transient the adaptive (1−Mm²)
+  factor rides out; `n_inblade` barely moves x, so points probe the
+  constant, not the exponent): c* ∈ [8.8, ≥30] on converging points →
+  **duct family binds, default 4.4 stands**; per-case overrides safe to
+  ~13 on ib=6-class layouts. Two NEW measured open items at φ=55°
+  (ib∈{2,12}, failing at every c, NOT envelope failures): the **freeze-
+  fallback wedge** — a capacity-deficient exit-duct station frozen by the
+  §6.6 patience fallback distorts its own repositioning targets and never
+  gains the missing capacity (ib=2: false choke, 1200 patience-off iters
+  sane-but-unconverged; ib=12: persistent ~3% deficiency with converged
+  closures → Vm-singularity rupture at it 161). Candidate fix recorded in
+  C.3: best-effort capacity-peak vm_q0 for deficient stations instead of
+  freezing (it is the true choked-station solution at genuine choke).
 
 ## Commands
 
