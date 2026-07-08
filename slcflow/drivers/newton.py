@@ -147,13 +147,25 @@ def _residual_scale(frozen: FrozenInputs):
 
 
 def _safe_residual(asm: ResidualAssembler, x, scale):
-    """Scaled residual at ``x``, or ``None`` if the point is infeasible
-    (crossing streamline) or produces a non-finite residual (out-of-domain
-    Vm along the ODE). No exception crosses this boundary (AD-10)."""
+    """Scaled residual at ``x``, or ``None`` if the point is infeasible:
+    a crossing streamline, a non-finite residual (out-of-domain Vm along
+    the ODE), or an integrated Vm field that is not strictly positive.
+
+    The positivity rule is the Newton-side counterpart of the classical
+    driver's positive-branch root validation (2026-07 Tier-3 stabilization):
+    the master ODE's RHS ~ core/Vm is singular at Vm = 0, and a trial whose
+    profile crossed zero sits on a spurious branch whose residual can be
+    FINITE (mass balancing by sign cancellation) — previously such garbage
+    passed this screen and could poison the line-search merit. No exception
+    crosses this boundary (AD-10)."""
     if not _is_feasible_q(x, asm.frozen):
         return None
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
-        r = asm.residual(x)
+        fields = asm.split(x)
+        if not bool(np.all(np.isfinite(fields.vm))
+                    and np.all(fields.vm > 0.0)):
+            return None
+        r = asm.residual_from(fields, x)
     if not np.all(np.isfinite(r)):
         return None
     return r / scale

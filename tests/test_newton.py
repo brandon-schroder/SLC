@@ -155,6 +155,40 @@ def test_newton_line_search_recovers_from_a_crossing_full_step():
     np.testing.assert_allclose(x, res_c.x, atol=1e-6)
 
 
+def test_negative_vm_trial_is_infeasible_despite_finite_residual():
+    # 2026-07 Tier-3 stabilization follow-up (Newton side of the classical
+    # positive-branch rule): the master ODE is singular at Vm = 0, and a
+    # trial x whose integrated Vm crosses zero sits on a spurious branch
+    # whose residual can be FINITE (mass balancing by sign cancellation) --
+    # the old screen (finite residual + monotone q) accepted it, letting
+    # garbage poison the line-search merit. Scaling one station's Vm_q0 to
+    # 0.1x on the converged V1c state produces exactly that: negative
+    # interior Vm, finite residual. The guard must reject it.
+    case = V1ForcedVortex()
+    topo, inlet, _ = _setup(case, 17)
+    res_c = _tier2(topo, case, inlet)
+    assert res_c.converged
+    asm = ResidualAssembler(res_c.frozen)
+    scale = _residual_scale(res_c.frozen)
+
+    x_bad = np.array(res_c.x)
+    x_bad[1] *= 0.1
+    assert _is_feasible_q(x_bad, res_c.frozen)      # positions untouched
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        fields = asm.split(x_bad)
+        r = asm.residual(x_bad)
+    assert np.all(np.isfinite(r))                   # old rule would ACCEPT
+    assert np.any(fields.vm < 0.0)                  # ...a spurious branch
+    assert _safe_residual(asm, x_bad, scale) is None  # new rule rejects
+
+    # Healthy states are untouched: the converged x still screens clean and
+    # residual_from(split(x), x) is exactly residual(x) (the refactor seam).
+    r_ok = _safe_residual(asm, res_c.x, scale)
+    assert r_ok is not None
+    np.testing.assert_array_equal(
+        asm.residual_from(asm.split(res_c.x), res_c.x), asm.residual(res_c.x))
+
+
 def test_newton_is_deterministic():
     case = V1FreeVortex.compressible()
     topo, inlet, _ = _setup(case, 9)

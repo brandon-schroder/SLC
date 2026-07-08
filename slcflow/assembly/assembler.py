@@ -346,8 +346,17 @@ class ResidualAssembler:
         C-order, matching ``assembly.pack``. In back-pressure mode (section
         6.6) ``mdot`` is read from the trailing state component and ONE more
         row is appended: the throttling-station back-pressure condition."""
+        return self.residual_from(self.split(x), x)
+
+    def residual_from(self, fields: AssembledFields, x):
+        """The section 6.1 residual rows evaluated on an already-assembled
+        ``fields`` (ARCH-5.1 reusable piece): lets a driver share ONE
+        ``split`` between its own trial screening and the residual — the
+        Newton positive-branch guard inspects ``fields.vm`` before paying
+        for the rows (2026-07 stabilization follow-up). ``fields`` must be
+        ``self.split(x)`` for the same ``x``; nothing revalidates that
+        here. ``residual(x)`` is exactly this after its own split."""
         fz = self.frozen
-        fields = self.split(x)
         if self.backpressure:
             _, _, mdot = unpack(x, fz.n_sl, fz.n_qo, backpressure=True)
         else:

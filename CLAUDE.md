@@ -365,6 +365,25 @@ These are not suggestions; violating them is a bug even if tests pass.
   positive-branch guard yet (negative-Vm finite garbage passes its
   feasibility check); ln-Vm positivity-safe integration is the recorded
   principled root fix if new cases resurface it.
+- **Post-M8 consolidation sprint (2026-07).** (1) **Newton positive-branch
+  guard shipped**: `_safe_residual` now splits once, rejects trials whose
+  integrated Vm is not strictly positive (spurious branches carry FINITE
+  residuals — measured on plain V1c, not just bends), and evaluates the
+  residual via the new `ResidualAssembler.residual_from(fields, x)` seam
+  (no cost change); regression
+  `test_newton.py::test_negative_vm_trial_is_infeasible_despite_finite_residual`.
+  (2) **Newton finishing measured, not wired**: on V8 T3 the inner Newton is
+  textbook (2-3 quadratic iterations/pass) but the quasi-Newton closure
+  outer contracts at only ~0.73/pass after a ~4-pass hump → ~54 passes ×
+  ~2.2 s (dense-FD Jacobian) ≈ 120 s vs classical's 75 s. Profitability
+  gate = the ARCH-5.3 colored-FD Jacobian (~4× pass cost) or
+  closure-in-Newton; don't wire escalation before one of those lands.
+  (3) **§6.4 envelope headroom measured** (C.3 note): the duct-calibrated
+  threshold is 2-3× conservative on blade-row bends — V8 identical answer at
+  `wilkinson_c=13.2` in 152 iters (vs 396), diverges at 22; V7 halves at
+  13.2. Default stays 4.4 pending a multi-family recalibration of
+  `tools/calibrate_wilkinson.py`; per-case overrides safe to ~13 on
+  V7/V8-class geometry.
 
 ## Commands
 
