@@ -15,12 +15,29 @@ one inner Newton solve the ``FrozenInputs`` are fixed, so the inner system is
 exactly the frozen-closure residual (and, at Tier 2, the exact full system —
 the curvature/lean lag terms carry zero flags).
 
-Jacobian: **dense forward-difference** here. Section 6.3 permits dense Newton
-for the typical problem size (N_sl * N_qo <~ 10^3 unknowns); it is
-the unconditionally-correct baseline against which the ARCH-5.3
-colored-finite-difference Jacobian (exploiting the near-block-tridiagonal
-station-index structure) must be validated column-for-column when it lands.
-That optimization is the recorded next step, not a correctness prerequisite.
+Jacobian: **colored forward-difference by default** (ARCH-5.3, landed
+2026-07), with the dense version retained as the unconditionally-correct
+baseline (``jacobian="dense"``), the validation oracle, and the automatic
+fallback when a colored group cannot be formed. The coloring is **exact by
+construction** — groups only provably-disjoint columns, so it matches the
+dense Jacobian column-for-column to FD noise in EVERY configuration.
+Measured structure (2026-07 probes, the design data): ``vm_q0`` columns
+are exactly block-diagonal in station index at every tier (one color for
+all of them; the lean term uses the lagged Vm field, so no cross-station
+Vm coupling); interior-``q`` columns are block-diagonal to FD noise
+(~1e-8) only when the curvature/lean terms are off AND the geometry is a
+straight annulus (``|sin(eps)| ~ 0`` — the fit feeds the residual solely
+through ``cos(eps)``, second-order at eps = 0), certified per solve by
+``_q_columns_groupable``; on curved paths the same coupling is FIRST-order
+(measured 38% at stride 1 on the V8 bend even at Tier 2) and under active
+curvature the interpolating spline couples stations globally with ~0.27/
+station decay — the arch spec's "near-block-tridiagonal" premise is soft,
+not sparse. A banded/approximate stride-6 mode was measured UNPROFITABLE
+end-to-end (2.8% aliasing inflated inner iterations ~1.7x, more than the
+cheaper Jacobian saved) and deliberately does not ship. Net: straight-
+annulus Tier-2/meanline solves (the continuation/back-pressure workhorse)
+get (n_sl-1)-color Jacobians (measured 3.7x on V1c), curved/Tier-3 cases
+keep per-column q plus the free vm color (~15% on V8).
 
 Globalization detail (the M2/M3 carryover): a Newton trial step can drive a
 q-o's nodes non-monotone (a *crossing streamline*), which the assembler's
@@ -82,6 +99,16 @@ class NewtonConfig:
     max_backtrack: int = 40
     armijo: float = 1e-4
     closure_relax: float = 0.25
+    # ARCH-5.3 colored finite differences (default) vs the dense baseline.
+    # EXACT by construction — no approximate/banded mode ships (see the
+    # module docstring for the measured structure and the measured-
+    # unprofitable stride experiment). "colored" groups only what is
+    # provably disjoint: all vm_q0 columns share one color always; interior
+    # q columns additionally share stride-1 colors when the curvature/lean
+    # flags are off AND the seed geometry has |sin(eps)| ~ 0 (straight-
+    # annulus q-o's — checked per solve, not assumed). A colored failure
+    # falls back to dense automatically.
+    jacobian: str = "colored"
 
     def __post_init__(self):
         if self.max_iter < 1 or self.max_outer < 1:
@@ -89,6 +116,9 @@ class NewtonConfig:
         if not (0.0 < self.closure_relax <= 1.0):
             raise ConfigError(
                 f"closure_relax must be in (0, 1], got {self.closure_relax}")
+        if self.jacobian not in ("colored", "dense"):
+            raise ConfigError(
+                f"jacobian must be 'colored' or 'dense', got {self.jacobian!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +204,109 @@ def _safe_residual(asm: ResidualAssembler, x, scale):
 # ---------------------------------------------------------------------------
 # Inner Newton core
 # ---------------------------------------------------------------------------
+_EPS_STRAIGHT = 1e-4     # |sin(eps)| below this reads as a straight annulus
+
+
+def _q_columns_groupable(asm: ResidualAssembler, x) -> bool:
+    """True iff grouping interior-q columns across stations is EXACT here.
+
+    Two measured facts (2026-07 structure probes) gate it: with the
+    curvature/lean terms off AND ``|sin(eps)| ~ 0`` everywhere (straight-
+    annulus q-o's), q columns are block-diagonal in station index to FD
+    noise (~1e-8) — the fit feeds the residual only through ``cos(eps)``,
+    whose sensitivity is second-order at eps = 0. On a curved path the same
+    coupling is FIRST-order (measured 38% at stride 1 on the V8 bend, Tier
+    2!), and with curvature active the spline's global support couples
+    stations at ~0.27/station — grouping is never exact there, so we don't.
+    Geometry is judged at the seed; straightness is preserved along the
+    solve (positions slide along fixed straight q-o's).
+    """
+    fid = asm.frozen.fidelity
+    if fid.curvature_term != 0.0 or fid.lean_term != 0.0:
+        return False
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        eps = asm.split(x).metrics.eps
+    return bool(np.all(np.isfinite(eps))
+                and np.max(np.abs(np.sin(eps))) < _EPS_STRAIGHT)
+
+
+def _colored_groups(frozen: FrozenInputs, group_q: bool):
+    """Column groups + station maps for the colored Jacobian (ARCH-5.3).
+
+    Layout per ``assembly.pack``: columns are ``vm_q0[j]`` then interior
+    ``q[i, j]`` in C-order (then ``mdot`` in back-pressure mode); residual
+    rows mirror it (then the back-pressure row, attributed to the
+    throttling station). Groups — all EXACT, never approximate:
+
+    * one group holding ALL ``vm_q0`` columns — measured exactly
+      block-diagonal in station index at every tier (the lean term uses the
+      LAGGED Vm field, so there is no cross-station Vm coupling);
+    * interior ``q[i, j]`` columns: one group per streamline ``i`` spanning
+      all stations when ``group_q`` (see ``_q_columns_groupable``), else
+      one column per group (no assumption about the spline's support);
+    * the ``mdot`` column alone (its dense response is attributed exactly).
+
+    Rows are attributed to the nearest group-column station (Voronoi in
+    station index; exact when the group's columns have disjoint row
+    support, which is what ``group_q`` certifies).
+    """
+    n_sl, n_qo = frozen.n_sl, frozen.n_qo
+    n_int = max(n_sl - 2, 0)
+    bp = isinstance(frozen.spec, BackPressureSpec)
+    groups = [np.arange(n_qo)]                    # all vm_q0 columns
+    for i in range(n_int):
+        base = n_qo * (1 + i)
+        if group_q:
+            groups.append(base + np.arange(n_qo))
+        else:
+            groups.extend(np.array([base + j]) for j in range(n_qo))
+    if bp:
+        groups.append(np.array([n_qo * (1 + n_int)]))
+    col_station = np.concatenate([np.arange(n_qo)] * (1 + n_int)
+                                 + ([np.array([0])] if bp else []))
+    row_station = np.concatenate(
+        [np.arange(n_qo)] * (1 + n_int)
+        + ([np.array([frozen.spec.station])] if bp else []))
+    return groups, col_station, row_station
+
+
+def _fd_jacobian_colored(asm, x, r0, scale, config: NewtonConfig,
+                         group_q: bool):
+    """Colored forward-difference Jacobian of the SCALED residual
+    (ARCH-5.3): all columns of a group are perturbed in one residual
+    evaluation and the response is attributed to each column's own station
+    block. Backward fallback per GROUP; ``None`` if a group cannot be
+    formed (the caller retries dense before giving up)."""
+    frozen = asm.frozen
+    groups, col_station, row_station = _colored_groups(frozen, group_q)
+    jac = np.empty((r0.size, x.size))
+    for g in groups:
+        h = config.fd_rel * np.abs(x[g]) + config.fd_abs
+        xf = x.copy()
+        xf[g] += h
+        rf = _safe_residual(asm, xf, scale)
+        if rf is not None:
+            diff = rf - r0
+        else:
+            xb = x.copy()
+            xb[g] -= h
+            rb = _safe_residual(asm, xb, scale)
+            if rb is None:
+                return None
+            diff = r0 - rb
+        if g.size == 1:
+            jac[:, g[0]] = diff / h[0]
+            continue
+        owner = np.argmin(np.abs(row_station[:, None]
+                                 - col_station[g][None, :]), axis=1)
+        for k, col in enumerate(g):
+            mask = owner == k
+            col_vals = np.zeros(r0.size)
+            col_vals[mask] = diff[mask] / h[k]
+            jac[:, col] = col_vals
+    return jac
+
+
 def _fd_jacobian(asm, x, r0, scale, config: NewtonConfig):
     """Dense forward-difference Jacobian of the SCALED residual (section 6.3).
 
@@ -214,11 +347,17 @@ def newton_solve(asm: ResidualAssembler, x0, config: NewtonConfig = NewtonConfig
     r = _safe_residual(asm, x, scale)
     if r is None:
         return x, SolveStatus.NUMERICAL_FAILURE, records
+    colored = config.jacobian == "colored"
+    group_q = colored and _q_columns_groupable(asm, x)
     for it in range(1, config.max_iter + 1):
         rnorm = float(np.max(np.abs(r)))
         if rnorm < config.tol_res:
             return x, SolveStatus.CONVERGED, records
-        jac = _fd_jacobian(asm, x, r, scale, config)
+        jac = None
+        if colored:
+            jac = _fd_jacobian_colored(asm, x, r, scale, config, group_q)
+        if jac is None:      # dense baseline, and the colored fallback
+            jac = _fd_jacobian(asm, x, r, scale, config)
         if jac is None:
             records.append(_rec(it, rnorm, 0.0))
             return x, SolveStatus.NUMERICAL_FAILURE, records

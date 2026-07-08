@@ -384,6 +384,27 @@ These are not suggestions; violating them is a bug even if tests pass.
   13.2. Default stays 4.4 pending a multi-family recalibration of
   `tools/calibrate_wilkinson.py`; per-case overrides safe to ~13 on
   V7/V8-class geometry.
+- **Post-M8 colored-FD Jacobian (2026-07, ARCH-5.3 closed).** Default
+  Newton Jacobian is now colored FD, **exact by construction** — validated
+  column-for-column against the dense baseline in every configuration (the
+  M5 bar). Measured structure (probes, recorded in the module docstring):
+  `vm_q0` columns exactly block-diagonal at every tier → one color always;
+  interior-q columns block-diagonal to FD noise ONLY with curvature/lean
+  off AND `|sin(eps)|~0` (straight annulus — the cos ε sensitivity is
+  second-order at ε=0), certified per solve by `_q_columns_groupable`; on
+  bends the ε coupling is FIRST-order (measured 38% grouped error at Tier 2
+  on V8!) and under curvature the spline couples stations globally
+  (~0.27/station decay) — **the arch spec's "near-block-tridiagonal"
+  premise is soft, not sparse**. A banded stride-6 approximate mode was
+  built, measured (2.8% aliasing → ~1.7× more inner iterations → net
+  LOSS end-to-end on V8 T3) and deliberately dropped. Shipped result:
+  straight-annulus Tier-2/meanline Jacobians (the continuation/BP
+  workhorse) 3.9× cheaper at 1.8e-8 agreement; curved/Tier-3 bit-exact
+  with the free vm color (~1.2×). `jacobian="dense"` remains the escape
+  hatch + automatic fallback. Newton-finishing profitability on radial/
+  mixed Tier 3 therefore stays gated (the 4× hoped-for pass-cost cut is
+  physically unavailable on curved paths without closure-in-Newton or a
+  compact-support streamline fit — both recorded).
 
 ## Commands
 

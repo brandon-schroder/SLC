@@ -189,6 +189,79 @@ def test_negative_vm_trial_is_infeasible_despite_finite_residual():
         asm.residual_from(asm.split(res_c.x), res_c.x), asm.residual(res_c.x))
 
 
+# --------------------------------------------------------------------------
+# ARCH-5.3: colored-FD Jacobian, validated column-for-column against dense
+# --------------------------------------------------------------------------
+def test_colored_jacobian_matches_dense_straight_annulus():
+    # Straight annulus, Tier 2: the groupable regime (curvature/lean off,
+    # |sin(eps)| ~ 0) -- q columns share stride-1 colors and the colored
+    # Jacobian must match the dense baseline to FD noise (measured 1.8e-8;
+    # asserted at 1e-6 of the Jacobian scale).
+    from slcflow.drivers.newton import (_fd_jacobian, _fd_jacobian_colored,
+                                        _q_columns_groupable)
+    case = V1ForcedVortex()
+    topo, inlet, _ = _setup(case, 17)
+    res = _tier2(topo, case, inlet)
+    assert res.converged
+    asm = ResidualAssembler(res.frozen)
+    scale = _residual_scale(res.frozen)
+    x = np.array(res.x, dtype=float)
+    r0 = _safe_residual(asm, x, scale)
+    assert _q_columns_groupable(asm, x)          # the exact grouped regime
+    jd = _fd_jacobian(asm, x, r0, scale, NewtonConfig())
+    jc = _fd_jacobian_colored(asm, x, r0, scale, NewtonConfig(), True)
+    assert np.max(np.abs(jc - jd)) < 1e-6 * np.max(np.abs(jd))
+
+
+def test_colored_jacobian_curved_path_detects_and_stays_exact():
+    # Curved annulus: grouping q columns is NOT safe (the eps coupling is
+    # first-order on a bend -- measured 38% error when forced), so the
+    # groupability check must refuse, and the ungrouped colored Jacobian
+    # (vm color + per-column q) must equal dense BIT-EXACTLY: the vm
+    # cross-station terms are true zeros, so the grouped vm evaluation
+    # reproduces each dense column's arithmetic identically.
+    from slcflow.drivers.newton import (_fd_jacobian, _fd_jacobian_colored,
+                                        _q_columns_groupable)
+    from slcflow.verification import V2CurvedAnnulus
+
+    case = V2CurvedAnnulus()
+    exact = case.exact()
+    topo = case.topology(5)
+    inlet = TransportFields(h0=np.full(5, case.h0), s=np.full(5, case.s),
+                            rvt=np.zeros(5))
+    warm = solve_classical(topo, case.gas, FidelityConfig.tier2(),
+                           MassFlowSpec(exact.mdot), inlet,
+                           config=ClassicalConfig(max_outer=5))
+    asm = ResidualAssembler(warm.frozen)
+    scale = _residual_scale(warm.frozen)
+    x = np.array(warm.x, dtype=float)
+    r0 = _safe_residual(asm, x, scale)
+    assert not _q_columns_groupable(asm, x)      # bend: refuse grouping
+    jd = _fd_jacobian(asm, x, r0, scale, NewtonConfig())
+    jc = _fd_jacobian_colored(asm, x, r0, scale, NewtonConfig(), False)
+    np.testing.assert_array_equal(jc, jd)
+
+
+def test_colored_and_dense_newton_reach_the_same_solution():
+    # End-to-end: the default (colored) and the dense baseline drive the
+    # same warm start to the same fixed point.
+    case = V1ForcedVortex()
+    topo, inlet, _ = _setup(case, 17)
+    res_c = _tier2(topo, case, inlet)
+    asm = ResidualAssembler(res_c.frozen)
+    x0 = pack(res_c.x[:topo.n_qo] * 0.9,
+              unpack(res_c.x, 17, topo.n_qo)[1])
+    xa, sa, _ = newton_solve(asm, x0, NewtonConfig(jacobian="colored"))
+    xb, sb, _ = newton_solve(asm, x0, NewtonConfig(jacobian="dense"))
+    assert sa is SolveStatus.CONVERGED and sb is SolveStatus.CONVERGED
+    np.testing.assert_allclose(xa, xb, atol=1e-8)
+
+
+def test_newton_config_rejects_unknown_jacobian_mode():
+    with pytest.raises(ConfigError, match="jacobian"):
+        NewtonConfig(jacobian="banded")
+
+
 def test_newton_is_deterministic():
     case = V1FreeVortex.compressible()
     topo, inlet, _ = _setup(case, 9)
