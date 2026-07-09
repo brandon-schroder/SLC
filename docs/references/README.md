@@ -37,6 +37,35 @@ them is an eyes-on-page (or book-in-hand) task, not something the fetch
 pipeline can finish. Coefficient-level calibration of the paywalled-source
 correlations needs you to supply a readable copy.
 
+## NotebookLM source library (primary calibration route, 2026-07-09)
+
+The reference corpus lives in the user's NotebookLM notebooks (many sources
+marker-converted to cleaned markdown, manually structure-checked). Queried
+via the `notebooklm` skill for **source-grounded, citation-backed** extraction
+— this is what actually discharges coefficient-level tags (the web-fetch route
+below cannot read scanned PDFs). Relevant notebooks:
+
+| Notebook | Sources | Holds |
+|----------|---------|-------|
+| Staging Area (Loss Models) | 28 | K-O 1982, Dunham-Came, Ainley-Mathieson, Zhu-Sjolander, Benner, Aungier — **marker-cleaned** (use this over the older one) |
+| Turbomachinery: Empirical Loss Models | 26 | same lineage, pre-cleanup (some garbled OCR) |
+| Staging Area (Theory) / Turbomachinery: Fundamental Theory | 37 / 13 | SLC formulation, radial equilibrium, throughflow theory |
+| Staging Area (Reduced Order) / Reduced-Order Aerodynamic Solvers | 36 / 30 | Novak, Wilkinson, Denton, method papers |
+| OTAC | 6 | NASA object-oriented throughflow code |
+
+**Discharged via this route:**
+- **KO82 (Kacker-Okapuu) — scalar formula constants CONFIRMED**, see
+  [`KO82.md`](KO82.md) and `tests/test_kacker_okapuu_reference.py`. Residual
+  `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
+  digitization), and a `[DECIDE]` on the negative-incidence interpolation
+  weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+
+Query mechanics (for the next pass): NotebookLM persists chat server-side and
+will anchor on it — **clear the chat between topics** (`scripts/clear_chat.py`,
+added) or answers regurgitate the prior question. The skill's answer-scraper
+was also patched to baseline answer-node count (else it returns the stale
+persisted answer). Both fixes are in the skill dir, not this repo.
+
 ## Public-domain — acquired, URLs verified (2026-07-08)
 
 | Key | Document | Source URL | Discharges (topic → tag sites) | Verification status |

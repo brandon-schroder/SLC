@@ -13,10 +13,22 @@ the incompressible AM charts over-predict as M2 rises), and ``f_Re`` the
 Reynolds correction. The two reference curves ``Y_p(b1=0)`` (nozzle) and
 ``Y_p(b1=b2)`` (impulse) are smooth surrogate fits to the AM charts (minimum
 near the loading-optimal pitch/chord, rising with exit angle; impulse loss
-higher, its optimum at tighter spacing). **[VERIFY: every coefficient and
-the two reference curves against the library copies (Ainley-Mathieson 1951;
-Dunham-Came 1970; Kacker-Okapuu 1982) — encoded from general knowledge
-pending the library pass, as for the compressor set.]**
+higher, its optimum at tighter spacing).
+
+Verification status (see ``docs/references/KO82.md`` for the term-by-term
+transcription + citations, 2026-07-09): the **scalar formula constants** are
+CONFIRMED against KO82/DC/AM — the 0.914 and 2/3 bracket factors, K_p form +
+Mach endpoints + K2, f_Re knees/exponents, the secondary 0.0334 (DC) x 1.2
+(K-O) + f_AR, the shock 0.75/(M-0.4)^1.75, and the (t/c/0.2)^(b1/b2) thickness
+exponent. The **loading sign convention** is confirmed frame-consistent (KO82
+uses sum-of-tangents for load / difference for mean angle; our signed frame
+swaps them — same physics, see the secondary_loss note). **Still [VERIFY]:**
+the two nozzle/impulse reference curves ``yp1``/``yp2`` and the TE ``phi2``
+curves are surrogate fits to the AM/K-O *charts* — they need reference-figure
+points (digitization), not a formula lookup. **[DECIDE]** the profile
+interpolation weight: KO82 uses signed ``|b1/b2|(b1/b2)`` for negative
+incidence; we use AM-1957's symmetric ``(b1/b2)^2`` (identical for b1>=0) —
+see ``profile_loss_am`` and the KO82.md findings.
 
 The shock component ``Y_shock`` lands at M6-4 (the V5 choke-knee is waiting
 on it); this module ships the subsonic chain. Per-node Reynolds number from
@@ -85,6 +97,11 @@ def profile_loss_am(s_c, beta1_deg, beta2_deg, tc, *, xp=None):
 
     r = soft_clip(beta1_deg / a2, _R_LO, _R_HI, _R_W, xp=xp)
     tfac = (t / 0.20) ** r
+    # Interpolation weight r**2 is AM-1957's symmetric form (verified vs the
+    # source, docs/references/KO82.md). KO82 modified it to the SIGNED
+    # |r|*r for negative inlet angles; identical for r>=0, opposite sign of
+    # the impulse correction for r<0. [DECIDE AM-1957 vs KO82 target before
+    # switching to abs_smooth(r)*r — a behavior change at negative incidence.]
     yp_am = (yp1 + r * r * (yp2 - yp1)) * tfac
     return yp_am, v1 * v2 * v3
 
