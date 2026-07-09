@@ -9,9 +9,11 @@
 > `G-5` is the geometry/grid module spec; `AD-n` are the binding
 > architectural decisions (ARCH-1 / `CLAUDE.md`).
 >
-> Written at commit `d7b7b27` (2026-07-07); suite 373 tests green. Line
-> numbers are stamped to that commit — the function names beside them are
-> the durable anchors.
+> Written at commit `d7b7b27` (2026-07-07); numbers, line stamps, and the
+> failure-mode notes refreshed at `f541523` (2026-07-08) after the Tier-3
+> stabilization (Guide 3 §4); suite 378 tests green. Line numbers are
+> stamped to that later commit — the function names beside them are the
+> durable anchors.
 
 ---
 
@@ -23,9 +25,15 @@ whole classical path:
 
 | Run | Case | `n_sl` | Fidelity | Outcome |
 |---|---|---|---|---|
-| **A** | `V5AxialRotor` (single rotor) | 1 | Tier 1 meanline | `CONVERGED`, 63 outer iterations, PR = 1.1616, η = 0.8251 |
-| **B** | `V5MultistageCompressor` (2 stages, 4 rows) | 9 | Tier 3 + mixing | `CONVERGED`, 90 outer iterations (~27 s), PR = 1.1799, η = 0.8752 |
+| **A** | `V5AxialRotor` (single rotor) | 1 | Tier 1 meanline | `CONVERGED`, 73 outer iterations, PR = 1.1616, η = 0.8251 |
+| **B** | `V5MultistageCompressor` (2 stages, 4 rows) | 9 | Tier 3 + mixing | `CONVERGED`, 92 outer iterations (~19 s), PR = 1.1799, η = 0.8752 |
 | **C** | `V5AxialRotor` again | 9 | Tier 2 | `NUMERICAL_FAILURE` — deliberately included; see §8 |
+
+> Numbers refreshed at commit `f541523` (post the 2026-07 Tier-3
+> stabilization, Guide 3 §4). Run A's iteration count rose from the 63 this
+> guide originally reported to 73: the stabilization made the first closure
+> application ramp in gently rather than switch on full-strength, trading a
+> few iterations for a much larger stability basin (Guide 3 §2.3).
 
 Reproduce any of them in a REPL:
 
@@ -64,7 +72,7 @@ solved yet; this is pure description.
   station set is the **immutable topology** (AD-8): it never changes during
   a solve; only where streamlines cross each q-o does.
 
-**The blade row** — a `RowSpec` (`drivers/classical.py:115`) bundling
+**The blade row** — a `RowSpec` (`drivers/classical.py:128`) bundling
 identity and physics sources: `row_id="r1"`, shaft speed ω = 400 rad/s,
 `swirl=LIEBLEIN_NACA65.swirl`, `loss=LIEBLEIN_NACA65.loss`, and a
 `ParamRowGeometry` with metal angles β₁ᵦ = −63°, β₂ᵦ = −45° (degrees at
@@ -103,7 +111,7 @@ three small things and delegates:
    callables into `(n_sl,)` arrays.
 3. **Blockage** broadcast to `(n_sl, n_qo)` (zero here).
 
-Then `solve_classical(...)` (`drivers/classical.py:335`) runs the actual
+Then `solve_classical(...)` (`drivers/classical.py:400`) runs the actual
 §6.2 scheme, and `_reduce` (§7) turns its result into a
 `PerformanceResult`.
 
@@ -121,7 +129,7 @@ walk.
 
 ### C.1 Resolving rows against the topology
 
-`_resolve_rows` (`drivers/classical.py:129`) matches each `RowSpec` to its
+`_resolve_rows` (`drivers/classical.py:142`) matches each `RowSpec` to its
 stations by `row_id` and validates the shape loudly (`ConfigError`,
 AD-10's "raise early at construction boundaries"): stations must run
 `EDGE_LE, INBLADE*, EDGE_TE` on contiguous indices. For run A the row
@@ -144,7 +152,7 @@ Three cheap guesses, one per unknown family:
   blade rows join from iterate 2, because closures need a flow field to
   evaluate against.
 - **`Vm(q=0)` per station**: a 1-D continuity estimate
-  `ṁ / (2π ρ₀ r̄ L_qo)` (`classical.py:400`).
+  `ṁ / (2π ρ₀ r̄ L_qo)` (`classical.py:469`).
 
 ### C.3 The transport sweep — how physics enters between stations
 
@@ -171,12 +179,17 @@ are re-swept once per outer iterate (§D.6), never inside the residual
 
 ## 5. Stage D — anatomy of one outer iterate (§6.2.2)
 
-The outer loop (`classical.py:439`) runs up to `max_outer = 200` times.
-Each iterate has five numbered sub-steps, matching §6.2.2.1–6.2.2.5. The
-loop is bracketed by the two AD-10 boundary checks (`classical.py:441`,
-`classical.py:471`): non-finite lagged inputs or assembled fields become a
-typed `NUMERICAL_FAILURE` *before* they can crash scipy — run C dies at
-exactly this fence.
+The outer loop (`classical.py:505`) runs up to `max_outer = 200` times.
+Each iterate has five numbered sub-steps, matching §6.2.2.1–6.2.2.5.
+AD-10 boundary checks guard it: non-finite lagged inputs
+(`classical.py:509`) and a broken streamline-metrics fit
+(`classical.py:537`) become a typed `NUMERICAL_FAILURE` *before* they can
+crash scipy, and the flow-field check runs on the *solved* state
+(`classical.py:583`), after the per-q-o solves. (That last placement is
+newer than the rest of this section — the 2026-07 Tier-3 stabilization
+moved it there so a stale-guess field the solves are about to repair is no
+longer fatally checked; Guide 3 §4.3. Run C still dies at these fences,
+just at the repositioning guard; §8.)
 
 ### D.1 Freeze (§6.2.2.1)
 
@@ -194,7 +207,7 @@ necessities rather than design luxuries (full story in Guide 3):
 
 - `kappa_lagged` / `kappa_relax` (§5.5): with the curvature term active,
   the curvature entering the ODE is an exponential moving average
-  `0.3·κ_new + 0.7·κ_used_last` (`classical.py:465`). M3 measured that
+  `0.3·κ_new + 0.7·κ_used_last` (`classical.py:546`). M3 measured that
   without this lag the streamwise odd-even mode diverges at *any*
   relaxation factor.
 - `ClosureFields.row_exit_rvt` / `row_delta_s`: the closure outputs are
@@ -219,7 +232,7 @@ temperatures — is *derived* from these unknowns. That compression is the
 
 ### D.3 `split(x)`: state → assembled picture
 
-`ResidualAssembler.split` (`assembly/assembler.py:313`) is the pure
+`ResidualAssembler.split` (`assembly/assembler.py:321`) is the pure
 function (AD-3) that turns a state vector into an `AssembledFields`:
 
 1. **Positions → metrics.** Attach the wall rows to the interior
@@ -263,7 +276,7 @@ For each station j, the driver solves the scalar continuity equation
 F_j(Vm_q0) = 2π ∫ ρ Vm cos ε (1−B) r dq  −  ṁ  =  0
 ```
 
-with `brentq` (`_solve_qo`, `classical.py:260`), where every evaluation of
+with `brentq` (`_solve_qo`, `classical.py:273`), where every evaluation of
 `F_j` integrates the master ODE across the span and then the mass flux
 with **the** shared quadrature rule (`mass_cumulative`,
 `assembler.py:240` — the same rule that repositioning inverts; §5.4's
@@ -276,7 +289,7 @@ consequences visible in the code:
 - The root-finder deliberately brackets the **subsonic branch** — the scan
   looks for the first sign change *below* the peak (§6.5 branch selection).
 - If the peak never reaches zero, this q-o physically cannot pass ṁ: the
-  driver returns `CHOKE_LIMITED` naming the station (`classical.py:489`) —
+  driver returns `CHOKE_LIMITED` naming the station (`classical.py:573`) —
   a typed result, not an error.
 - Trial velocities that push static enthalpy negative produce non-finite
   F by design; `_solve_qo` maps them to a huge mass deficit so `brentq`
@@ -295,7 +308,7 @@ compression raised ρ.
 
 For `n_sl > 1`: on each q-o, take the *same* mass cumulative used above,
 and invert it — find the q where the cumulative reaches `ψᵢ · ṁ/(2π)`
-(`invert_cumulative`; `classical.py:501`). That target is where streamline
+(`invert_cumulative`; `classical.py:602`). That target is where streamline
 i *should* sit. Then move only a fraction of the way:
 
 ```
@@ -303,7 +316,7 @@ q_next = q_full + ω_sl · (q_target − q_full)
 ```
 
 `ω_sl` is the **Wilkinson relaxation factor** (`_omega_sl`,
-`classical.py:305`), the single most safety-critical constant in the
+`classical.py:370`), the single most safety-critical constant in the
 driver. With the curvature term active it is throttled to
 
 ```
@@ -330,7 +343,7 @@ streamwise zigzag (Guide 3).
 Only now — outside the residual, once per iterate — does machine-specific
 physics run:
 
-1. **Evaluate closures** (`_evaluate_rows`, `classical.py:203`). For each
+1. **Evaluate closures** (`_evaluate_rows`, `classical.py:216`). For each
    row, build a `RowFlowView` of the *current* LE flow (velocities, angles,
    thermodynamic state, plus lagged TE quantities for iterative
    closures) and make one call each to `swirl.exit_rvt(row, view)` and
@@ -338,12 +351,14 @@ physics run:
    `rVθ` implied by incidence/deviation and an entropy rise converted per
    Appendix B, with a validity ∈ [0,1] (0.979 at convergence — slightly
    off the correlations' comfort zone, reported, not raised; §7.3.3).
-2. **Under-relax the outputs** (`classical.py:531`). New outputs are
+2. **Under-relax the outputs** (`classical.py:630`). New outputs are
    blended into the lagged ones with `closure_relax = 0.25`: measured at
    M4, the swirl↔continuity Picard loop *diverges* at 0.5 on staggered
-   rows (loop gain ~ tan β₂). This single constant is why run A takes 63
+   rows (loop gain ~ tan β₂). This single constant is why run A takes ~70+
    iterations for a converged flow field that barely changes after
-   iterate 10 — see §6.
+   iterate 10 — see §6. (Since the 2026-07 stabilization the *first*
+   application also ramps from the duct baseline through the same rule, not
+   full-strength; Guide 3 §2.3.)
 3. **Rebuild transport steps and re-sweep.** `row_steps`
    (`streamwise.py:138`) turns the relaxed `(rVθ_te, Δs)` into the row's
    `TransportStep`s (C¹ in-blade schedules distribute them when INBLADE
@@ -377,10 +392,10 @@ story):
 | iterate | cont_norm | pos_norm | closure_norm |
 |---|---|---|---|
 | 1 | 2.0e−13 | 0 | 1.0 (closures just switched on) |
-| 32 | 1.3e−13 | 0 | 9.3e−6 |
-| 63 | 1.3e−13 | 0 | 9.1e−10 → **CONVERGED** |
+| 37 | 1.3e−13 | 0 | 2.3e−5 |
+| 73 | 1.3e−13 | 0 | 8.6e−10 → **CONVERGED** |
 
-The closure norm contracts by an almost perfectly constant factor ≈ 0.71
+The closure norm contracts by an almost perfectly constant factor ≈ 0.75
 per iterate — the fixed-point contraction rate set by `closure_relax`
 times the physical loop gain. That geometric tail is the visible cost of
 Picard: the answer stops changing long before the norm crosses 10⁻⁹.
@@ -392,17 +407,21 @@ Run B (Tier 3, 9 streamlines, 4 rows, mixing on):
 | iterate | cont_norm | pos_norm | closure_norm | ω_sl |
 |---|---|---|---|---|
 | 1 | 0 | 2.4e−7 | 1.0 | 0.6227 |
-| 2 | 4.8e−14 | 6.9e−2 | 6.5e−1 | 0.5877 |
-| 23 | 7.7e−15 | 7.9e−5 | 4.5e−3 | 0.6031 |
-| 90 | 8.4e−15 | 4.3e−12 | 9.4e−10 | 0.6031 | **CONVERGED** |
+| 2 | 1.6e−13 | 1.7e−2 | 4.1e−1 | 0.6130 |
+| 47 | 7.9e−15 | 1.3e−6 | 1.1e−4 | 0.6031 |
+| 92 | 7.9e−15 | 6.3e−12 | 7.9e−10 | 0.6031 | **CONVERGED** |
 
 Positions and closures converge together — they are one coupled fixed
 point, which is the whole point of the nested scheme. The M8 headline
 lives in this run's exit entropy: spanwise spread 0.69 J/(kg·K) *with*
-mixing; the identical case with `mixing_term = 0` runs away to a
-~40 J/(kg·K) hub/tip split and fails outright (Appendix C.5m,
-`tests/test_multistage_mixing.py`) — mixing is a convergence
-prerequisite for multistage axial, not a smoother.
+mixing versus ~17.6 J/(kg·K) with `mixing_term = 0` — a ~25× reduction in
+spanwise entropy stratification (Appendix C.5m,
+`tests/test_multistage_mixing.py`). Mixing is a *physical* model bounding a
+real stratification, **not** a convergence device: since the 2026-07
+stabilization the un-mixed case converges too (it just leaves the flow
+physically over-stratified). Guide 1 originally reported mixing as a
+"convergence prerequisite" — that was an artifact of the pre-stabilization
+driver; see Guide 3 §4–5 for the full correction.
 
 **A consistency check you can do by eye.** Run A's exit: `rVθ = 39.74
 m²/s`, `h0 = 315 896 J/kg`. Euler's work: `Δh0 = ω·ΔrVθ = 400 × 39.74 =
@@ -450,14 +469,14 @@ capacity peak sits below ṁ — an operability fact, §6.6), and
 `reason` string says which and when).
 
 Run C is the instructive one. The same rotor that converges as a meanline
-fails spanwise in 11 iterates:
+fails spanwise in 8 iterates:
 
 ```
 status: NUMERICAL_FAILURE
-reason: non-finite assembled fields at outer iteration 11 (AD-10 boundary check)
-it6 :  pos=3.4e-2  closure=2.0e-1        # already ragged, not contracting
-it10:  pos=9.4e-2  closure=1.6           # diverging; validity -> 0.0
-Vm(q=0) = [94.4, 93.0, 2.8, 2.8]         # mid-machine velocity collapse
+reason: repositioning failed at outer iteration 9: cumulative integral is
+        decreasing; integrand < 0 upstream
+it5 :  pos=1.1e-1  closure=1.9           # ragged, not contracting
+it8 :  pos=2.0e-1  closure=1.3           # diverging; validity -> 0.0
 ```
 
 Why: `V5AxialRotor`'s metal angles are **mid-span values** (its docstring
@@ -466,10 +485,18 @@ Across the wide 0.3–0.6 m span the blade speed doubles, so the relative
 inlet angle swings ≈ 52° (wall_0) to 69° (wall_1) against a uniform 63°
 metal angle — roughly −11°/+6° of incidence at the walls. The loss
 correlation, driven far off-design, charges enormous entropy near the
-walls (17–19 J/(kg·K) at two nodes versus ~2 mid-span in the last
-recorded field), density and Vm collapse there, and within a few
-iterates the assembled fields go non-finite — at which point the boundary
-check converts the mess into a typed status instead of a traceback.
+walls, density and Vm collapse there, the mass flux goes negative
+somewhere along a q-o, and repositioning cannot invert a non-monotone
+cumulative — at which point the guard converts the mess into a typed
+status instead of a traceback.
+
+(This is genuinely the *case* being ill-posed, not a driver artifact: run
+C still fails after the 2026-07 Tier-3 stabilization that fixed the
+radial/mixed cases — Guide 3 §4 — it just now trips the repositioning
+guard rather than the non-finite-fields boundary check, since that
+stabilization moved the flow-field check to the solved state. A wide
+spanwise run *needs* spanwise metal angles; no driver fix substitutes for
+correct blade geometry.)
 
 Two durable lessons, both bought with real debugging time in this
 project's history (see the memory note "verification case-design
@@ -486,7 +513,7 @@ operability limits. Three escalations reuse the same pure residual
 
 - **Newton** (`drivers/newton.py`, §6.3): stacks the *same* rows —
   `n_qo` continuity residuals + interior mass-fraction residuals
-  (`ResidualAssembler.residual`, `assembler.py:334`) — into a global
+  (`ResidualAssembler.residual`, `assembler.py:342`) — into a global
   system, dense-FD Jacobian, Armijo line search with a
   crossing-streamline guard. Warm start mandatory; measured quadratic
   (V1c: ~3 iterations vs 15 classical). This is what the 0.71-per-iterate
@@ -516,11 +543,11 @@ currently plumbed at the `solve_classical`/continuation level.)
 | Metrics | `grid/core.py:146` `evaluate_metrics` | G-6, §5.1–5.2 |
 | Master ODE | `assembly/assembler.py:204` `_rhs` / `:219` `_integrate` | §3.1/§5.3, A.5 |
 | Continuity / capacity | `assembler.py:240` `mass_cumulative`, `:269` `continuity_F`, `:275` `qo_capacity` | §3.2/§5.4, A.7 |
-| Station march | `drivers/classical.py:260` `_solve_qo` | §6.2.2.2, §6.5 |
-| Repositioning + ω_sl | `classical.py:305` `_omega_sl`, `:501` | §6.2.2.3, §6.4, C.3 |
-| Closure refresh | `classical.py:203` `_evaluate_rows`, `:531` under-relax | §6.2.2.4/§6.2.4, AD-4 |
+| Station march | `drivers/classical.py:273` `_solve_qo` | §6.2.2.2, §6.5 |
+| Repositioning + ω_sl | `classical.py:370` `_omega_sl`, `:595` | §6.2.2.3, §6.4, C.3 |
+| Closure refresh | `classical.py:216` `_evaluate_rows`, `:630` under-relax | §6.2.2.4/§6.2.4, AD-4 |
 | Mixing | `transport/mixing.py` `mix_transported` | §3.6 |
-| Norms | `classical.py:572` | §6.2.5 |
+| Norms | `classical.py:677` | §6.2.5 |
 | Reduction | `machine/__init__.py:164` `_reduce` | ARCH-5.5, §3.2 weight |
 
 ## 11. Check your understanding
@@ -534,8 +561,8 @@ currently plumbed at the `solve_classical`/continuation level.)
    not 90?** The two wall streamlines are not unknowns — walls are
    geometry (AD-8). 10 × `Vm(q=0)` + 7 interior × 10 positions = 80.
 3. **The flow field of run A is visually converged by iterate ~10. Why
-   does the driver run 63 iterates?** The closure↔continuity Picard loop
-   contracts at ≈ 0.71/iterate (under-relaxation 0.25 × loop gain), and
+   does the driver run 73 iterates?** The closure↔continuity Picard loop
+   contracts at ≈ 0.75/iterate (under-relaxation 0.25 × loop gain), and
    the gate is 10⁻⁹ on the *closure-update* norm — a geometric tail, the
    documented cost of lagged closures (AD-4) that Newton exists to remove.
 4. **What, physically, is `CHOKE_LIMITED`?** At some station, the mass-flow
@@ -550,7 +577,9 @@ currently plumbed at the `solve_classical`/continuation level.)
 6. **Why did run C fail while run A converged on the same machine?** Not a
    solver defect: the case supplies mid-span metal angles only, so a wide
    spanwise run puts the wall streamlines ~±10° off-design in incidence;
-   the uncalibrated loss closure charges wall entropy spikes, `Vm`
-   collapses mid-machine, and the AD-10 boundary check converts the
-   resulting non-finite fields into a typed `NUMERICAL_FAILURE` with a
-   reason string (§8).
+   the uncalibrated loss closure charges wall entropy spikes, `Vm` and
+   density collapse near the walls, the mass flux goes negative along a
+   q-o, and the repositioning guard converts the non-monotone cumulative
+   into a typed `NUMERICAL_FAILURE` with a reason string (§8). It still
+   fails after the 2026-07 stabilization — the case, not the driver, is
+   ill-posed.

@@ -6,8 +6,9 @@
 > conforms to them, never to these guides. If a guide and a spec disagree,
 > the spec wins and the guide has a bug.
 >
-> Written at commit `d7b7b27` (2026-07-07); suite 373 tests, both lint gates
-> green, milestones M0–M8 all closed.
+> Written at commit `d7b7b27` (2026-07-07), tracker refreshed at `f541523`
+> (2026-07-08); suite 378 tests, both lint gates green, milestones M0–M8 all
+> closed (plus the post-M8 Tier-3 stabilization; Guide 3 §4).
 
 ---
 
@@ -35,7 +36,7 @@ navigate it.
 | 0 | `00_reading_guide.md` | This index. | current |
 | 1 | `01_life_of_a_solve.md` | One real `Machine.evaluate` call traced end to end — every stage, every data structure, with actual numbers from two converged runs and one instructive failure. | current |
 | 2 | `02_theory_companion.md` | Pedagogical twin of the theory manual: the master q-o ODE derived and explained term by term, the elimination form, Appendix B loss→entropy conversions with worked numbers. | current |
-| 3 | `03_numerics_and_stability.md` | The solution algorithms and the *measured* findings that shaped them: the curvature lag, the calibrated Wilkinson envelope, closure under-relaxation, mixing as a multistage convergence prerequisite, the INBLADE repositioning pockets, Newton/continuation. | planned |
+| 3 | `03_numerics_and_stability.md` | The solution algorithms and the *measured* findings that shaped them: the curvature lag, the calibrated Wilkinson envelope, closure under-relaxation, the 2026-07 Tier-3 stabilization (which overturned the "fragile pocket" / "mixing is a convergence prerequisite" stories), Newton/continuation. | current |
 | 4 | `04_module_reference.md` | Package-by-package narrative reference: purpose, public API and contracts, spec traceability, key invariants, pinning tests. | planned |
 | 5 | `05_closures_compendium.md` | Per correlation set (Lieblein, Kacker–Okapuu, Centrifugal/Wiesner): physical basis, equations as implemented, coefficient provenance and `[VERIFY]` status, C¹-smoothing choices. | planned |
 | 6 | `06_trust_and_verification.md` | The audit view: per V-case, what it proves and what would still pass if a correlation were wrong; the `[VERIFY]` map. | planned |
