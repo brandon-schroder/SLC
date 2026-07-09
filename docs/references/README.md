@@ -57,10 +57,12 @@ below cannot read scanned PDFs). Relevant notebooks:
 - **KO82 (Kacker-Okapuu) — scalar formula constants CONFIRMED**, see
   [`KO82.md`](KO82.md) and `tests/test_kacker_okapuu_reference.py`. Includes
   the TE `Y_TE = ζ/(1−ζ)` mapping (confirmed as the M2→0 limit of the exact
-  compressible K-O relation). Residual `[VERIFY]`: the nozzle/impulse + TE
-  **chart** reference curves (need figure digitization), and a `[DECIDE]` on
-  the negative-incidence interpolation weight (AM-1957 `(b1/b2)^2` as coded vs
-  KO82 signed `|b1/b2|(b1/b2)`).
+  compressible K-O relation). The negative-incidence interpolation weight is
+  **fixed** (resolution pass): AM-1957's symmetric `(b1/b2)^2` → KO82's signed
+  `|b1/b2|(b1/b2)` — behavior-preserving for `b1≥0` (all in-domain cases;
+  V6 runs `r∈[0.04,0.72]`), with a C¹ positivity floor for deep-negative
+  extrapolation. Residual `[VERIFY]`: the nozzle/impulse + TE **chart**
+  reference curves (need figure digitization).
 - **CONV-B (Appendix-B loss→entropy definitions) — all CONFIRMED**, see
   [`CONV-B.md`](CONV-B.md) and `tests/test_conversions_reference.py`. The
   foundational layer: master `Δs=−R ln(p02/p01)` (Denton 4a), compressor `ω̄`

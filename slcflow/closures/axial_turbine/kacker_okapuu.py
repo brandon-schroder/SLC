@@ -4,7 +4,7 @@ Manual sections 4.3, 4.4, 7.1, 7.3; Appendix B.3 conversion).
 Provenance: the Kacker-Okapuu recalibration of the Ainley-Mathieson /
 Dunham-Came profile loss:
 
-    Y_p,AM = [ Y_p(b1=0) + (b1/b2)^2 (Y_p(b1=b2) - Y_p(b1=0)) ] (t/c / 0.2)^(b1/b2)
+    Y_p,AM = [ Y_p(b1=0) + |b1/b2|(b1/b2) (Y_p(b1=b2) - Y_p(b1=0)) ] (t/c / 0.2)^(b1/b2)
     Y_profile = 0.914 (2/3 Y_p,AM K_p + Y_shock) f_Re
 
 where ``b1`` is the inlet flow angle and ``b2`` the exit gas angle (both from
@@ -25,10 +25,11 @@ uses sum-of-tangents for load / difference for mean angle; our signed frame
 swaps them — same physics, see the secondary_loss note). **Still [VERIFY]:**
 the two nozzle/impulse reference curves ``yp1``/``yp2`` and the TE ``phi2``
 curves are surrogate fits to the AM/K-O *charts* — they need reference-figure
-points (digitization), not a formula lookup. **[DECIDE]** the profile
-interpolation weight: KO82 uses signed ``|b1/b2|(b1/b2)`` for negative
-incidence; we use AM-1957's symmetric ``(b1/b2)^2`` (identical for b1>=0) —
-see ``profile_loss_am`` and the KO82.md findings.
+points (digitization), not a formula lookup. The profile interpolation weight
+uses KO82's signed ``|b1/b2|(b1/b2)`` (**resolved 2026-07** from the prior
+AM-1957 symmetric ``(b1/b2)^2``; identical for ``b1>=0`` so behavior-preserving
+for every in-domain case, differs only at negative incidence) — see
+``profile_loss_am`` and ``docs/references/KO82.md``.
 
 The shock component ``Y_shock`` lands at M6-4 (the V5 choke-knee is waiting
 on it); this module ships the subsonic chain. Per-node Reynolds number from
@@ -60,6 +61,12 @@ CALIBRATED = {
 # Angle ratio b1/b2 soft-clip range (nozzle 0 -> impulse 1; a little slack
 # for negative incidence and super-impulse). [VERIFY]
 _R_LO, _R_HI, _R_W = -1.0, 1.2, 0.1
+# KO82 signed interpolation weight |r|*r: abs_smooth eps (small vs the r
+# scale, so the weight ~ r^2 away from 0 and C1 through it), and a positivity
+# floor (fraction of the nozzle loss) the signed weight may not drive the
+# bracket below -- an AD-10 safety on deep negative-incidence EXTRAPOLATION
+# only (no in-domain case reaches it; V6 runs r in [0.04, 0.72]).
+_WEIGHT_EPS, _YP_FLOOR_FRAC = 0.05, 0.5
 # Mach-correction constants (K-O): K1 ramps 1 -> 0 over M2 in [0.2, 1.0].
 _M2_FLOOR, _M_W, _KP_FLOOR = 0.05, 0.05, 0.10
 
@@ -78,9 +85,10 @@ def profile_loss_am(s_c, beta1_deg, beta2_deg, tc, *, xp=None):
     """Ainley-Mathieson profile-loss coefficient ``Y_p,AM`` (section 4.3;
     [VERIFY coefficients]).
 
-    Interpolates on the squared angle ratio between the nozzle (``b1=0``)
-    and impulse (``b1=b2``) reference curves, with the K-O thickness
-    correction ``(t/c / 0.2)^(b1/b2)``. Returns ``(Y_p_AM, validity)``.
+    Interpolates on KO82's signed angle-ratio weight ``|r|r`` (``r=b1/b2``)
+    between the nozzle (``b1=0``) and impulse (``b1=b2``) reference curves,
+    with the K-O thickness correction ``(t/c / 0.2)^(b1/b2)``. Returns
+    ``(Y_p_AM, validity)``.
     """
     xp = get_xp(xp)
     sc, v1 = _saturate(s_c, "s_c", xp=xp)
@@ -97,12 +105,19 @@ def profile_loss_am(s_c, beta1_deg, beta2_deg, tc, *, xp=None):
 
     r = soft_clip(beta1_deg / a2, _R_LO, _R_HI, _R_W, xp=xp)
     tfac = (t / 0.20) ** r
-    # Interpolation weight r**2 is AM-1957's symmetric form (verified vs the
-    # source, docs/references/KO82.md). KO82 modified it to the SIGNED
-    # |r|*r for negative inlet angles; identical for r>=0, opposite sign of
-    # the impulse correction for r<0. [DECIDE AM-1957 vs KO82 target before
-    # switching to abs_smooth(r)*r — a behavior change at negative incidence.]
-    yp_am = (yp1 + r * r * (yp2 - yp1)) * tfac
+    # KO82's SIGNED interpolation weight |r|*r (Kacker-Okapuu modified
+    # AM-1957's symmetric r^2 "to account for negative inlet angles",
+    # docs/references/KO82.md finding 1, resolved 2026-07). Identical for
+    # r>=0 -- so behavior-preserving for every in-domain case (V6 runs
+    # r in [0.04, 0.72]); for r<0 it lets the loss dip below nozzle (the
+    # negative-incidence bucket) instead of AM's symmetric rise. The bracket
+    # is floored to a fraction of the nozzle loss so the surrogate curves
+    # cannot return negative loss under deep negative-r extrapolation (AD-10;
+    # off-design safety, not a calibration -- no in-domain case reaches it).
+    weight = abs_smooth(r, _WEIGHT_EPS, xp=xp) * r
+    bracket = smooth_max(yp1 + weight * (yp2 - yp1), _YP_FLOOR_FRAC * yp1,
+                         _R_W, xp=xp)
+    yp_am = bracket * tfac
     return yp_am, v1 * v2 * v3
 
 

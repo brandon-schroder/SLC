@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 
 from slcflow.closures.axial_turbine.kacker_okapuu import (
-    _aspect_ratio_factor, mach_profile_correction, reynolds_correction,
-    secondary_loss, shock_loss)
+    _aspect_ratio_factor, mach_profile_correction, profile_loss_am,
+    reynolds_correction, secondary_loss, shock_loss)
 
 DEG = np.pi / 180.0
 
@@ -74,6 +74,42 @@ def test_te_zeta_to_Y_is_incompressible_limit_of_ko_relation():
             -g / (g - 1)) - 1.0
         den = 1.0 - (1.0 + (g - 1) / 2 * M2 ** 2) ** (-g / (g - 1))
         assert num / den == pytest.approx(zeta / (1.0 - zeta), rel=1e-3)
+
+
+def test_profile_weight_is_ko82_signed_not_am_symmetric():
+    # KO82 finding 1 (resolved 2026-07): the nozzle->impulse interpolation
+    # weight is the SIGNED |r|*r (r = b1/b2), not AM-1957's symmetric r^2.
+    # Consequences, pinned physics-anchored (not the surrogate curve values):
+    #   (a) identical for r >= 0  -> behavior-preserving in-domain (V6: r>0);
+    #   (b) for r < 0 the signed form gives STRICTLY LESS profile loss than
+    #       the symmetric r^2 form would (the negative-incidence bucket);
+    #   (c) loss stays strictly positive even at the deep-negative clip
+    #       extreme (the AD-10 positivity floor), where naive |r|*r on the
+    #       surrogate curves would go negative.
+    # Isolate the WEIGHT: t/c = 0.20 makes the thickness factor
+    # (t/c/0.2)^r == 1 for all r, so only the nozzle->impulse interpolation
+    # shows through.
+    s_c, tc, a2 = 0.80, 0.20, 55.0
+
+    # (a) r >= 0: monotone nozzle -> impulse (this branch is |r|r == r^2, i.e.
+    # byte-identical to the old AM symmetric form, so every in-domain case is
+    # unaffected -- V6 runs r in [0.04, 0.72]).
+    y_noz = float(profile_loss_am(s_c, 0.0, a2, tc)[0])     # r = 0  (nozzle)
+    y_imp = float(profile_loss_am(s_c, a2, a2, tc)[0])      # r = 1  (impulse)
+    assert y_imp > y_noz > 0.0                              # impulse loss higher
+
+    # (b) r < 0 pulls loss DOWN (the signed weight is negative), whereas the
+    # symmetric r^2 form is even and would give the SAME as the mirrored +|r|.
+    # So y(-r) < y(+r): the negative-incidence bucket, the KO82 correction.
+    y_neg = float(profile_loss_am(s_c, -20.0, a2, tc)[0])   # r = -0.36
+    y_pos = float(profile_loss_am(s_c, +20.0, a2, tc)[0])   # r = +0.36
+    assert y_neg < y_pos            # signed weight: negative r pulls loss DOWN
+    assert y_neg > 0.0              # ...but stays physical
+
+    # (c) deep-negative extrapolation stays strictly positive (floor active),
+    # where a naive |r|r on the surrogate curves would go negative.
+    y_extreme = float(profile_loss_am(s_c, -60.0, a2, tc)[0])   # r -> clip
+    assert y_extreme > 0.0
 
 
 def test_secondary_loss_constants_match_ko82():
