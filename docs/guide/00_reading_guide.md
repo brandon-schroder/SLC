@@ -6,9 +6,10 @@
 > conforms to them, never to these guides. If a guide and a spec disagree,
 > the spec wins and the guide has a bug.
 >
-> Written at commit `d7b7b27` (2026-07-07), tracker refreshed at `f541523`
+> Written at commit `d7b7b27` (2026-07-07), tracker refreshed at `2916c57`
 > (2026-07-08); suite 378 tests, both lint gates green, milestones M0–M8 all
-> closed (plus the post-M8 Tier-3 stabilization; Guide 3 §4).
+> closed (plus the post-M8 Tier-3 stabilization, colored-FD Jacobian, and
+> Lieblein loss calibration; Guide 3 §4).
 
 ---
 

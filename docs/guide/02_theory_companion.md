@@ -14,7 +14,10 @@
 > numbers were produced by running the code at the header commit — mostly
 > via `closures/conversions.py` on the run-A state from Guide 1.
 >
-> Written at commit `d7b7b27` (2026-07-07); suite 373 tests green.
+> Written at commit `d7b7b27` (2026-07-07); §8's closing check refreshed to
+> `2916c57` (2026-07-08) after the Lieblein loss calibration (the fixed
+> illustrative B.2/B.3/B.4 conversions are unchanged — only run A's actual
+> Δs moved); suite 378 tests green.
 
 ---
 
@@ -284,7 +287,7 @@ Rearranged, rothalpy conservation *is* the Euler work equation:
 
 Work enters **exclusively** through the swirl change (§4.2) — there is no
 independent "work coefficient" anywhere in the solver. This is why Guide
-1's Euler check (400 × 39.74 = 15 896 J/kg, exactly the observed Δh0) held
+1's Euler check (400 × 41.16 = 16 464 J/kg, exactly the observed Δh0) held
 to round-off: the transport update is this identity, literally
 (`transport/streamwise.py:82`).
 
@@ -407,13 +410,17 @@ non-negative, first-order limit the textbook `Δh_loss/T` (worked:
 3 000 J/kg at 320 K → 9.331 vs. 9.375 first-order).
 
 **Closing the loop to Guide 1.** Run A's converged rotor charged
-Δs = 8.884 J/(kg·K). The master relation run backwards:
-`exp(−Δs/R) = 0.9695` — the loss knocked 3.05% off the achievable
+Δs = 1.626 J/(kg·K). The master relation run backwards:
+`exp(−Δs/R) = 0.9944` — the loss knocked 0.56% off the achievable
 stagnation-pressure ratio. Check: the ideal PR from the work is
-`(T0,ex/T0,in)^(γ/(γ−1)) = (315 896/300 000)^3.5 = 1.1981`, and
-`1.1981 × 0.9695 = 1.1616` — run A's reported pressure ratio, exactly.
+`(T0,ex/T0,in)^(γ/(γ−1)) = (316 463/300 000)^3.5 = 1.2056`, and
+`1.2056 × 0.9944 = 1.1988` — run A's reported pressure ratio, exactly.
 Work sets the ideal PR through Euler; entropy discounts it through the
-master relation; the two never mix accounts.
+master relation; the two never mix accounts. (Δs and the PR here are at
+the `2916c57` calibration state — see Guide 1's run-table note; the *B.2/B.3
+worked conversions above use fixed illustrative coefficients and do not
+move*. This closing identity is what is invariant: whatever the loss, PR =
+ideal × exp(−Δs/R).)
 
 ## 9. Fidelity flags as physics switches (§8)
 

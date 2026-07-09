@@ -10,10 +10,10 @@
 > architectural decisions (ARCH-1 / `CLAUDE.md`).
 >
 > Written at commit `d7b7b27` (2026-07-07); numbers, line stamps, and the
-> failure-mode notes refreshed at `f541523` (2026-07-08) after the Tier-3
-> stabilization (Guide 3 §4); suite 378 tests green. Line numbers are
-> stamped to that later commit — the function names beside them are the
-> durable anchors.
+> failure-mode discussion refreshed at `2916c57` (2026-07-08) after the
+> Tier-3 stabilization (Guide 3 §4) and the Lieblein closure-calibration
+> fixes; suite 378 tests green. Line numbers are stamped to that later
+> commit — the function names beside them are the durable anchors.
 
 ---
 
@@ -25,15 +25,20 @@ whole classical path:
 
 | Run | Case | `n_sl` | Fidelity | Outcome |
 |---|---|---|---|---|
-| **A** | `V5AxialRotor` (single rotor) | 1 | Tier 1 meanline | `CONVERGED`, 73 outer iterations, PR = 1.1616, η = 0.8251 |
-| **B** | `V5MultistageCompressor` (2 stages, 4 rows) | 9 | Tier 3 + mixing | `CONVERGED`, 92 outer iterations (~19 s), PR = 1.1799, η = 0.8752 |
-| **C** | `V5AxialRotor` again | 9 | Tier 2 | `NUMERICAL_FAILURE` — deliberately included; see §8 |
+| **A** | `V5AxialRotor` (single rotor) | 1 | Tier 1 meanline | `CONVERGED`, 78 outer iterations, PR = 1.1988, η = 0.9689 |
+| **B** | `V5MultistageCompressor` (2 stages, 4 rows) | 9 | Tier 3 + mixing | `CONVERGED`, 92 outer iterations (~20 s), PR = 1.1989, η = 0.9499 |
+| **C** | `V5AxialRotor` again | 9 | Tier 2 | `CONVERGED` but closure validity → 0 (§8 pairs it with a genuine `CHOKE_LIMITED`) |
 
-> Numbers refreshed at commit `f541523` (post the 2026-07 Tier-3
-> stabilization, Guide 3 §4). Run A's iteration count rose from the 63 this
-> guide originally reported to 73: the stabilization made the first closure
-> application ramp in gently rather than switch on full-strength, trading a
-> few iterations for a much larger stability basin (Guide 3 §2.3).
+> **On the numbers in this guide.** The *mechanics* traced here — the
+> iteration structure, the Euler-work identity, the typed statuses, the data
+> shapes — are stable. The *performance* values (PR, η, entropy) are not:
+> they track the ongoing calibration of the `[VERIFY]` loss/deviation
+> correlations, and have already moved once under this guide (run A read
+> PR 1.1616, η 0.825 at the 2026-07-07 stamp; the Lieblein calibration fixes
+> of 2026-07-08 moved it to PR 1.1988, η 0.969, and made run C converge
+> where it previously failed). Numbers here are stamped to commit `2916c57`
+> (2026-07-08). Treat them as a snapshot of a moving target; the point is the
+> machinery, not the third decimal.
 
 Reproduce any of them in a REPL:
 
@@ -299,7 +304,7 @@ consequences visible in the code:
 A warm bracket around the previous iterate's root (`±30%`) makes the happy
 path cheap; the 64-point cold scan is the fallback.
 
-Run A after convergence: `Vm(q=0) = [91.16, 91.16, 84.46, 84.46]` m/s —
+Run A after convergence: `Vm(q=0) = [91.16, 91.16, 82.01, 82.01]` m/s —
 identical within the duct pairs (same annulus, same transported fields on
 both sides of a duct interval) and dropping across the rotor because
 compression raised ρ.
@@ -392,8 +397,8 @@ story):
 | iterate | cont_norm | pos_norm | closure_norm |
 |---|---|---|---|
 | 1 | 2.0e−13 | 0 | 1.0 (closures just switched on) |
-| 37 | 1.3e−13 | 0 | 2.3e−5 |
-| 73 | 1.3e−13 | 0 | 8.6e−10 → **CONVERGED** |
+| 40 | 1.3e−13 | 0 | 1.7e−5 |
+| 78 | 1.3e−13 | 0 | 9.4e−10 → **CONVERGED** |
 
 The closure norm contracts by an almost perfectly constant factor ≈ 0.75
 per iterate — the fixed-point contraction rate set by `closure_relax`
@@ -407,30 +412,33 @@ Run B (Tier 3, 9 streamlines, 4 rows, mixing on):
 | iterate | cont_norm | pos_norm | closure_norm | ω_sl |
 |---|---|---|---|---|
 | 1 | 0 | 2.4e−7 | 1.0 | 0.6227 |
-| 2 | 1.6e−13 | 1.7e−2 | 4.1e−1 | 0.6130 |
-| 47 | 7.9e−15 | 1.3e−6 | 1.1e−4 | 0.6031 |
-| 92 | 7.9e−15 | 6.3e−12 | 7.9e−10 | 0.6031 | **CONVERGED** |
+| 2 | 7.6e−14 | 1.8e−2 | 4.2e−1 | 0.6123 |
+| 47 | 2.3e−14 | 6.6e−7 | 8.2e−5 | 0.6019 |
+| 92 | 2.3e−14 | 9.5e−12 | 8.8e−10 | 0.6019 | **CONVERGED** |
 
 Positions and closures converge together — they are one coupled fixed
-point, which is the whole point of the nested scheme. The M8 headline
-lives in this run's exit entropy: spanwise spread 0.69 J/(kg·K) *with*
-mixing versus ~17.6 J/(kg·K) with `mixing_term = 0` — a ~25× reduction in
-spanwise entropy stratification (Appendix C.5m,
-`tests/test_multistage_mixing.py`). Mixing is a *physical* model bounding a
-real stratification, **not** a convergence device: since the 2026-07
-stabilization the un-mixed case converges too (it just leaves the flow
-physically over-stratified). Guide 1 originally reported mixing as a
-"convergence prerequisite" — that was an artifact of the pre-stabilization
-driver; see Guide 3 §4–5 for the full correction.
+point, which is the whole point of the nested scheme. The M8 headline lives
+in this run's exit entropy: spanwise spread 0.315 J/(kg·K) *with* mixing
+versus 1.88 J/(kg·K) with `mixing_term = 0` — a ~6× reduction in spanwise
+entropy stratification (`tests/test_multistage_mixing.py`). Mixing is a
+*physical* model bounding a real stratification, **not** a convergence
+device: since the 2026-07 stabilization the un-mixed case converges too (it
+just leaves the flow physically over-stratified). Guide 1 originally
+reported mixing as a "convergence prerequisite" — that was an artifact of
+the pre-stabilization driver; see Guide 3 §4–5 for the full correction.
+(The ratio itself tracks loss magnitude: before the 2026-07-08 loss
+calibration it read ~25× on a much larger absolute stratification; the
+normative Appendix C.5m still carries that earlier figure. The *qualitative*
+claim — mixing bounds a real spanwise stratification — is what is stable.)
 
-**A consistency check you can do by eye.** Run A's exit: `rVθ = 39.74
-m²/s`, `h0 = 315 896 J/kg`. Euler's work: `Δh0 = ω·ΔrVθ = 400 × 39.74 =
-15 896 J/kg` — exactly the observed `315 896 − 300 000`. Not a coincidence
+**A consistency check you can do by eye.** Run A's exit: `rVθ = 41.16
+m²/s`, `h0 = 316 463 J/kg`. Euler's work: `Δh0 = ω·ΔrVθ = 400 × 41.16 =
+16 464 J/kg` — exactly the observed `316 463 − 300 000`. Not a coincidence
 and not a test tolerance: the transport update *is* this identity (§C.3),
 so it holds to round-off by construction. Similarly the exit flow angle:
-`Vθ = 39.74/0.4743 = 83.8 m/s` against `Vm = 84.5` gives α = 44.8°, and in
-the relative frame β₂ = atan2(83.8 − 400·0.4743, 84.5) = −51.4° versus the
-−45° metal angle — about 6.4° of deviation, which is the Lieblein
+`Vθ = 41.16/0.4743 = 86.8 m/s` against `Vm = 82.0` gives α = 46.6°, and in
+the relative frame β₂ = atan2(86.8 − 400·0.4743, 82.0) = −51.5° versus the
+−45° metal angle — about 6.5° of deviation, which is the Lieblein
 deviation correlation doing its job (under-turning, the physically correct
 sign).
 
@@ -454,56 +462,72 @@ field into the scalars an MDO loop wants:
   exact `FrozenInputs` of the last iterate, and the complete per-iteration
   record (ARCH-6).
 
-Run A: `PR = 1.1616, η = 0.8251, validity = 0.979`. Run B:
-`PR = 1.1799, η = 0.8752, validity = 0.9785`. Remember the standing
+Run A: `PR = 1.1988, η = 0.9689, validity = 0.9998`. Run B:
+`PR = 1.1989, η = 0.9499, validity = 0.9986`. Remember the standing
 caveat (overview §10): these are *structurally* sane numbers from
 uncalibrated (`[VERIFY]`) correlations, not validated predictions — η
-reads high wherever deferred loss components are missing.
+reads high wherever deferred loss components are missing (and, as the run
+table warns, these values are still moving as the correlations are
+calibrated).
 
-## 8. When it fails: run C, and the typed-status contract
+## 8. The edges: validity saturation and the typed-status contract
 
 The driver never throws on physics. Its outcomes are a closed set
 (`SolveStatus`): `CONVERGED`, `MAX_ITER`, `CHOKE_LIMITED` (a station's
 capacity peak sits below ṁ — an operability fact, §6.6), and
-`NUMERICAL_FAILURE` (an AD-10 boundary check tripped; the record's
-`reason` string says which and when).
+`NUMERICAL_FAILURE` (an AD-10 boundary check tripped; the record's `reason`
+says which and when). Two edges are worth seeing.
 
-Run C is the instructive one. The same rotor that converges as a meanline
-fails spanwise in 8 iterates:
+**Run C — converged, but flagged.** Run the same rotor spanwise
+(`n_sl = 9`, Tier 2). `V5AxialRotor`'s metal angles are **mid-span values**
+(its docstring says so — a spanwise run should pass spanwise arrays via
+`geometry`). Across the wide 0.3–0.6 m span the blade speed doubles, so the
+relative inlet angle swings ≈ 52° (wall_0) to 69° (wall_1) against a uniform
+63° metal angle — roughly −11°/+6° of incidence at the walls. The result:
 
 ```
-status: NUMERICAL_FAILURE
-reason: repositioning failed at outer iteration 9: cumulative integral is
-        decreasing; integrand < 0 upstream
-it5 :  pos=1.1e-1  closure=1.9           # ragged, not contracting
-it8 :  pos=2.0e-1  closure=1.3           # diverging; validity -> 0.0
+status: CONVERGED   (84 iterations, PR = 1.2010)
+validity: 0.0       ← the closures report they are fully out of calibration
 ```
 
-Why: `V5AxialRotor`'s metal angles are **mid-span values** (its docstring
-says so — a spanwise run should pass spanwise arrays via `geometry`).
-Across the wide 0.3–0.6 m span the blade speed doubles, so the relative
-inlet angle swings ≈ 52° (wall_0) to 69° (wall_1) against a uniform 63°
-metal angle — roughly −11°/+6° of incidence at the walls. The loss
-correlation, driven far off-design, charges enormous entropy near the
-walls, density and Vm collapse there, the mass flux goes negative
-somewhere along a q-o, and repositioning cannot invert a non-monotone
-cumulative — at which point the guard converts the mess into a typed
-status instead of a traceback.
+The case is aerodynamically wrong at the walls, but it does **not** crash.
+Two mechanisms from earlier in this guide are why: the closures **saturate
+smoothly** far off-design instead of exploding (the C¹ rule, Guide 2 §10),
+and every evaluation returns a **validity ∈ [0,1]** that here collapses to
+0 — the "this answer is outside my calibration" channel (§7.3.3). A wide
+spanwise run still *needs* spanwise metal angles; the point is that the
+solver tells you so through metadata rather than a traceback.
 
-(This is genuinely the *case* being ill-posed, not a driver artifact: run
-C still fails after the 2026-07 Tier-3 stabilization that fixed the
-radial/mixed cases — Guide 3 §4 — it just now trips the repositioning
-guard rather than the non-finite-fields boundary check, since that
-stabilization moved the flow-field check to the solved state. A wide
-spanwise run *needs* spanwise metal angles; no driver fix substitutes for
-correct blade geometry.)
+(This is itself a moving story. At the 2026-07-07 stamp, before the loss
+correlation was recalibrated, run C *did* fail — the far-off-design loss
+charged enough wall entropy to collapse the density and trip a guard. The
+smaller corrected loss now keeps it converging. So "run C fails" was true
+when this guide was first written and is no longer; the durable lesson is
+the *validity channel*, not the failure.)
 
-Two durable lessons, both bought with real debugging time in this
-project's history (see the memory note "verification case-design
-gotchas"): **the convergence record is the first diagnostic** — a
-closure norm that stops contracting around iterate 5–6 is a case-physics
-smell, not a driver bug; and **check the case design before blaming the
-solver.**
+**A genuine `CHOKE_LIMITED`.** To see a real typed failure, over-throttle
+the meanline rotor. It passes ṁ = 150 kg/s but not 180:
+
+```
+V5AxialRotor(mdot=180).evaluate(n_sl=1)
+→ status: CHOKE_LIMITED
+  reason: q-o 3 cannot pass mdot = 180.0 (15 consecutive capacity-deficient
+          iterations, section 6.6)
+```
+
+That is the A.7 capacity peak sitting below the demanded flow — no subsonic
+`Vm(q=0)` can push 180 kg/s through the rotor's trailing-edge q-o. Note the
+"15 consecutive" — the driver does **not** declare choke on the first
+deficient iterate, because a station can be transiently root-less while the
+lagged fields relax; only persistence past `choke_patience = 15` distinguishes
+real choke from a switch-on transient (the mechanism is Guide 3 §4.3).
+
+The durable lesson across both edges — bought with real debugging time in
+this project (memory: "verification case-design gotchas") — is: **the
+convergence record and the validity/status metadata are the first
+diagnostic.** A validity collapsing to 0, or a closure norm that stops
+contracting, is a case-physics smell; a typed status names the operability
+limit. Check those before blaming the driver.
 
 ## 9. What changes off the happy path (forward pointers)
 
@@ -514,10 +538,11 @@ operability limits. Three escalations reuse the same pure residual
 - **Newton** (`drivers/newton.py`, §6.3): stacks the *same* rows —
   `n_qo` continuity residuals + interior mass-fraction residuals
   (`ResidualAssembler.residual`, `assembler.py:342`) — into a global
-  system, dense-FD Jacobian, Armijo line search with a
-  crossing-streamline guard. Warm start mandatory; measured quadratic
-  (V1c: ~3 iterations vs 15 classical). This is what the 0.71-per-iterate
-  tail of §6 buys its way out of.
+  system, colored forward-difference Jacobian (exact-by-construction, with
+  a dense baseline as oracle/fallback; Guide 3 §4.5), Armijo line search
+  with a crossing-streamline guard. Warm start mandatory; measured
+  quadratic (V1c: ~3 iterations vs 15 classical). This is what the
+  ~0.75-per-iterate tail of §6 buys its way out of.
 - **Back-pressure mode** (`BackPressureSpec`, §6.6): ṁ joins `x` as the
   trailing unknown and the assembler appends one row — exit static
   pressure at the throttling station — making the choke-proximal branch
@@ -561,7 +586,7 @@ currently plumbed at the `solve_classical`/continuation level.)
    not 90?** The two wall streamlines are not unknowns — walls are
    geometry (AD-8). 10 × `Vm(q=0)` + 7 interior × 10 positions = 80.
 3. **The flow field of run A is visually converged by iterate ~10. Why
-   does the driver run 73 iterates?** The closure↔continuity Picard loop
+   does the driver run 78 iterates?** The closure↔continuity Picard loop
    contracts at ≈ 0.75/iterate (under-relaxation 0.25 × loop gain), and
    the gate is 10⁻⁹ on the *closure-update* norm — a geometric tail, the
    documented cost of lagged closures (AD-4) that Newton exists to remove.
@@ -574,12 +599,12 @@ currently plumbed at the `solve_classical`/continuation level.)
    refresh — once per outer iterate, through the §7.1 protocol interfaces,
    never inside the residual (AD-4, AD-5). The residual only ever sees the
    frozen, under-relaxed outputs.
-6. **Why did run C fail while run A converged on the same machine?** Not a
-   solver defect: the case supplies mid-span metal angles only, so a wide
-   spanwise run puts the wall streamlines ~±10° off-design in incidence;
-   the uncalibrated loss closure charges wall entropy spikes, `Vm` and
-   density collapse near the walls, the mass flux goes negative along a
-   q-o, and the repositioning guard converts the non-monotone cumulative
-   into a typed `NUMERICAL_FAILURE` with a reason string (§8). It still
-   fails after the 2026-07 stabilization — the case, not the driver, is
-   ill-posed.
+6. **Run C (the rotor run spanwise with mid-span-only metal angles)
+   converges but reports validity 0. What is that telling you, and why is it
+   not a failure?** The wall streamlines are ~±10° off-design in incidence,
+   so the closures are far outside their calibration — but they *saturate
+   smoothly* (the C¹ rule) instead of exploding, and flag it through the
+   validity channel (validity → 0) rather than crashing. The case is
+   aerodynamically wrong at the walls; the solver reports that as metadata,
+   not a traceback (§8). Fixing it needs spanwise metal angles, not a driver
+   change.

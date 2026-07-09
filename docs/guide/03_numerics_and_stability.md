@@ -13,7 +13,11 @@
 > Descriptive, not normative. Section refs (§, A.x, C.x) are theory-manual
 > sections. Numbers were produced by running the code at the header commit.
 >
-> Written at commit `f541523` (2026-07-08); suite 378 tests green.
+> Written at commit `2916c57` (2026-07-08); suite 378 tests green. (The
+> colored-FD Jacobian, the multi-family Wilkinson recalibration, and the
+> Lieblein loss-coefficient fixes all landed on `main` in the same window as
+> this guide; numbers and status here reflect that state, not the earlier
+> `f541523` I first drafted against.)
 >
 > **Supersedes two Guide-1 claims** that were true when Guide 1 was written
 > but were overturned by the 2026-07 stabilization (§4 below): multistage
@@ -126,16 +130,23 @@ branch in `_omega_sl` is a tier/config decision, not a flow-value branch
 (AD-1). Guide 1's run B showed `ω_sl` settling at 0.603, genuinely
 throttled below the cap by station density.
 
-**Headroom (2026-07 probe, C.3 note).** The envelope was calibrated on the
-V2 *duct*. On the blade-row-coupled bends (V7 90°, V8 55°) it is measured
-**2–3× over-conservative**: V8 Tier 3 reaches the *identical* fixed point
-(PR 1.5873) at `wilkinson_c = 13.2` in **152 iterations versus 396** at the
-default, and only diverges at 22 — so this family's threshold sits in
-(13.2, 22), not near the duct's 7.3. The default stays 4.4 (two cases are a
-probe, not a family sweep; and margin discipline is against a *calibrated*
-threshold). Per-case overrides up to ~13 are safe on V7/V8-class geometry.
-A proper multi-family recalibration of the tool is the recorded route to a
-faster default.
+**Headroom, and the multi-family recalibration (2026-07).** The envelope was
+originally calibrated on the V2 *duct*. `tools/calibrate_wilkinson.py` has
+since been extended with a `bladerow` family (the V7/V8 parametric bends,
+run *after* the Tier-3 stabilization so blade-row divergences reflect the
+genuine §6.4 mode rather than the driver artifact of §4). The finding: on
+the blade-row bends the duct envelope is **2–3× over-conservative** — V8
+Tier 3 reaches the *identical* fixed point at `wilkinson_c = 13.2` in ~152
+iterations versus ~400 at the default, and only diverges near 22, so this
+family's threshold constant sits around 8.8–30 rather than the duct's ~7.3.
+**Yet the shipped default stays `wilkinson_c = 4.4`**: the recalibration
+confirmed that the *duct* family is the binding constraint (a general-purpose
+default must be safe on the stiffest geometry it may meet, and the margin
+discipline is against the duct's calibrated ~7.3 threshold). The blade-row
+headroom is exposed as a **per-case override** — safe up to ~13 on
+V7/V8-class geometry — not baked into the default. This is the
+recalibration that earlier drafts of this guide listed as an open item; it
+is done, and its answer is "4.4 stands, with documented per-case headroom."
 
 ### 2.2 Coupling A: why the curvature lag is mandatory (§5.5)
 
@@ -316,7 +327,7 @@ All in `drivers/classical.py` plus a capacity guard in `assembler.py`:
    above) — removing the main transient producer at the source.
 
 The Newton path got the matching guard in the consolidation sprint:
-`_safe_residual` (`newton.py:149`) now splits once, rejects any trial whose
+`_safe_residual` (`newton.py:179`) now splits once, rejects any trial whose
 integrated `Vm` is not strictly positive, and evaluates the rows through the
 new `residual_from(fields, x)` seam. The measured motivation: spurious
 negative-Vm branches carry *finite* residuals (mass balancing by
@@ -332,7 +343,7 @@ the honest part — the guide series must record what turned out to be wrong:
 |---|---|
 | V8 Tier-3 "converges nowhere; angle-specific pocket" | Converges: 396 iterations, PR 1.5873, within a few % of Tier 2 (`test_v8_mixed_flow.py::test_tier3_converges_after_stabilization`) |
 | V7 Tier-3 "needs 6 INBLADE stations; edge-only diverges" | Edge-only converges: 173 iterations, PR 2.4433 vs the subdivided 2.4540 (<0.5%). **INBLADE is a resolution choice, not a convergence requirement.** |
-| Multistage mixing is a "convergence prerequisite" | Mixing-off *converges* (89 iterations, PR 1.1765). The surviving claim is physical stratification (§5), not convergence. |
+| Multistage mixing is a "convergence prerequisite" | Mixing-off *converges* (92 iterations, PR 1.1973). The surviving claim is physical stratification (§5), not convergence. |
 
 Two in-suite tripwires that used to assert *divergence* were flipped to
 assert *convergence*, so a regression that reintroduces the artifact fails
@@ -366,10 +377,25 @@ answer. Four design points:
 - **Warm start is mandatory** (ARCH-5.3). Newton is local; the seed is a
   classical iterate or a neighbouring converged operating point. `solve_newton`
   raises `ConfigError` without one.
-- **Dense forward-difference Jacobian** (`_fd_jacobian`). This is the
-  unconditionally-correct baseline; the colored-FD version (exploiting the
-  near-block-tridiagonal station structure) is a recorded optimization that
-  must validate column-for-column against it, not a prerequisite.
+- **Colored forward-difference Jacobian** (the default since 2026-07;
+  `jacobian="dense"` keeps the dense version as the validation oracle and the
+  automatic fallback). The coloring is **exact by construction** — it groups
+  only *provably-disjoint* columns, so it matches the dense Jacobian
+  column-for-column to FD noise in every configuration, never approximating.
+  The measured structure is more subtle than the arch spec's
+  "near-block-tridiagonal" guess: the `Vm(q=0)` columns are exactly
+  block-diagonal in station index at every tier (one color for all of them —
+  the lean term reads the *lagged* Vm, so no cross-station Vm coupling), but
+  the interior-`q` columns are block-diagonal only when the curvature/lean
+  terms are off *and* the annulus is straight (`|sinε| ≈ 0`); on curved paths
+  the coupling is first-order and under active curvature the interpolating
+  spline couples stations *globally* (~0.27/station decay). Net payoff:
+  straight-annulus Tier-2/meanline solves — the continuation/back-pressure
+  workhorse — get `(n_sl−1)`-color Jacobians (measured 3.7× on V1c); curved
+  and Tier-3 cases keep per-column `q` plus the one free `Vm` color (~15% on
+  V8). A banded stride-6 approximation was measured *unprofitable* end-to-end
+  (aliasing inflated inner iterations ~1.7×, more than the Jacobian saved)
+  and deliberately does not ship.
 - **Two globalization guards fold into the Armijo line search.** A trial that
   makes a q-o's nodes non-monotone (a *crossing streamline*, which PCHIP
   cannot represent) gets merit `+∞` and backtracks (`_is_feasible_q`,
@@ -382,14 +408,18 @@ answer. Four design points:
 
 **Why Newton does not yet *finish* the hard cases.** You would expect to
 escalate to Newton for the slow V8 Tier-3 tail. Measured, it is
-*unprofitable at the dense-FD cost*: the inner Newton is textbook (2–3
-quadratic iterations per pass), but the quasi-Newton *closure* outer loop
-still contracts at only ~0.73/pass after a ~4-pass hump — so ~54 passes ×
-~2.2 s per dense-FD pass ≈ 120 s, versus classical's 75 s on the same case.
-The profitability gate is the colored-FD Jacobian (~4× cheaper passes) *or*
-closure-in-Newton. Until one lands, continuation escalates classical→Newton
+*unprofitable*: the inner Newton is textbook (2–3 quadratic iterations per
+pass), but the quasi-Newton *closure* outer loop still contracts at only
+~0.73/pass after a several-pass hump, so ~50+ Jacobian-bearing passes are
+needed — and colored-FD, which rescued the *straight* cases (3.7×), buys
+only ~15% on exactly this curved Tier-3 geometry (the coloring degrades to
+per-column `q` when curvature couples the stations globally, above). So the
+one lever that would have made Newton-finishing pay does not pay *here*. The
+remaining profitability gate is **closure-in-Newton** (folding the lagged
+closures into the simultaneous solve, collapsing the outer loop that is
+actually the bottleneck). Until then, continuation escalates classical→Newton
 only for *point* failures, not to finish slow-but-converging tails
-(`continuation.py:269`). This is a measured decision, recorded so it is not
+(`continuation.py:269`). A measured decision, recorded so it is not
 re-litigated blindly.
 
 ## 5. The mixing operator (§3.6)
@@ -418,24 +448,30 @@ Three properties, each a deliberate numerical choice:
   gates it; 0 returns the input untouched, so the V3 Tier-2 ≡ Tier-3 identity
   is never disturbed by a mixing model being *present*.
 
-**What the multistage measurement actually shows (revised).** Guide 1
+**What the multistage measurement actually shows (revised twice).** Guide 1
 originally reported mixing as a *convergence prerequisite* — that the
-un-mixed two-stage compressor "ran away to ~40 J/(kg·K) and failed outright."
-The 2026-07 stabilization (§4) showed that non-convergence was the driver
-artifact, not physics: post-fix the un-mixed case **converges cleanly (89
-iterations)**. The *physical* claim survives and is what
-`test_multistage_mixing` now pins:
+un-mixed two-stage compressor "ran away and failed outright." The 2026-07
+stabilization (§4) showed that non-convergence was the driver artifact, not
+physics: post-fix the un-mixed case **converges cleanly**. The *physical*
+claim survives and is what `test_multistage_mixing` now pins, though its
+magnitude tracks loss (the 2026-07-08 loss calibration shrank the absolute
+stratification, and with it the ratio, from ~25× to ~6×):
 
-| Multistage V5, n_sl=9, Tier 3 | Converged | PR | exit Δs spread |
+| Multistage V5, n_sl=9, Tier 3 (at `2916c57`) | Converged | PR | exit Δs spread |
 |---|---|---|---|
-| mixing **off** | yes (89 it) | 1.1765 | **17.6 J/(kg·K)** |
-| mixing **on** (Gallimore, c_mix=0.01) | yes (92 it) | 1.1799 | **0.69 J/(kg·K)** |
+| mixing **off** | yes (92 it) | 1.1973 | **1.88 J/(kg·K)** |
+| mixing **on** (Gallimore, c_mix=0.01) | yes (92 it) | 1.1989 | **0.315 J/(kg·K)** |
 
-So mixing bounds a ~**25× spanwise entropy stratification** — §3.6's
-"unrealistic stratification" made *measurable* rather than *fatal*. The
-`c_mix = 0.01` constant and the mixing entropy-*production* term (the
-operator redistributes `s`; the irreversibility source beyond redistribution
-is a refinement) both stay `[VERIFY]`.
+So mixing bounds a ~**6× spanwise entropy stratification** — §3.6's
+"unrealistic stratification" made *measurable* rather than *fatal*. (The
+normative Appendix C.5m still carries the pre-calibration ~25× figure; the
+*qualitative* claim is what is stable, and the ratio will keep moving with
+the loss coefficients.) The `c_mix = 0.01` constant and the mixing
+entropy-*production* term (the operator redistributes `s`; the
+irreversibility source beyond redistribution is a refinement) both stay
+`[VERIFY]` — and, per the reference-calibration work, `c_mix` is now flagged
+`[DECIDE]`: the code non-dimensionalizes on radius rather than stage length,
+so 0.01 is ~10–50× stronger than the Gallimore–Cumpsty source value.
 
 ## 6. Continuation and BC switching (§6.6–6.7)
 
@@ -469,26 +505,33 @@ cut of overview §10:
 - Tier 2 ≡ Tier 3 **bit-for-bit** (1e-10) on straight annulus — the "fidelity
   is data" claim, mechanically verified (V3).
 - Newton quadratic convergence from warm start (§4.5).
+- **Colored-FD Jacobian shipped** (2026-07), exact-by-construction, dense as
+  oracle/fallback; 3.7× on straight cases (§4.5).
 - Mixing conservation to machine precision (§5).
 - Tier-3 radial/mixed **converges** (V7 all station counts, V8) since the
   2026-07 stabilization — the fragility is resolved (§4).
 
 **Provisional (works, but a constant is uncalibrated or margin is untuned):**
 - `wilkinson_c = 4.4` is duct-calibrated and 2–3× conservative on blade-row
-  bends (§2.1). Correct, just slow.
+  bends. The multi-family recalibration **is done** (§2.1): the duct binds,
+  so 4.4 stays the default, with per-case headroom to ~13 on V7/V8-class
+  geometry. Correct, just slow on bends until a per-case override is used.
 - `closure_relax = 0.25`, `kappa_relax = 0.3`, `choke_patience = 15` are
   measured on the cases to hand, not swept across a family.
-- `c_mix = 0.01` is `[VERIFY]`.
+- The loss/deviation `CorrelationSet` coefficients are under active
+  calibration against the reference library (a real Lieblein `K_ti` bug was
+  fixed 2026-07-08; a Lieblein `ω̄`-inversion bug is flagged and xfail-pinned)
+  — every performance number in this series moves with that work.
+- `c_mix = 0.01` is `[VERIFY]`/`[DECIDE]` (§5: ~10–50× the source value on the
+  code's radius non-dimensionalization).
 
 **Open (recorded, unstarted or deliberately deferred):**
 - **`ln Vm` positivity-safe integration** — the principled fix for the §4
   singularity (currently screened, not structurally prevented).
-- **Multi-family Wilkinson recalibration** — the route to a faster default
-  `ω_sl` on blade-row bends.
-- **Colored-FD Jacobian** — now doubly motivated: cheaper Newton passes would
-  make Newton-finishing of slow tails profitable (§4.5).
-- Closure-in-Newton (the AD-4 lagging is a starting point, not the ceiling),
-  and the JAX/AD backend the `xp=` plumbing anticipates.
+- **Closure-in-Newton** — now the sole remaining lever to make Newton-finishing
+  of slow *curved* Tier-3 tails pay (colored-FD already shipped but buys only
+  ~15% there; §4.5). The AD-4 lagging is a starting point, not the ceiling.
+- The JAX/AD backend the `xp=` plumbing anticipates.
 
 ## 8. Check your understanding
 
@@ -525,10 +568,12 @@ cut of overview §10:
    they are not a convergence requirement (§4.4).
 6. **Newton converges V8 Tier-3's inner system in 2–3 iterations. Why doesn't
    the driver escalate to Newton to finish that case?** Because the
-   *quasi-Newton closure outer* loop still contracts at ~0.73/pass, and each
-   dense-FD pass is expensive (~2.2 s), so ~54 passes ≈ 120 s beats classical's
-   75 s the wrong way. Escalation is gated on the colored-FD Jacobian or
-   closure-in-Newton landing first (§4.5).
+   *quasi-Newton closure outer* loop still contracts at only ~0.73/pass, so
+   ~50+ Jacobian-bearing passes are needed — and the colored-FD Jacobian that
+   rescued the *straight* cases (3.7×) buys only ~15% on this *curved* Tier-3
+   geometry, where curvature couples the stations globally and the coloring
+   degrades to per-column `q`. The lever that would have paid does not pay
+   here; the remaining gate is closure-in-Newton (§4.5).
 7. **Mixing is now known *not* to be a convergence prerequisite. What is the
    surviving, tested claim for why multistage machines need it?** It bounds a
    real spanwise entropy stratification — measured ~25× (17.6 → 0.69
