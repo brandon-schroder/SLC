@@ -18,31 +18,28 @@ Cross-checked against `slcflow/closures/axial_compressor/loss.py`.
 
 Confirmed pieces pinned in `tests/test_lieblein_loss_reference.py`.
 
-## BUG (confirmed, high priority; fix deferred to the consolidation pass)
+## BUG — FIXED (resolution pass, 2026-07)
 
-**The ω̄ velocity-ratio factor is inverted.** Aungier Eq 6-27 and Cumpsty Eq
+**The ω̄ velocity-ratio factor was inverted.** Aungier Eq 6-27 and Cumpsty Eq
 1.32 both give
 
     ω̄ = 2·(θ*/c)·(σ/cos β2)·(W2/W1)²
 
 (NotebookLM, verbatim, two independent sources: *"the correct velocity-ratio
 factor is (W2/W1)², which is the inverse of the term in your query"*; for
-constant axial velocity `(W2/W1)² = (cos β1/cos β2)²`). The code (`loss.py:118-
-119`) and its own docstring (`:9`) use **`(W1/W2)²`** — the reciprocal.
+constant axial velocity `(W2/W1)² = (cos β1/cos β2)²`). The code and its own
+docstring had used **`(W1/W2)²`** — the reciprocal. For a compressor `W2 < W1`,
+so it overestimated profile loss by `(W1/W2)⁴` (~4× at DF≈0.45).
 
-For a compressor the flow diffuses (`W2 < W1`, so `W1/W2 > 1`), so this is not
-a small error: `code/correct = (W1/W2)⁴`. At a representative `W2/W1 ≈ 0.7`
-(DF≈0.45) the coded profile loss is **~4× too high**. It is a transcription
-error against the cited sources (docstring and code agree with each other but
-not the source), not a modeling choice.
-
-**Why not fixed here:** per the plan to consolidate all sources before
-resolving, and because a ~4× loss change (i) shifts every V4/V5 result and
-(ii) may interact with the M4-tuned `_WBAR_CEIL = 0.5` ceiling and the 10°
-bucket width (which could have been calibrated against the inflated loss).
-Fixing it wants a paired re-look at the whole compressor-loss calibration and
-a V5 re-measurement, done in the resolution pass. Flagged `[BUG]` at the code
-site.
+**Fix.** The ω̄ assembly was extracted to `profile_loss_coefficient(theta_c,
+sigma, beta2, w1, w2)` using `(W2/W1)²`, and pinned in
+`tests/test_lieblein_loss_reference.py::test_omega_bar_uses_W2_over_W1_squared`
+(with a guard against silent regression to the inverted form). The change
+lowers profile loss / raises efficiency. **Measured:** the V5 structural bands
+stayed in range and the full suite is green — i.e. the M4-tuned `_WBAR_CEIL`
+ceiling and 10° bucket were **not** calibrated against the inflated loss, so no
+paired recalibration was needed. (The point-by-point V5 speedline is still
+`[VERIFY]` on the chart-digitization work, unaffected by this.)
 
 ## Findings — modeling differences (documented)
 

@@ -83,14 +83,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   Braembussche typical. No bug. Two `[DECIDE]`s: incidence `f_inc` (code uses
   1.0; Conrad 0.5–0.7 / Aungier 0.8) and `W_avg²` (code square-of-mean vs
   Aungier mean-of-squares).
-- **LIEB59 (Lieblein compressor profile loss) — constants CONFIRMED, one
-  `[BUG]` found**, see [`LIEB59.md`](LIEB59.md) and
+- **LIEB59 (Lieblein compressor profile loss) — constants CONFIRMED, ω̄ bug
+  FIXED**, see [`LIEB59.md`](LIEB59.md) and
   `tests/test_lieblein_loss_reference.py`. `D_eq` (1.12, 0.61) and `θ*/c`
-  (0.004, 1.17) verified vs Aungier/Cumpsty/Dixon. **Confirmed bug** (fix
-  deferred to the consolidation pass): the ω̄ velocity ratio is inverted —
-  code `(W1/W2)²`, source `(W2/W1)²` → ~4× loss overestimate for a
-  compressor (pinned as a strict xfail). Plus a `[DECIDE]` off-design model
-  substitution (quadratic bucket vs Lieblein's `D_eq += k(i−i*)^1.43`).
+  (0.004, 1.17) verified vs Aungier/Cumpsty/Dixon. The ω̄ velocity-ratio
+  inversion (code `(W1/W2)²` vs source `(W2/W1)²`, ~4× overestimate) is
+  **fixed** (resolution pass) — extracted to `profile_loss_coefficient`,
+  V5 bands + full suite green. Remaining `[DECIDE]`: off-design model
+  (quadratic bucket vs Lieblein's `D_eq += k(i−i*)^1.43`).
 - **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` value is a
   `[DECIDE]`**, see [`GC86.md`](GC86.md). The turbulent-diffusion form is
   right, but the coded `c_mix=0.01` does NOT match G-C: they recommend

@@ -157,6 +157,30 @@ class StallFlag:
     detail: str = ""
 
 
+def _classify_stall(out_mdot, pr, prev_pr, validity, armed, peak_mdot, config):
+    """Section 6.7 stall-onset classification for one converged point (pure).
+
+    Order is normative: **validity saturation is checked before PR turnover**.
+    For a compressor whose loss/deviation correlation loses validity as
+    incidence climbs toward stall (e.g. Lieblein), validity collapses to 0 at
+    the high-incidence end *before* the (correct) loss turns the PR over — so
+    that family flags ``validity_saturated``. ``pr_turnover`` fires only when a
+    point on an ARMED (already-risen) characteristic actually falls below its
+    predecessor while validity is still admissible. Returns a
+    :class:`StallFlag` or ``None``.
+    """
+    if validity < config.validity_min:
+        return StallFlag(mdot=out_mdot, criterion="validity_saturated",
+                         detail=f"closure validity {validity:.3g} "
+                                f"< {config.validity_min:.3g}")
+    if armed and prev_pr is not None and pr < prev_pr:
+        return StallFlag(
+            mdot=out_mdot, criterion="pr_turnover",
+            detail=f"PR {pr:.5g} < previous {prev_pr:.5g} at falling mdot "
+                   f"(peak ~{peak_mdot:.4g})")
+    return None
+
+
 @dataclass(frozen=True)
 class SwitchEvent:
     """A logged boundary-condition switch (section 6.6: automatic + logged)."""
@@ -355,16 +379,10 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
         validity = float(result.frozen.closures.validity)
         c = _choke_margin(result)
 
-        if validity < config.validity_min:
-            stall = StallFlag(mdot=out_mdot, criterion="validity_saturated",
-                              detail=f"closure validity {validity:.3g} "
-                                     f"< {config.validity_min:.3g}")
-            break
-        if armed and prev_pr is not None and pr < prev_pr:
-            stall = StallFlag(
-                mdot=out_mdot, criterion="pr_turnover",
-                detail=f"PR {pr:.5g} < previous {prev_pr:.5g} at falling mdot "
-                       f"(peak ~{points[-1].mdot:.4g})")
+        peak_mdot = points[-1].mdot if points else out_mdot
+        stall = _classify_stall(out_mdot, pr, prev_pr, validity, armed,
+                                peak_mdot, config)
+        if stall is not None:
             break
 
         points.append(MapPoint(

@@ -4,17 +4,15 @@ Pins the equivalent-diffusion-ratio and wake-momentum-thickness constants
 confirmed term-by-term against Aungier ch.6 / Cumpsty / Dixon in
 ``docs/references/LIEB59.md`` (extracted 2026-07-09, citation-backed).
 
-Scope: the CONFIRMED-correct pieces (D_eq 1.12/0.61, theta/c 0.004/1.17). The
-omega_bar velocity-ratio INVERSION bug (code (W1/W2)^2 vs source (W2/W1)^2) is
-documented in LIEB59.md with the fix deferred to the consolidation pass -- see
-``test_omega_bar_velocity_ratio_is_inverted`` below, an xfail that will start
-passing once the bug is fixed.
+Scope: D_eq (1.12/0.61), theta/c (0.004/1.17), and the omega_bar assembly
+(2 (theta/c)(sigma/cos b2)(W2/W1)^2, Aungier 6-27 / Cumpsty 1.32 -- the
+velocity-ratio inversion bug found in this pass is now FIXED, 2026-07).
 """
 import numpy as np
 import pytest
 
 from slcflow.closures.axial_compressor.loss import (
-    equivalent_diffusion, wake_momentum_thickness)
+    equivalent_diffusion, profile_loss_coefficient, wake_momentum_thickness)
 
 DEG = np.pi / 180.0
 
@@ -42,15 +40,15 @@ def test_wake_momentum_thickness_0p004_1p17(d_eq):
         ref, rel=3e-3)
 
 
-@pytest.mark.xfail(reason="known bug (LIEB59.md): omega_bar uses (W1/W2)^2, "
-                   "Aungier 6-27/Cumpsty 1.32 give (W2/W1)^2. Fix deferred to "
-                   "the consolidation pass; this xpasses once corrected.",
-                   strict=True)
-def test_omega_bar_velocity_ratio_is_inverted():
-    # Pin the bug in-suite: build the coded omega_min factor and the correct
-    # one, assert they AGREE (they don't yet -> xfail). W1>W2 for a compressor.
-    b2 = 25.0 * DEG
-    theta_c, sigma, w1, w2 = 0.01, 1.2, 1.0, 0.72
-    coded = 2.0 * theta_c * sigma / np.cos(b2) * (w1 / w2) ** 2
-    correct = 2.0 * theta_c * sigma / np.cos(b2) * (w2 / w1) ** 2
-    assert coded == pytest.approx(correct, rel=1e-6)
+@pytest.mark.parametrize("b2d,theta_c,sigma,w1,w2", [(25.0, 0.01, 1.2, 1.0, 0.72),
+                                                    (35.0, 0.015, 1.0, 1.0, 0.65)])
+def test_omega_bar_uses_W2_over_W1_squared(b2d, theta_c, sigma, w1, w2):
+    # Aungier 6-27 / Cumpsty 1.32: omega_bar = 2(theta/c)(sigma/cos b2)(W2/W1)^2
+    # (the inversion bug is fixed). W1 > W2 for a compressor -> factor < 1.
+    b2 = b2d * DEG
+    expect = 2.0 * theta_c * sigma / np.cos(b2) * (w2 / w1) ** 2
+    got = float(profile_loss_coefficient(theta_c, sigma, b2, w1, w2))
+    assert got == pytest.approx(expect, rel=1e-9)
+    # Guard against a silent regression to the inverted form.
+    inverted = 2.0 * theta_c * sigma / np.cos(b2) * (w1 / w2) ** 2
+    assert got < inverted           # (W2/W1)^2 < (W1/W2)^2 since W2 < W1

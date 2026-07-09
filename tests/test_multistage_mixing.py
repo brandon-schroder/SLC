@@ -5,9 +5,11 @@ Section 3.6's stated motivation is that multistage machines "develop
 unrealistic spanwise stratification of h0, s and rVt without a mixing model."
 This case makes that concrete on a two-stage axial compressor: with the
 default Gallimore mixing the exit entropy profile is nearly uniform; with
-mixing OFF the machine converges to a HEAVILY STRATIFIED state (~25x the
+mixing OFF the machine converges to a strongly STRATIFIED state (~6x the
 spanwise entropy spread) -- section 3.6's "unrealistic stratification" made
-measurable.
+measurable. (The absolute magnitudes fell after the 2026-07 Lieblein
+omega_bar inversion fix cut profile loss ~4x; the qualitative claim is
+unchanged and the ratio is what carries it.)
 
 Historical note: M8-3 originally recorded mixing as a *convergence
 prerequisite* (mixing-off NUMERICAL_FAILURE at 800 iterations). The 2026-07
@@ -79,11 +81,13 @@ def test_without_mixing_converges_heavily_stratified(without_mixing,
     # mixing is a *convergence prerequisite* was the driver's stale-split
     # artifact -- un-mixed, the two-stage now converges. The PHYSICAL
     # section 3.6 claim stands and is what this pins: without mixing the
-    # exit entropy profile is dramatically stratified (measured 17.6 vs
-    # 0.69 J/(kg K), ~25x; asserted at >10x with a >5 J/(kg K) floor).
+    # exit entropy profile is strongly stratified. REVISED AGAIN 2026-07 (the
+    # Lieblein omega_bar inversion fix cut profile loss ~4x, lowering the
+    # absolute spreads): measured 1.88 vs 0.32 J/(kg K), ~6x; asserted at >4x
+    # with a >1.5 J/(kg K) floor.
     base, mix = without_mixing, with_mixing
     assert base.converged
     s_base = np.ptp(base.result.frozen.transported.s[:, -1])
     s_mix = np.ptp(mix.result.frozen.transported.s[:, -1])
-    assert s_base > 10.0 * s_mix                     # dramatically worse
-    assert s_base > 5.0                              # and absolutely large
+    assert s_base > 4.0 * s_mix                      # dramatically worse
+    assert s_base > 1.5                              # and absolutely large

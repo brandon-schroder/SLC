@@ -6,21 +6,20 @@ reproduced in the standard texts (Cumpsty; Aungier; Dixon):
 
     D_eq   = (W1/W2) [1.12 + 0.61 (cos^2 beta1 / sigma)(tan beta1 - tan beta2)]
     theta/c = 0.004 / (1 - 1.17 ln D_eq)
-    omega_bar_min = 2 (theta/c) (sigma / cos beta2) (W2/W1)^2   # see [BUG]
+    omega_bar_min = 2 (theta/c) (sigma / cos beta2) (W2/W1)^2
 
 Verification status (docs/references/LIEB59.md, 2026-07-09, vs Aungier ch.6 /
-Cumpsty / Dixon): D_eq (1.12, 0.61), theta/c (0.004, 1.17), and the inlet-
-relative reference dynamic head are CONFIRMED (pinned in
+Cumpsty / Dixon): D_eq (1.12, 0.61), theta/c (0.004, 1.17), the inlet-relative
+reference dynamic head, and the ``omega_bar`` assembly are CONFIRMED (pinned in
 tests/test_lieblein_loss_reference.py).
 
-**[BUG -- confirmed, fix DEFERRED to the consolidated resolution pass.]** The
-omega_bar velocity-ratio factor is INVERTED. Aungier Eq 6-27 and Cumpsty Eq
-1.32 both give ``omega_bar = 2 (theta/c)(sigma/cos beta2)(W2/W1)^2``, but the
-code below (``:evaluate``) uses ``(W1/W2)^2``. For a compressor W2 < W1 so this
-overestimates profile loss by ~(W1/W2)^4 (~4x at DF~0.45). Not fixed in
-isolation because it shifts every V4/V5 result and may interact with the
-M4-tuned _WBAR_CEIL and 10-deg bucket; needs a paired loss-calibration re-look
-+ V5 re-measurement.
+**FIXED 2026-07 (was a confirmed [BUG]).** The ``omega_bar`` velocity ratio was
+coded inverted as ``(W1/W2)^2``; Aungier Eq 6-27 and Cumpsty Eq 1.32 give
+``(W2/W1)^2`` (``profile_loss_coefficient``). For a compressor W2 < W1, so the
+old form overestimated profile loss by ~(W1/W2)^4 (~4x at DF~0.45); the fix
+lowers profile loss / raises efficiency. V5 is structural bands so it stayed in
+range; the M4 _WBAR_CEIL / 10-deg bucket were NOT retuned against the old value
+(verified by the full-suite re-run).
 
 **[DECIDE] off-design model:** the quadratic bucket (``w_bucket``, 10 deg
 default) is our substitution; Lieblein's published off-design extends D_eq by
@@ -47,7 +46,7 @@ from .lieblein import (deviation_slope, reference_deviation,
                        reference_incidence)
 
 __all__ = ["equivalent_diffusion", "wake_momentum_thickness",
-           "LieblienLoss"]
+           "profile_loss_coefficient", "LieblienLoss"]
 
 # theta/c fit domain: the denominator 1 - 1.17 ln(D_eq) vanishes at
 # D_eq = e^(1/1.17) ~ 2.35; saturate D_eq below that with a smooth ceiling,
@@ -86,6 +85,20 @@ def wake_momentum_thickness(d_eq, *, xp=None):
     lo, hi, w = _DEQ_CAL
     v = blend(d_eq, lo, w, xp=xp) * (1.0 - blend(d_eq, hi, w, xp=xp))
     return 0.004 / (1.0 - 1.17 * xp.log(d)), v
+
+
+def profile_loss_coefficient(theta_c, sigma, beta2_rad, w1, w2, *, xp=None):
+    """Lieblein profile total-pressure loss coefficient (inlet-relative
+    reference dynamic head):
+
+        omega_bar_min = 2 (theta*/c) (sigma / cos beta2) (W2/W1)^2
+
+    Aungier Eq 6-27 / Cumpsty Eq 1.32 (CONFIRMED, docs/references/LIEB59.md).
+    The velocity ratio is ``(W2/W1)^2`` -- for a compressor ``W2 < W1`` so this
+    is < 1. (This was previously coded inverted as ``(W1/W2)^2``, a ~4x
+    overestimate; fixed 2026-07.)"""
+    xp = get_xp(xp)
+    return 2.0 * theta_c * sigma / xp.cos(beta2_rad) * (w2 / w1) ** 2
 
 
 @dataclass(frozen=True)
@@ -128,12 +141,8 @@ class LieblienLoss:
 
         d_eq = equivalent_diffusion(w1, w2, b1r, b2r, sigma, xp=xp)
         theta_c, v_d = wake_momentum_thickness(d_eq, xp=xp)
-        # [BUG] velocity ratio is INVERTED: Aungier 6-27 / Cumpsty 1.32 give
-        # (W2/W1)^2, not (W1/W2)^2 -- ~4x loss overestimate for a compressor.
-        # Fix deferred to the consolidated resolution pass (docs/references/
-        # LIEB59.md): touches every V4/V5 result + the M4 loss calibration.
-        omega_min = (2.0 * theta_c * sigma / xp.cos(b2r)
-                     * (w1 / w2) ** 2)
+        omega_min = profile_loss_coefficient(theta_c, sigma, b2r, w1, w2,
+                                             xp=xp)
         omega_raw = omega_min * (1.0 + ((i - i_ref)
                                         / self.bucket_width_deg) ** 2)
         # Section 7.3.2 conservative asymptote: level off smoothly well

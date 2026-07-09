@@ -3,9 +3,10 @@ ARCH-5.4; M5-2).
 
 Binds the speedline traversal mechanics on a duct (deterministic: point
 ordering, choke-margin trend, warm-start answer-invariance, config guards),
-the real rising-then-turning characteristic on the V5 meanline rotor (the
-section 6.7 turnover flag with its recorded criterion), and the
-classical->Newton escalation at the point-solver level.
+the real rising-then-stalling characteristic on the V5 meanline rotor (the
+section 6.7 stall flag with its recorded criterion -- validity_saturated for
+the Lieblein family, with pr_turnover unit-covered on _classify_stall), and
+the classical->Newton escalation at the point-solver level.
 
 Provenance: M5 sub-step 2, written with the implementation.
 """
@@ -15,8 +16,8 @@ import pytest
 from slcflow.drivers import (BCSwitchConfig, ClassicalConfig, MapResult,
                              SpeedlineConfig, solve_classical, solve_speedline)
 from slcflow.drivers.classical import RowSpec
-from slcflow.drivers.continuation import (_BACKPRESSURE, _NORMAL, _next_mode,
-                                          _solve_point)
+from slcflow.drivers.continuation import (_BACKPRESSURE, _NORMAL, _classify_stall,
+                                          _next_mode, _solve_point)
 from slcflow.errors import ConfigError
 from slcflow.closures.axial_compressor import LIEBLEIN_NACA65
 from slcflow.geometry.bladerow import ParamRowGeometry
@@ -102,9 +103,9 @@ def test_speedline_config_guards():
 
 
 # --------------------------------------------------------------------------
-# Section 6.7 characteristic + turnover flag (V5 meanline rotor)
+# Section 6.7 characteristic + stall flag (V5 meanline rotor)
 # --------------------------------------------------------------------------
-def test_v5_meanline_characteristic_rises_then_flags_turnover():
+def test_v5_meanline_characteristic_rises_then_flags_stall():
     case, topo, inlet, row = _v5_meanline()
     m = solve_speedline(topo, case.gas, FidelityConfig.tier1(), inlet,
                         rows=[row], mdot_start=130.0, mdot_min=55.0,
@@ -114,12 +115,38 @@ def test_v5_meanline_characteristic_rises_then_flags_turnover():
     assert len(prs) >= 3
     assert all(b > a for a, b in zip(prs, prs[1:]))   # strictly rising
     assert all(p.pressure_ratio > 1.0 for p in m.points)
-    # ...and the traversal ends by REPORTING surge onset, not solving through.
+    # ...and the traversal ends by REPORTING stall onset, not solving through.
+    # For the Lieblein rotor the correlation's validity collapses to 0 as
+    # incidence climbs toward stall BEFORE the (now correctly lower, post-
+    # omega_bar fix) loss can turn the PR over -- so this family flags
+    # ``validity_saturated``. (Before the omega_bar inversion was fixed the
+    # inflated loss produced a spurious pr_turnover; pr_turnover coverage is
+    # preserved as a unit test on ``_classify_stall`` below.)
     assert m.stall is not None
-    assert m.stall.criterion == "pr_turnover"
-    assert "peak" in m.stall.detail
+    assert m.stall.criterion == "validity_saturated"
+    assert "validity" in m.stall.detail
     # The last accepted point is the peak (highest PR on the line).
     assert m.points[-1].pressure_ratio == pytest.approx(m.peak_pressure_ratio)
+
+
+def test_classify_stall_pr_turnover_and_priority():
+    # Unit coverage of the section 6.7 classifier's pr_turnover branch, which
+    # is not reachable end-to-end for the Lieblein family (validity saturates
+    # first) but IS the correct flag for a correlation that stays valid across
+    # the peak. Priority is normative: validity is checked before turnover.
+    cfg = SpeedlineConfig()          # validity_min=0.1
+    # Armed, valid, PR fell below its predecessor -> pr_turnover.
+    f = _classify_stall(out_mdot=90.0, pr=1.40, prev_pr=1.42, validity=0.9,
+                        armed=True, peak_mdot=100.0, config=cfg)
+    assert f is not None and f.criterion == "pr_turnover"
+    assert "peak" in f.detail
+    # Not armed yet (still on the rising branch): no flag despite pr<prev.
+    assert _classify_stall(90.0, 1.40, 1.42, 0.9, False, 100.0, cfg) is None
+    # Rising and valid: no flag.
+    assert _classify_stall(90.0, 1.45, 1.42, 0.9, True, 100.0, cfg) is None
+    # Validity wins over a simultaneous turnover (order is normative).
+    f = _classify_stall(90.0, 1.40, 1.42, 0.0, True, 100.0, cfg)
+    assert f is not None and f.criterion == "validity_saturated"
 
 
 # --------------------------------------------------------------------------
