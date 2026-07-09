@@ -459,26 +459,27 @@ outright." The 2026-07 stabilization (§4) showed that non-convergence was the
 driver artifact, not physics: post-fix the un-mixed case **converges
 cleanly**. That refutation is stable. The *quantitative* benefit was then
 reported as *dramatic* (~25×, then ~6× as the Lieblein loss was corrected) —
-but that too was an artifact, of two compounding calibration errors. At the
-honest coefficient it is **modest**:
+but that too was an artifact, of two compounding calibration errors *plus* a
+saturated-loss case. At the honest coefficient, and after the case geometry
+was retuned into the Lieblein validity window, it is **modest**:
 
-| Multistage V5, n_sl=9, Tier 3 — snapshot @ `13e8978` | Converged | validity | exit Δs spread |
+| Multistage V5, n_sl=9, Tier 3 — snapshot @ `HEAD` | Converged | validity | exit Δs spread |
 |---|---|---|---|
-| mixing **off** | yes | **0.0** | 1.88 J/(kg·K) |
-| mixing **on** (Gallimore, c_mix=5e-4) | yes | **0.0** | 1.68 J/(kg·K) |
+| mixing **off** | yes | **1.0** | 0.267 J/(kg·K) |
+| mixing **on** (Gallimore, c_mix=5e-4) | yes | **1.0** | 0.218 J/(kg·K) |
 
-The reduction is ~1.1× (~11%), and it does *not* catch up as stratification
-grows (off→on: 3 stages 6.83→6.29 = 8%, 4 stages 10.32→9.42 = 9%). Read the
-history as a warning: the ratio was ~25× when the compressor loss was ~4× too
-high (the Lieblein ω̄ inversion) **and** `c_mix` was ~20× too strong
-(`0.01`); ~6× after the ω̄ fix alone; ~1.1× now that `c_mix` is
-Gallimore–Cumpsty-calibrated (`5e-4`, §5 below / `docs/references/GC86.md`).
-The "mixing flattens multistage stratification" narrative does **not** survive
-an honest coefficient on this case. One caveat keeps the absolute numbers
-soft: **both runs sit at validity 0** — but that is a *family-wide* property
-(the representative V5 metal angles sit outside the Lieblein calibration
-window, so *every* V5 case runs saturated; even the single-stage rotor reads
-validity 0), a standing `[VERIFY]`, not something unique to this case.
+The reduction is ~18%, and it does *not* catch up as stratification grows
+(off→on: 3 stages 2.73→2.36 = 14%, 4 stages 5.23→4.51 = 14%). Read the history
+as a warning about compounding errors: the ratio read ~25× when the compressor
+loss was ~4× too high (the Lieblein ω̄ inversion) **and** `c_mix` was ~20× too
+strong (`0.01`); ~6× after the ω̄ fix; then ~1.1× at the calibrated `c_mix`
+**but still on saturated loss** (the case ran at closure **validity 0** — the
+over-loaded, untwisted V5 blades over a wide annulus drove `D_eq` out of the
+Lieblein window; this was a *family-wide* problem, even the single-stage rotor
+read validity 0). Retuning the annulus (hub/tip 0.64 → 0.73, §V5-retune) put it
+in-window; ~18% is the meaningful number. The "mixing flattens multistage
+stratification" narrative does **not** survive an honest coefficient on
+in-window loss.
 
 What survives is **structural**, and it is what the guide should lean on:
 mixing is provably conservative (machine-precision, tested), it reduces
@@ -488,7 +489,7 @@ is now G–C-calibrated (`5e-4`; the code non-dimensionalizes on radius not
 stage length, so the constant carries an implicit `L_s/r` factor — the
 accepted cost of the r-based retune, GC86.md option B); the mixing
 entropy-*production* term is a recorded refinement. The normative Appendix
-C.5m now carries this ~11% reality.
+C.5m now carries this ~18% reality.
 
 ## 6. Continuation and BC switching (§6.6–6.7)
 
@@ -593,9 +594,10 @@ cut of overview §10:
    dramatic homogenizer. What is the surviving, tested claim for why multistage
    machines need it?** That it is conservative (machine-precision) and reduces
    spanwise entropy stratification *by construction* (the *direction* is
-   guaranteed). At the Gallimore–Cumpsty-calibrated `c_mix = 5e-4` the *size*
-   of the reduction is **modest** — ~11% on two stages, not catching up as
-   stratification grows (§5). The historical ratio (~25× → ~6× → ~1.1×) is
-   the story of two compounding calibration errors (the Lieblein ω̄ inversion
-   and a ~20×-strong `c_mix`) being removed one at a time — a cautionary
-   example of an inflated claim, not a moving physical target.
+   guaranteed). At the Gallimore–Cumpsty-calibrated `c_mix = 5e-4`, on
+   in-window loss, the *size* of the reduction is **modest** — ~18% on two
+   stages, not catching up as stratification grows (§5). The historical ratio
+   (~25× → ~6× → ~1.1×-saturated → ~1.22× in-window) is the story of two
+   compounding calibration errors (the Lieblein ω̄ inversion and a ~20×-strong
+   `c_mix`) *plus* a saturated-loss case being fixed one at a time — a
+   cautionary example of an inflated claim, not a moving physical target.

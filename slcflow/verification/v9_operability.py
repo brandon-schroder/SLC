@@ -11,9 +11,12 @@ Status split (honest, and the same boundary V5 already sits on):
 
   * **Surge flagging is demonstrated on the V5 rotor** (``v5_rotor``): the
     meanline operating line rises in pressure ratio and the traversal reports
-    ``pr_turnover`` at the peak, section 6.7 "report, don't solve through".
-    Point-by-point agreement with a *reported* surge line is **[VERIFY]**,
-    blocked on the reference data (same as V5).
+    a stall onset at the peak, section 6.7 "report, don't solve through". The
+    recorded criterion is ``validity_saturated``: the Lieblein correlation's
+    validity collapses as incidence climbs toward stall before the (correctly
+    low, post-omega_bar-fix) loss turns PR over — see the continuation
+    ``_classify_stall`` note. Point-by-point agreement with a *reported* surge
+    line is **[VERIFY]**, blocked on the reference data (same as V5).
 
   * **Stable BC-switching is demonstrated on a well-posed testbed**
     (``bc_switch_testbed``, a swirling duct with a clean annulus choke
@@ -21,8 +24,9 @@ Status split (honest, and the same boundary V5 already sits on):
     back-pressure branch, throttles, and switches back on recovery with no
     limit-cycling. The *V5* meanline cannot be driven onto its own choke knee:
     the single-node continuity Jacobian is singular at the capacity peak
-    (``dF/dVm = 0`` at the compressible mass-flux maximum; measured M6-4 —
-    V5 meanline chokes at mdot ~ 175 kg/s), so the mdot-parameterized problem
+    (``dF/dVm = 0`` at the compressible mass-flux maximum; the retuned V5
+    meanline annulus chokes at mdot ~ 118 kg/s), so the mdot-parameterized
+    problem
     is singular there by construction, and the supersonic-mdot branch has no
     physical entropy without a *compressor* shock-loss closure — that
     traversal is **[VERIFY]**.

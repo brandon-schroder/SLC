@@ -25,7 +25,7 @@ from slcflow.verification.v9_operability import V9Operability
 # --------------------------------------------------------------------------
 def test_v9_v5_operating_line_reports_margin_and_flags_surge():
     line = V9Operability.v5_rotor().operating_line(
-        mdot_start=130.0, mdot_min=70.0, mdot_step=10.0)
+        mdot_start=110.0, mdot_min=55.0, mdot_step=10.0)
     # A rising characteristic that ends by REPORTING stall onset, with the
     # firing criterion recorded (section 6.7). For the Lieblein rotor the
     # correlation validity collapses to 0 as incidence climbs toward stall

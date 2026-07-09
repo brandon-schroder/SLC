@@ -434,22 +434,22 @@ model, not a convergence device: the un-mixed multistage case converges too
 claim — that was a pre-stabilization driver artifact (Guide 3 §4–5). What
 mixing *should* do is bound the spanwise entropy stratification, and it is
 provably conservative (machine-precision, tested). But the *size* of the
-effect on this showcase case has collapsed as two calibrations were corrected:
-~25× reduction was reported when the compressor loss was ~4× too high (the
-Lieblein ω̄ inversion) **and** the mixing coefficient was ~20× too strong
-(`c_mix = 0.01`); ~6× after the ω̄ fix alone; and — now that `c_mix` is
-Gallimore–Cumpsty-calibrated (`5×10⁻⁴`, Guide 3 §5) — only ~1.1× (spread 1.68
-vs 1.88 J/(kg·K)). That last number is the *honest* one: at a correctly
-calibrated coefficient, spanwise mixing on this two-stage case is a **modest
-~11% damping, not a homogenizer**, and it does not catch up as stratification
-grows with stage count (Guide 3 §5). Two caveats keep it soft rather than
-sharp: the whole V5 Lieblein family runs at closure **validity 0** (the
-representative metal angles sit outside the correlation's calibration window —
-a family-wide `[VERIFY]`, not unique to this case), so the absolute spreads
-come from smoothly-saturated loss; and the normative Appendix C.5m has been
-updated to this ~1.1× reality. The durable claims (mixing conserves; mixing
-reduces stratification by design; the un-mixed solve converges) hold. This is
-exactly what the snapshot discipline is for.
+effect on this showcase case collapsed as two calibrations **and** a
+saturated-loss case were corrected in turn: ~25× reduction was reported when
+the compressor loss was ~4× too high (the Lieblein ω̄ inversion) **and** the
+mixing coefficient was ~20× too strong (`c_mix = 0.01`); ~6× after the ω̄ fix;
+~1.1× at the calibrated `c_mix` **but still on saturated loss** (the whole V5
+Lieblein family ran at closure **validity 0** — the over-loaded, untwisted
+blades over a wide annulus drove the diffusion factor `D_eq` out of the
+correlation's window, even the single-stage rotor); and finally **~18%** once
+the annulus was retuned (hub/tip 0.64 → 0.73) to put the loss in-window. That
+last is the *honest, meaningful* number: at a correctly calibrated coefficient
+on in-window loss, spanwise mixing on this two-stage case is a **modest ~18%
+damping, not a homogenizer**, and it does not catch up as stratification grows
+with stage count (Guide 3 §5). The normative Appendix C.5m carries this. The
+durable claims (mixing conserves; mixing reduces stratification by design; the
+un-mixed solve converges) hold. This is exactly what the snapshot discipline
+is for.
 
 **A consistency check you can do by eye.** Run A's exit: `rVθ = 41.16
 m²/s`, `h0 = 316 463 J/kg`. Euler's work: `Δh0 = ω·ΔrVθ = 400 × 41.16 =

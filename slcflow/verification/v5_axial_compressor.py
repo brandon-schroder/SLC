@@ -8,7 +8,11 @@ for, or a spanwise grid for Tier 2/3.
 
 **Status (M4 entry point).** This binds the *structural* half of V5: the case
 converges end-to-end, does real work with real loss, and lands its
-total-to-total pressure ratio and efficiency in physically sane bands. The
+total-to-total pressure ratio and efficiency in physically sane bands. As of
+the 2026-07 retune it also runs **inside** the Lieblein correlation's validity
+window (closure validity 1.0 at the design point and across most of its
+operating line), so the reported loss is in-domain rather than saturated — see
+the geometry comment below. The
 quantitative half — reproducing a *specific* NASA case (e.g. the two-stage fan
 or rotor 67) point-by-point against published throughflow/test data, and
 speedline generation with choke-side behaviour — is **[VERIFY]** and blocked
@@ -55,15 +59,25 @@ class V5AxialRotor:
     geometry object (AD-7).
     """
 
-    r0: float = 0.3
+    # Geometry/loading tuned (2026-07) to run INSIDE the Lieblein SP-36
+    # validity window at every tier. The original -63/-45 over a hub/tip 0.5
+    # annulus was an over-loaded, untwisted blade: with zero inlet swirl the
+    # relative inlet angle beta1_flow = atan(omega r / Vm) swings hard across a
+    # 2:1 radius ratio, so a constant metal angle drove the equivalent
+    # diffusion factor D_eq to ~3 (window [1,2]) and beta1 past 70 deg at the
+    # spanwise tiers -> closure validity 0 (the loss became saturated garbage,
+    # even though PR/eta stayed in-band). Narrowing to hub/tip 0.75 (a more
+    # representative NACA-65 mid-stage annulus) and moderating the turning
+    # keeps D_eq in [1.2, 1.6] and beta1 < 55 deg, validity 1.0.
+    r0: float = 0.45
     r1: float = 0.6
     length: float = 1.0
     omega: float = 400.0             # rad/s
-    mdot: float = 100.0              # kg/s
+    mdot: float = 100.0              # kg/s (valid window ~[80, 115]; choke ~118)
     h0_in: float = 3.0e5             # J/kg
     s_in: float = 0.0
-    beta1_blade_deg: float = -63.0   # relative metal angle, LE
-    beta2_blade_deg: float = -45.0   # relative metal angle, TE
+    beta1_blade_deg: float = -52.0   # relative metal angle, LE
+    beta2_blade_deg: float = -40.0   # relative metal angle, TE
     solidity: float = 1.2
     chord: float = 0.06
     thickness: float = 0.08
@@ -122,7 +136,11 @@ class V5MultistageCompressor:
     """
 
     n_stages: int = 2
-    r0: float = 0.35
+    # hub/tip 0.73 (was 0.64): keeps the untwisted matched-stage blades inside
+    # the Lieblein SP-36 validity window (D_eq <= ~1.45, was 2.25 -> validity 0)
+    # at every tier, so the loss the mixing comparison sees is in-domain. Same
+    # root cause + fix as the single-rotor V5AxialRotor retune (2026-07).
+    r0: float = 0.40
     r1: float = 0.55
     length: float = 1.0
     omega: float = 300.0

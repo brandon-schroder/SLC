@@ -279,7 +279,8 @@ built from. Loss→entropy conversions are in `closures/conversions.py`
 tridiagonal in `q`) diffusion of `{h0, s, rVθ}`. It is finite-volume with
 zero-flux walls, so it **conserves** the mass-flux-weighted total of each field
 and is **unconditionally stable**. The default `GallimoreMixing` coefficient is
-`μ_mix = c_mix·ρ·Vm·r` with `c_mix = 0.01` (**`[VERIFY]`**). It runs in the
+`μ_mix = c_mix·ρ·Vm·r` with `c_mix = 5×10⁻⁴` (Gallimore–Cumpsty-calibrated,
+2026-07; was `0.01`, ~20× too strong). It runs in the
 driver's *lagged* refresh (never the residual path) and is gated by
 `FidelityConfig.mixing_term`, so it is a strict no-op unless a case opts in.
 
@@ -330,9 +331,12 @@ many *structural* ones. Be precise about which is which.
   iterations); Newton finishing and a §6.4 recalibration on
   blade-row-coupled bends (C.3 was duct-calibrated, possibly
   artifact-contaminated) are the follow-ups. The M8-3 "mixing is a
-  convergence prerequisite" claim fell with the same artifact — the
-  surviving §3.6 claim is the measured ~25× spanwise entropy stratification
-  without mixing.
+  convergence prerequisite" claim fell with the same artifact; the surviving
+  §3.6 claim — spanwise stratification without mixing — was then re-measured
+  by the 2026-07 reference-calibration pass down from "~25×" to a **modest
+  ~18%** (the "25×" ran on inflated + saturated loss; fixed the Lieblein ω̄
+  inversion, calibrated `c_mix`→5e-4, and retuned V5 into the validity
+  window). Mixing is a modest damping, not a homogenizer.
 - Real-gas backend, JAX/AD backend, closure-in-Newton, endwall
   boundary-layer *model*, cooling/bleed flows: all deliberately deferred
   (ARCH-9).
@@ -353,7 +357,7 @@ plausibility bands are wide by intent. The right adversarial question is
 | **V1** | Analytic REE, grid order | **Quantitative** (order 1.94) |
 | **V2** | Curved annulus, full Tier 3 vs planar-limit | Quantitative-ish (planar limit; external CFD cross-check `[VERIFY]`) |
 | **V3** | Tier consistency (Tier2≡Tier3, Tier1 mass-avg) | **Quantitative** (bit-for-bit) |
-| **V5** | Axial compressor (single + **multistage**) | Structural; multistage shows mixing is a **convergence prerequisite** |
+| **V5** | Axial compressor (single + **multistage**) | Structural (in-window loss after 2026-07 retune); multistage shows mixing is a **modest damping** (~18%), not a homogenizer |
 | **V6** | Axial turbine (K-O set) | Structural |
 | **V7** | Centrifugal impeller (first radial end-to-end) | Structural; Tier-3 needs INBLADE subdivision |
 | **V8** | Mixed-flow (partial-φ bend) | Structural at all tiers (Tier 3 since the 2026-07 stabilization) |

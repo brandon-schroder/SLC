@@ -1,30 +1,31 @@
 """Multistage-compressor mixing revisit (Theory Manual sections 9.5, 3.6;
-Appendix C.5m; M8 sub-step 3, REVISED TWICE in 2026-07).
+Appendix C.5m; M8 sub-step 3, REVISED repeatedly through 2026-07).
 
 Section 3.6's stated motivation is that multistage machines "develop
 unrealistic spanwise stratification of h0, s and rVt without a mixing model."
 This case exercises the operator on a two-stage axial compressor: mixing ON
-vs OFF, at the Gallimore-Cumpsty-calibrated coefficient.
+vs OFF, at the Gallimore-Cumpsty-calibrated coefficient, now with the case
+geometry retuned so the Lieblein loss runs INSIDE its validity window
+(closure validity 1.0, not the earlier saturated 0 -- so the stratification is
+a meaningful measurement, not saturated-loss garbage).
 
-**What this actually measures (the honest, twice-corrected result).** At the
-G-C-calibrated ``c_mix = 5e-4`` (docs/references/GC86.md, resolution pass
-2026-07) spanwise mixing is a MODEST damping of the exit entropy spread --
-measured ~11% on two stages (s_base 1.88 -> s_mix 1.68 J/(kg.K)), holding at
-~8-11% up to four stages while the absolute spread itself grows
-(2/3/4 stages: 1.9/6.8/10.3 J/(kg.K)). It is NOT a homogenizer: the mixing
-does not catch up with the stratification production. That is what this file
-pins now.
+**What this measures (the honest, in-window result).** At the G-C-calibrated
+``c_mix = 5e-4`` spanwise mixing is a MODEST damping of the exit entropy
+spread -- measured ~18% on two stages (s_base 0.267 -> s_mix 0.218 J/(kg.K)),
+~14% at three and four stages -- while the absolute spread itself grows
+(2/3/4 stages: 0.27/2.73/5.23 J/(kg.K)). It does NOT catch up with the
+stratification production, i.e. it is not a homogenizer. That is what this
+file pins.
 
-Two historical over-claims, both since traced to artifacts (kept as a warning):
-  * M8-3 recorded mixing as a *convergence prerequisite* (mixing-off
-    NUMERICAL_FAILURE at 800 iters). The 2026-07 Tier-3 stabilization showed
-    that was the driver's stale-split / spurious-branch bug, not physics --
-    un-mixed now converges fine.
-  * The same revision then recorded a *dramatic* stratification difference
-    (~6-25x). That was the over-strong ``c_mix = 0.01`` (~20x the G-C
-    calibration); at the corrected coefficient the effect is the modest ~11%
-    above. The "mixing flattens multistage stratification" narrative does not
-    survive an honestly-calibrated coefficient on this representative case.
+The claim has been wrong three times before, each a traced artifact (kept as a
+warning): (1) M8-3 called mixing a *convergence prerequisite* -- a driver
+stale-split bug (fixed at the 2026-07 Tier-3 stabilization; un-mixed converges
+fine). (2) The revision called it a *dramatic homogenizer* (~25x) -- the
+compound artifact of the Lieblein omega_bar inversion (~4x too much loss) and
+a ~20x-strong c_mix. (3) After both were fixed the case still ran at closure
+validity 0 (over-loaded, untwisted blade over a wide annulus -> D_eq out of
+window), so the loss was saturated. Retuning the annulus (hub/tip 0.64 -> 0.73)
+put it in-window; the surviving claim is the modest damping above.
 
 Structural gate (bands, not V5 validation tolerances -- [VERIFY], as the
 single-stage V5). Provenance: M8 sub-step 3, written with the case.
@@ -57,7 +58,7 @@ def without_mixing(case):
 
 
 # --------------------------------------------------------------------------
-# Section 3.6: mixing lets the multistage converge and compress
+# Section 3.6: mixing lets the multistage converge and compress, in-window
 # --------------------------------------------------------------------------
 def test_multistage_with_mixing_converges_and_compresses(with_mixing, case):
     r = with_mixing
@@ -67,6 +68,9 @@ def test_multistage_with_mixing_converges_and_compresses(with_mixing, case):
     assert r.pressure_ratio > 1.0                    # net compression
     elo, ehi = case.eta_band
     assert elo < r.efficiency < ehi
+    # The retune's whole point: the loss runs IN the Lieblein validity window.
+    val = float(np.asarray(r.result.frozen.closures.validity).min())
+    assert val > 0.5
 
 
 def test_multistage_with_mixing_deswirls(with_mixing):
@@ -86,18 +90,18 @@ def test_multistage_with_mixing_deswirls(with_mixing):
 # --------------------------------------------------------------------------
 def test_mixing_modestly_reduces_stratification_at_gc_calibration(
         without_mixing, with_mixing):
-    # RESOLUTION PASS 2026-07 (c_mix 0.01 -> 5e-4, G-C-calibrated): the earlier
-    # "dramatic (>4x) stratification difference" was the over-strong
-    # coefficient. At the honest coefficient the mixed exit spread is only
-    # slightly below the un-mixed one -- measured ~11% (s_base 1.88 vs s_mix
-    # 1.68 J/(kg.K)). Both converge; the direction (mixing REDUCES the spread)
-    # is a guaranteed property of the diffusion operator; the SMALLNESS is the
-    # finding this pins (refuting the old homogenization claim).
+    # At the honest c_mix (5e-4) AND in-window loss (the 2026-07 retune), the
+    # mixed exit spread is only slightly below the un-mixed one -- measured
+    # ~18% on two stages (s_base 0.267 vs s_mix 0.218 J/(kg.K)). Both converge
+    # in-window; the direction (mixing REDUCES the spread) is a guaranteed
+    # property of the diffusion operator; the SMALLNESS is the finding this
+    # pins (refuting the old "dramatic homogenizer" claim).
     base, mix = without_mixing, with_mixing
     assert base.converged
+    assert float(np.asarray(base.result.frozen.closures.validity).min()) > 0.5
     s_base = float(np.ptp(base.result.frozen.transported.s[:, -1]))
     s_mix = float(np.ptp(mix.result.frozen.transported.s[:, -1]))
     assert s_base > s_mix                            # mixing reduces the spread
     assert s_base > 1.05 * s_mix                     # by a real (>5%) amount
     assert s_base < 1.5 * s_mix                      # but only modestly (<50%)
-    assert s_base > 1.0                              # spread is non-trivial
+    assert s_base > 0.15                             # spread is non-trivial

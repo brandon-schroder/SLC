@@ -101,10 +101,11 @@ below cannot read scanned PDFs). Relevant notebooks:
   too strong). **Fixed (resolution pass, option B): default `0.01 → 5e-4`**,
   keeping the r-based form (`stage` is ill-defined in the q-o march, so option
   A's `L_s` re-base was declined). **Paired V5 re-measure refutes the M8
-  homogenization claim**: at the honest coefficient mixing shaves only ~8–11%
-  off the exit `Δs` spread (2/3/4 stages) and does not catch up as
-  stratification grows — the old "~25×" was the compounded artifact of the
-  inflated Lieblein loss + the 20×-strong `c_mix`. C.5m + test revised.
+  homogenization claim**: at the honest coefficient (and after the V5 annulus
+  retune that puts the loss in-window) mixing shaves only ~14–18% off the exit
+  `Δs` spread (2/3/4 stages) and does not catch up as stratification grows —
+  the old "~25×" was the compounded artifact of the inflated Lieblein loss +
+  the 20×-strong `c_mix`. C.5m + test revised.
   Primary G-C source is in the **"Reduced-Order Aerodynamic Solvers"**
   notebook; Wisler-1987 evaluation in the loss notebook.
 - **AUN-C (Aungier compressor fits) — all incidence/deviation coefficients

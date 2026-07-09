@@ -355,8 +355,12 @@ These are not suggestions; violating them is a bug even if tests pass.
   reproduces its old fixed point (197 it, PR 2.4540); multistage V5
   mixing-off now *converges* — **the M8-3 "mixing is a convergence
   prerequisite" claim was the same artifact**; the surviving physical claim
-  (25× exit-entropy stratification without mixing, 17.6 vs 0.69 J/(kg·K)) is
-  what `test_multistage_mixing` now pins. Both tripwires flipped; C.5m/C.7/
+  (spanwise stratification without mixing) was itself later re-measured down
+  from "25×" to a **modest ~18%** by the 2026-07 reference-calibration pass
+  (Lieblein ω̄-inversion fix + G–C `c_mix`→5e-4 + a V5 annulus retune putting
+  the loss in-window — the "25×" ran on saturated, validity-0 loss); mixing is
+  a modest damping, not a homogenizer, as `test_multistage_mixing` now pins.
+  Both tripwires flipped; C.5m/C.7/
   C.8 revised; prescribed-closure exactness tests moved to closure-lag
   tolerance (ramp residual ~ tol_closure/closure_relax ≈ 4e-9 rel). Open
   follow-ups: Tier-3 radial/mixed is *slow* (ω_sl ≈ 0.066 throttle; Newton
