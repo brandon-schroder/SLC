@@ -12,10 +12,19 @@ forms with ``WorkingFluid`` inversions while keeping the same coefficient
 
 Bookkeeping rules (B.5): convert loss components INDIVIDUALLY, then sum the
 resulting delta_s — never sum pressure-loss coefficients with different
-reference dynamic heads. Each source correlation's exact coefficient
-definition (reference dynamic head, frame) is **[VERIFY per correlation]**
-against its paper — the single most common implementation bug class in
-throughflow codes (section 4.4).
+reference dynamic heads.
+
+Verification status (docs/references/CONV-B.md, 2026-07-09, vs Denton /
+Cumpsty / Aungier / Dixon / Lakshminarayana): the definitions and reference
+dynamic heads are CONFIRMED and pinned in test_conversions_reference.py — the
+master ``delta_s = -R ln(p02/p01)`` (Denton 4a), compressor ``omega_bar`` on
+the INLET dynamic head (Cumpsty; Dixon 3.5), turbine ``Y`` on the EXIT
+("discharge") dynamic head (Aungier), and the "compressor->inlet KE,
+turbine->exit KE" convention. Per-correlation attachments cross-checked in
+LIEB59 (Lieblein omega_bar->inlet), KO82 (K-O Y->exit), CENT-LOSS (enthalpy
+loss). One benign nuance remains: B.4 ``zeta`` uses the ACTUAL exit KE
+``1/2 V2^2`` while Denton uses the IDEAL ``1/2 c2is^2`` (equal at low loss;
+zeta is only the K-O TE term here, mapped to Y before summing).
 
 All functions vectorized over streamtube arrays; smooth (log/exp) in their
 coefficient arguments, so section 7.3 C1 discipline is inherited from the

@@ -59,6 +59,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **CONV-B (Appendix-B loss→entropy definitions) — all CONFIRMED**, see
+  [`CONV-B.md`](CONV-B.md) and `tests/test_conversions_reference.py`. The
+  foundational layer: master `Δs=−R ln(p02/p01)` (Denton 4a), compressor `ω̄`
+  on the **inlet** dynamic head (Cumpsty/Dixon 3.5), turbine `Y` on the
+  **exit** dynamic head (Aungier), KE `ζ` (Denton), and the
+  compressor-inlet/turbine-exit convention — all verbatim. No bug. One benign
+  nuance: B.4 `ζ` uses actual vs Denton's ideal exit KE (`ζ` is only the K-O
+  TE term, mapped to `Y` before summing).
 - **AM-ANGLE (Ainley turbine exit angle) — throat rule CONFIRMED**, see
   [`AM-ANGLE.md`](AM-ANGLE.md) and `tests/test_ainley_reference.py`. The
   coded `α2 = arccos(o/s)` is AM's M2=1 gauge angle (Eq 2) — the correct
