@@ -6,14 +6,27 @@ reproduced in the standard texts (Cumpsty; Aungier; Dixon):
 
     D_eq   = (W1/W2) [1.12 + 0.61 (cos^2 beta1 / sigma)(tan beta1 - tan beta2)]
     theta/c = 0.004 / (1 - 1.17 ln D_eq)
-    omega_bar_min = 2 (theta/c) (sigma / cos beta2) (W1/W2)^2
+    omega_bar_min = 2 (theta/c) (sigma / cos beta2) (W2/W1)^2   # see [BUG]
 
-with a quadratic off-design bucket about the reference incidence,
-``omega_bar = omega_bar_min (1 + ((i - i_ref)/w_bucket)^2)``, ``w_bucket``
-a documented width. **[VERIFY: every coefficient and the bucket width
-against the library copies (Lieblein 1959; SP-36; Aungier ch. 6) — encoded
-from general knowledge pending the library pass. The theta/c fit's validity
-ends near D_eq ~ 2 (stall); saturation below reflects that.]**
+Verification status (docs/references/LIEB59.md, 2026-07-09, vs Aungier ch.6 /
+Cumpsty / Dixon): D_eq (1.12, 0.61), theta/c (0.004, 1.17), and the inlet-
+relative reference dynamic head are CONFIRMED (pinned in
+tests/test_lieblein_loss_reference.py).
+
+**[BUG -- confirmed, fix DEFERRED to the consolidated resolution pass.]** The
+omega_bar velocity-ratio factor is INVERTED. Aungier Eq 6-27 and Cumpsty Eq
+1.32 both give ``omega_bar = 2 (theta/c)(sigma/cos beta2)(W2/W1)^2``, but the
+code below (``:evaluate``) uses ``(W1/W2)^2``. For a compressor W2 < W1 so this
+overestimates profile loss by ~(W1/W2)^4 (~4x at DF~0.45). Not fixed in
+isolation because it shifts every V4/V5 result and may interact with the
+M4-tuned _WBAR_CEIL and 10-deg bucket; needs a paired loss-calibration re-look
++ V5 re-measurement.
+
+**[DECIDE] off-design model:** the quadratic bucket (``w_bucket``, 10 deg
+default) is our substitution; Lieblein's published off-design extends D_eq by
+``+k(i-i*)^1.43`` (k=0.0117 NACA-65; Aungier 6-38 / Dixon 3.41). The theta/c
+fit's validity ends near D_eq ~ 2.35 (denominator zero); saturation reflects
+that.
 
 The native coefficient is the B.2 relative-total-pressure loss
 ``omega_bar`` referenced to the INLET relative dynamic head; conversion to
@@ -115,6 +128,10 @@ class LieblienLoss:
 
         d_eq = equivalent_diffusion(w1, w2, b1r, b2r, sigma, xp=xp)
         theta_c, v_d = wake_momentum_thickness(d_eq, xp=xp)
+        # [BUG] velocity ratio is INVERTED: Aungier 6-27 / Cumpsty 1.32 give
+        # (W2/W1)^2, not (W1/W2)^2 -- ~4x loss overestimate for a compressor.
+        # Fix deferred to the consolidated resolution pass (docs/references/
+        # LIEB59.md): touches every V4/V5 result + the M4 loss calibration.
         omega_min = (2.0 * theta_c * sigma / xp.cos(b2r)
                      * (w1 / w2) ** 2)
         omega_raw = omega_min * (1.0 + ((i - i_ref)

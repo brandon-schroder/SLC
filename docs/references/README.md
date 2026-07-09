@@ -59,6 +59,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **LIEB59 (Lieblein compressor profile loss) — constants CONFIRMED, one
+  `[BUG]` found**, see [`LIEB59.md`](LIEB59.md) and
+  `tests/test_lieblein_loss_reference.py`. `D_eq` (1.12, 0.61) and `θ*/c`
+  (0.004, 1.17) verified vs Aungier/Cumpsty/Dixon. **Confirmed bug** (fix
+  deferred to the consolidation pass): the ω̄ velocity ratio is inverted —
+  code `(W1/W2)²`, source `(W2/W1)²` → ~4× loss overestimate for a
+  compressor (pinned as a strict xfail). Plus a `[DECIDE]` off-design model
+  substitution (quadratic bucket vs Lieblein's `D_eq += k(i−i*)^1.43`).
 - **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` value is a
   `[DECIDE]`**, see [`GC86.md`](GC86.md). The turbulent-diffusion form is
   right, but the coded `c_mix=0.01` does NOT match G-C: they recommend
