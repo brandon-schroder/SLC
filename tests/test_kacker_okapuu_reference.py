@@ -61,6 +61,21 @@ def test_shock_coefficient_and_exponent_match_ko82():
     assert ratio == pytest.approx(2.0 ** 1.75, rel=1e-3)
 
 
+def test_te_zeta_to_Y_is_incompressible_limit_of_ko_relation():
+    # axial_turbine/loss.py maps the TE energy coefficient zeta to Y via
+    # Y_TE = zeta/(1-zeta). KO82's exact compressible relation (verbatim,
+    # KO82.md) is Y = {[1-(g-1)/2 M2^2(1/phi^2-1)]^(-g/(g-1)) - 1} /
+    # {1-(1+(g-1)/2 M2^2)^(-g/(g-1))} with phi^2 = 1-zeta. Its M2->0 limit
+    # must equal zeta/(1-zeta).
+    g, M2 = 1.4, 1e-4
+    for zeta in (0.02, 0.05, 0.10):
+        phi2 = 1.0 - zeta
+        num = (1.0 - (g - 1) / 2 * M2 ** 2 * (1.0 / phi2 - 1.0)) ** (
+            -g / (g - 1)) - 1.0
+        den = 1.0 - (1.0 + (g - 1) / 2 * M2 ** 2) ** (-g / (g - 1))
+        assert num / den == pytest.approx(zeta / (1.0 - zeta), rel=1e-3)
+
+
 def test_secondary_loss_constants_match_ko82():
     # KO82/DC: Y_s = 1.2 * 0.0334 * f_AR * (cos a2/cos a1) * (C_L/(s/c))^2 *
     # cos^2 a2 / cos^3 a_m, with C_L/(s/c) = 2|d(tan a)|*cos a_m (signed

@@ -55,10 +55,12 @@ below cannot read scanned PDFs). Relevant notebooks:
 
 **Discharged via this route:**
 - **KO82 (Kacker-Okapuu) — scalar formula constants CONFIRMED**, see
-  [`KO82.md`](KO82.md) and `tests/test_kacker_okapuu_reference.py`. Residual
-  `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
-  digitization), and a `[DECIDE]` on the negative-incidence interpolation
-  weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+  [`KO82.md`](KO82.md) and `tests/test_kacker_okapuu_reference.py`. Includes
+  the TE `Y_TE = ζ/(1−ζ)` mapping (confirmed as the M2→0 limit of the exact
+  compressible K-O relation). Residual `[VERIFY]`: the nozzle/impulse + TE
+  **chart** reference curves (need figure digitization), and a `[DECIDE]` on
+  the negative-incidence interpolation weight (AM-1957 `(b1/b2)^2` as coded vs
+  KO82 signed `|b1/b2|(b1/b2)`).
 - **CONV-B (Appendix-B loss→entropy definitions) — all CONFIRMED**, see
   [`CONV-B.md`](CONV-B.md) and `tests/test_conversions_reference.py`. The
   foundational layer: master `Δs=−R ln(p02/p01)` (Denton 4a), compressor `ω̄`
@@ -125,7 +127,7 @@ persisted answer). Both fixes are in the skill dir, not this repo.
 | Key | Document | Source URL | Discharges (topic → tag sites) | Verification status |
 |-----|----------|-----------|-------------------------------|---------------------|
 | **SP-36** | Johnsen & Bullock (eds.), *Aerodynamic Design of Axial-Flow Compressors*, NASA SP-36 (1965) | [archive.org item](https://archive.org/details/NASA_NTRS_Archive_19650013744) · [PDF 252 MB](https://archive.org/download/NASA_NTRS_Archive_19650013744/NASA_NTRS_Archive_19650013744.pdf) · [OCR txt](https://archive.org/stream/NASA_NTRS_Archive_19650013744/NASA_NTRS_Archive_19650013744_djvu.txt) | Compressor incidence/deviation/loss **chart outputs** for `lieblein.py` (`:8`,`:130` `[VERIFY others]`), `axial_compressor/loss.py` D_eq/θ*/c and the `[VERIFY range]`s; the V5 reference-figure reproduction points (`v5_axial_compressor.py:14,18,73`). | **Outputs only** — validates fit predictions at chart points; cannot validate Aungier's fit coefficients. Chart points require reading the figures (raster; not fetch-extractable). |
-| **AM51** | Ainley & Mathieson, *A Method of Performance Estimation for Axial-Flow Turbines*, ARC R&M 2974 (1951) | [Cranfield aerade PDF](https://reports.aerade.cranfield.ac.uk/bitstream/handle/1826.2/3538/arc-rm-2974.pdf) — vendored offline as [`AM51_arc-rm-2974.pdf`](AM51_arc-rm-2974.pdf) (2 MB, 32 pp) | Turbine exit-angle law `α2 = arccos(o/s)` and its geometry contract in `axial_turbine/ainley.py` (`:13` deviation correction, `:47`,`:55` `[VERIFY range]`/ceiling); the AM baseline the K-O profile/secondary losses build on (`kacker_okapuu.py`). | **Acquired but scanned** (no text layer; local copy in scratch `tool-results/`). Exit-angle law + loss framework are readable eyes-on-page; not yet transcribed. The K-O *coefficients* are 1982-era, **not** in AM51 → need K-O (below). |
+| **AM51** | Ainley & Mathieson, *A Method of Performance Estimation for Axial-Flow Turbines*, ARC R&M 2974 (1951) | [Cranfield aerade PDF](https://reports.aerade.cranfield.ac.uk/bitstream/handle/1826.2/3538/arc-rm-2974.pdf) (link only — scanned raster, no text layer) | Turbine exit-angle law `α2 = arccos(o/s)` and its geometry contract in `axial_turbine/ainley.py`; the AM baseline the K-O profile/secondary losses build on (`kacker_okapuu.py`). | **VERIFIED via the notebook library** (the AM content is quoted verbatim by the theory texts) — see [`AM-ANGLE.md`](AM-ANGLE.md). The scanned PDF was not needed; not vendored. K-O *coefficients* are 1982-era, **not** in AM51 → see KO82. |
 
 ## Paywalled — need a readable copy from you (ASME / books)
 
@@ -154,5 +156,8 @@ correlation+data first).
 4. Flip the code `[VERIFY]` to a citation of the note, and update the
    Theory-Manual §11 / Appendix-C provenance line.
 
-Large PDFs (SP-36 is 252 MB) stay at their archive URLs. The 2 MB AM51 scan
-is vendored offline (`AM51_arc-rm-2974.pdf`); everything else is a link.
+No source binaries are vendored — every reference is a link (or, for the
+paywalled set, a NotebookLM notebook). The AM51 scan was briefly vendored then
+removed: its content is verified via the notebook library (AM-ANGLE.md), and a
+32-page raster with no text layer was out of step with the markdown-note
+format of the rest.

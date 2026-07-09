@@ -51,9 +51,10 @@ class KackerOkapuuLoss:
 
     All three components share the B.3 exit-dynamic-head reference: the
     trailing-edge kinetic-energy coefficient is mapped to an equivalent
-    ``Y`` (``Y_TE = zeta/(1-zeta)``, [VERIFY]) so the family sums to one
-    exit-reference ``Y`` and one B.3 conversion (K-O standard; B.5-compliant
-    within the single-reference turbine family). Using B.3 rather than B.4
+    ``Y`` (``Y_TE = zeta/(1-zeta)`` -- CONFIRMED as the M2->0 incompressible
+    limit of the exact compressible K-O relation, docs/references/KO82.md) so
+    the family sums to one exit-reference ``Y`` and one B.3 conversion (K-O
+    standard; B.5-compliant within the single-reference turbine family). Using B.3 rather than B.4
     for the TE term keeps the residual path exception-free (AD-10) — B.4's
     ``assert`` guard cannot bind.
 
