@@ -149,18 +149,23 @@ class GallimoreMixing:
     intensity; a spanwise-velocity (Adkins-Smith) alternative is the recorded
     refinement.
 
-    **[DECIDE] c_mix -- verified NOT to match Gallimore-Cumpsty (see
-    docs/references/GC86.md).** The turbulent-diffusion FORM is confirmed, but
-    G-C nondimensionalize the diffusivity on the axial STAGE LENGTH,
-    ``eps/(V_z L_s) ~= 1.8e-3`` (range 1.6-2.7e-3, "good to one significant
-    figure"), while this form uses the local RADIUS ``r``. Reconciling,
-    ``c_mix ~= 1.8e-3*(L_s/r)/(1-B) ~= 2e-4..9e-4`` for typical geometry -- so
-    the default 0.01 is ~10-50x stronger than G-C. Left at 0.01 pending a
-    deliberate choice (re-base on L_s, or set ~5e-4) paired with a re-run of
-    the multistage V5 stratification measurement (which is sensitive to it).
+    **c_mix -- Gallimore-Cumpsty-calibrated (see docs/references/GC86.md).**
+    The turbulent-diffusion FORM is confirmed; G-C nondimensionalize the
+    diffusivity on the axial STAGE LENGTH, ``eps/(V_z L_s) ~= 1.8e-3`` (range
+    1.6-2.7e-3, "good to one significant figure"), while this form uses the
+    local RADIUS ``r``. Reconciling, the r-based constant is
+    ``c_mix ~= 1.8e-3*(L_s/r) ~= 4e-4..7e-4`` for representative stage geometry
+    (``L_s ~ 0.1 m``, ``r ~ 0.25-0.45 m``). **Resolved 2026-07 (option B, the
+    r-based retune):** default ``5e-4``, mid-band. (Was ``0.01``, ~20x stronger
+    than G-C -- an artifact the M8 stratification numbers were measured with;
+    those were re-measured with this value.) The remaining wrinkle -- ``c_mix``
+    now carries an implicit ``L_s/r`` geometry factor rather than being a clean
+    G-C transcription -- is the accepted cost of not adding a stage-length to
+    the mixing flow view (``stage`` is ill-defined in the station-by-station
+    q-o march; see GC86.md option A).
     """
 
-    c_mix: float = 0.01
+    c_mix: float = 5e-4
 
     def mu_mix(self, flow) -> Array:
         """Nodal ``mu_mix`` from a flow view exposing ``rho``, ``vm``, ``r``."""

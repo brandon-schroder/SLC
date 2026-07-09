@@ -91,15 +91,20 @@ below cannot read scanned PDFs). Relevant notebooks:
   **fixed** (resolution pass) — extracted to `profile_loss_coefficient`,
   V5 bands + full suite green. Remaining `[DECIDE]`: off-design model
   (quadratic bucket vs Lieblein's `D_eq += k(i−i*)^1.43`).
-- **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` value is a
-  `[DECIDE]`**, see [`GC86.md`](GC86.md). The turbulent-diffusion form is
-  right, but the coded `c_mix=0.01` does NOT match G-C: they recommend
-  `ε/(V_z·L_s) ≈ 1.8e-3` on the axial *stage length*, whereas the code
-  nondimensionalizes on *radius* — reconciled, a G-C-consistent value is
-  ~`5e-4` (the default is ~10–50× too strong). Left unchanged pending a
-  decision + V5-stratification re-run. Primary G-C source is in the
-  **"Reduced-Order Aerodynamic Solvers"** notebook; Wisler-1987 evaluation in
-  the loss notebook.
+- **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` RESOLVED**,
+  see [`GC86.md`](GC86.md). The turbulent-diffusion form is right, but the old
+  `c_mix=0.01` did NOT match G-C: they recommend `ε/(V_z·L_s) ≈ 1.8e-3` on the
+  axial *stage length*, whereas the code nondimensionalizes on *radius* —
+  reconciled, a G-C-consistent value is ~`5e-4` (the old default was ~10–50×
+  too strong). **Fixed (resolution pass, option B): default `0.01 → 5e-4`**,
+  keeping the r-based form (`stage` is ill-defined in the q-o march, so option
+  A's `L_s` re-base was declined). **Paired V5 re-measure refutes the M8
+  homogenization claim**: at the honest coefficient mixing shaves only ~8–11%
+  off the exit `Δs` spread (2/3/4 stages) and does not catch up as
+  stratification grows — the old "~25×" was the compounded artifact of the
+  inflated Lieblein loss + the 20×-strong `c_mix`. C.5m + test revised.
+  Primary G-C source is in the **"Reduced-Order Aerodynamic Solvers"**
+  notebook; Wisler-1987 evaluation in the loss notebook.
 - **AUN-C (Aungier compressor fits) — all incidence/deviation coefficients
   CONFIRMED**, see [`AUN-C.md`](AUN-C.md) and
   `tests/test_lieblein_reference.py`. Nine fits verified verbatim vs Aungier

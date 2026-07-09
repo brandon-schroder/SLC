@@ -542,14 +542,14 @@ The forced-vortex residue is larger because its $V_m$ genuinely varies across sp
 
 ### C.5m V5 multistage — mixing revisit (bound at M8-3; `tests/test_multistage_mixing.py`)
 
-The M8 revisit of V5 in a **multistage** configuration (`V5MultistageCompressor`, two repeating rotor+stator pairs on a cylindrical annulus, matched Lieblein stage: rotor $\beta=(-48°,-30°)$, stator $(25°,-5°)$ de-swirling to near-axial). This is the configuration §3.6 exists for, and the result is categorical rather than incremental:
+The M8 revisit of V5 in a **multistage** configuration (`V5MultistageCompressor`, two repeating rotor+stator pairs on a cylindrical annulus, matched Lieblein stage: rotor $\beta=(-48°,-30°)$, stator $(25°,-5°)$ de-swirling to near-axial). This is the configuration §3.6 exists for; the honest result, twice-corrected (see note), is that at Gallimore–Cumpsty calibration mixing is a **modest** damping, not a homogenizer:
 
 | Configuration ($N_{sl}=9$, Tier 3) | Converged | PR (t-t) | exit $\Delta s$ span spread |
 |---|---|---|---|
-| **mixing off** | yes (2026-07 revision; see note) | 1.177 | 17.6 J/(kg·K) |
-| **mixing on** (default Gallimore, $c_{mix}=0.01$) | yes | 1.18 | 0.69 J/(kg·K) |
+| **mixing off** | yes | 1.197 | 1.88 J/(kg·K) |
+| **mixing on** (default Gallimore, $c_{mix}=5\times10^{-4}$) | yes | 1.197 | 1.68 J/(kg·K) |
 
-**Revised at the 2026-07 Tier-3 stabilization.** M8-3 originally recorded the un-mixed two-stage as a NUMERICAL_FAILURE with a runaway ($\sim$40 J/(kg·K)) entropy split, and concluded mixing was a *convergence prerequisite*. The stabilization diagnosis showed that non-convergence was the driver's stale-split / spurious-branch artifact (see C.8 revision), not physics: post-fix the un-mixed case converges cleanly (89 iterations). The **physical** §3.6 claim survives and is what the regression now pins: without mixing the exit entropy profile is dramatically stratified — measured 17.6 vs. 0.69 J/(kg·K), a $\sim$25× spread — §3.6's "unrealistic spanwise stratification" made measurable rather than fatal. Bands are structural plausibility gates as for single-stage V5; $c_{mix}$ stays **[VERIFY]** (calibration deferred, ARCH-9).
+**Twice-revised in 2026-07 — a cautionary entry.** M8-3 originally recorded the un-mixed two-stage as a NUMERICAL_FAILURE with a runaway ($\sim$40 J/(kg·K)) entropy split and concluded mixing was a *convergence prerequisite*; the Tier-3 stabilization (see C.8) showed that was the driver's stale-split / spurious-branch artifact, and the un-mixed case converges cleanly. The revision then recorded a *dramatic* difference ($\sim$25×, 17.6 vs. 0.69 J/(kg·K)) — but that used $c_{mix}=0.01$, later found ($\sim$20×) stronger than G–C's calibration (GC86.md). After the Lieblein $\bar\omega$-inversion fix (lower loss) **and** the G–C-calibrated $c_{mix}=5\times10^{-4}$ (resolution pass), the measured effect is the modest $\sim$11% above, holding at $\sim$8–11% up to four stages (2/3/4 stages: 1.9/6.8/10.3 J/(kg·K) un-mixed) while the absolute spread grows — i.e. mixing does **not** catch up with the stratification production on this representative case. The direction (mixing reduces the spread) is a guaranteed operator property; the *smallness* is the finding the regression now pins. The "mixing flattens multistage stratification" narrative does not survive an honestly-calibrated coefficient here. Bands are structural plausibility gates as for single-stage V5; $c_{mix}$ is now G–C-calibrated (option B, r-based retune; GC86.md), with the remaining $L_s/r$ geometry factor the accepted cost of that form.
 
 ### C.6 V6 — Axial turbine, structural (bound at M6-5; `tests/test_v6_axial_turbine.py`)
 
