@@ -59,6 +59,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **WIE67 (Wiesner slip) — base form CONFIRMED**, see [`WIE67.md`](WIE67.md)
+  and `tests/test_wiesner_reference.py` (cross-agreeing across six texts).
+  `σ = 1 − √(cos β2b)/Z^0.7`, β2b from radial, exponent 0.7 — verified. Found:
+  the code omits the radius-ratio limit correction (`ε=exp(−8.16 cos β2b/Z)`
+  + cubic reduction) — `[DECIDE]`, off-limit only; von Backström not in the
+  library; a sin/cos docstring slip corrected. NB the Wiesner source lives in
+  the **"Staging Area (Theory)"** notebook (centrifugal texts), not the loss
+  notebook.
 
 Query mechanics (for the next pass): NotebookLM persists chat server-side and
 will anchor on it — **clear the chat between topics** (`scripts/clear_chat.py`,

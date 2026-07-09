@@ -18,12 +18,23 @@ reduce the exit swirl (and the Euler work). The closure is phi-agnostic in
 form: it reads the meridional (radial) velocity and the exit radius from the
 flow view, so it works at any exit orientation the grid provides.
 
-**[VERIFY: the Wiesner coefficient/exponent and the low-solidity /
-radius-ratio limit correction (sigma is reduced for r1/r2 above
-exp(-8.16 sin(beta2b)/Z)) against the library copies; the von Backstrom
-single-parameter alternative is the recorded [VERIFY] option. Encoded from
-the standard published form pending the library pass, as for the axial
-sets.]**
+Verification status (see ``docs/references/WIE67.md``, 2026-07-09, cross-
+checked against Aungier/Braembussche/Cumpsty/Dixon/Lakshminarayana/Whitfield-
+Baines): the base form is CONFIRMED -- ``sqrt(cos)``, the ``Z**0.7`` exponent,
+no leading coefficient, and ``beta2b`` referenced from the RADIAL direction
+(the standard Wiesner/American convention; Aungier's ``sin`` form is the same
+quantity referenced from the tangent). Pinned in ``test_wiesner_reference.py``.
+
+**[DECIDE] the radius-ratio limit correction (a real omission, off-limit
+only).** Wiesner's slip factor is reduced once ``r1/r2`` exceeds a limit
+``eps_lim = exp(-8.16 cos(beta2b)/Z)`` (from-radial form -- NB ``cos`` not the
+``sin`` of Aungier's tangent convention; constant 8.16 confirmed). Above it,
+``sigma_corr = sigma*[1 - ((r1/r2 - eps_lim)/(1 - eps_lim))**3]`` (Braembussche;
+Aungier uses ``beta2/10`` not the cube). This closure applies only the base
+``sigma`` -- it does not read the inducer radius ``r1`` -- so the correction is
+never applied; adding it is a section 4.1 geometry-contract addition + a
+behavior change. The von Backstrom single-parameter alternative is NOT in the
+library, so it stays an unresourced option.
 
 Smoothness (section 7.3): the backsweep is soft-saturated into ``[0, 85 deg)``
 so ``sqrt(cos)`` and ``tan`` stay bounded, and every evaluation returns a
@@ -49,7 +60,7 @@ _Z_CAL = (3.0, 40.0, 1.0)                        # calibrated blade-count band
 
 def wiesner_slip(beta2b_rad, blade_count, *, xp=None):
     """Wiesner slip factor ``sigma = 1 - sqrt(cos(beta2b)) / Z^0.7``
-    (section 3.4; [VERIFY coefficient/exponent]).
+    (section 3.4; form/exponent CONFIRMED, docs/references/WIE67.md).
 
     ``beta2b`` is the exit backsweep from the meridional/radial direction
     (sign-agnostic; the magnitude enters through ``cos``). Returns
