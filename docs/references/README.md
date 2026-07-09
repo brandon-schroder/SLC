@@ -59,6 +59,13 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **CENT-LOSS (centrifugal incidence + skin friction) — both forms
+  CONFIRMED**, see [`CENT-LOSS.md`](CENT-LOSS.md) and
+  `tests/test_centrifugal_loss_reference.py`. Incidence `½(ΔWθ)²` = Galvas
+  Eq 5.6; skin-friction leading `2·Cf` = Galvas `4·Cf·W²/2`; `Cf=0.005` =
+  Braembussche typical. No bug. Two `[DECIDE]`s: incidence `f_inc` (code uses
+  1.0; Conrad 0.5–0.7 / Aungier 0.8) and `W_avg²` (code square-of-mean vs
+  Aungier mean-of-squares).
 - **LIEB59 (Lieblein compressor profile loss) — constants CONFIRMED, one
   `[BUG]` found**, see [`LIEB59.md`](LIEB59.md) and
   `tests/test_lieblein_loss_reference.py`. `D_eq` (1.12, 0.61) and `θ*/c`

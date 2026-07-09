@@ -18,12 +18,21 @@ quantities (the relative exit velocity ``W2`` and ``T2``) are built from the
 shared Wiesner slip (same CorrelationSet) and B.1 rothalpy re-referencing
 across the radius change -- no addition to the flow-view contract.
 
-**[VERIFY: coefficients, and the deferred components (blade-loading
-diffusion, tip-clearance, disk-friction/windage, recirculation, leakage) that
-extend the set at V7 calibration time -- encoded from the standard published
-forms pending the library pass, as for the axial sets.]** ``Cf`` and
-``l_over_dhyd`` are row-scalar design inputs (geometry-derived hydraulic
-length is a later refinement).
+Verification status (docs/references/CENT-LOSS.md, 2026-07-09, vs Galvas
+NASA TN D-7487 / Aungier / Conrad / Braembussche): both base forms CONFIRMED --
+the incidence ``1/2 (dW_theta)^2`` is Galvas Eq 5.6 (W_x sin(dbeta) = dW_theta),
+the skin-friction leading ``2 Cf`` is Galvas ``4 Cf W^2/2``, and Cf=0.005 is
+Braembussche's typical wall value. Pinned in test_centrifugal_loss_reference.py.
+
+**[DECIDE] two modeling choices (documented, not changed):** (a) incidence
+uses the FULL NASA KE (f_inc=1); Conrad applies 0.5-0.7 and Aungier 0.8 -- the
+coded value is the conservative upper bound. (b) skin friction squares the mean
+velocity, ``[1/2(W1+W2)]^2``; Aungier specifies the mean of the squares,
+``1/2(W1^2+W2^2)``. **[VERIFY]** the deferred components (blade-loading
+diffusion, tip-clearance, disk-friction/windage, recirculation, leakage; Oh-
+Yoon-Chung 1997 set) at V7 calibration time. ``Cf``/``l_over_dhyd`` are
+row-scalar design inputs (geometry-derived hydraulic length is a later
+refinement).
 """
 from __future__ import annotations
 
@@ -44,7 +53,8 @@ _T_FLOOR, _T_W = 20.0, 5.0                   # exit static-T floor (a2 real)
 
 def incidence_loss(w_theta_flow, w_theta_blade, *, xp=None):
     """Inducer incidence loss ``dh = 1/2 (W_theta_flow - W_theta_blade)^2``
-    [J/kg] (section 4.3; the sudden-turning / NASA-style form; [VERIFY])."""
+    [J/kg] (section 4.3; Galvas/NASA Eq 5.6, CONFIRMED -- CENT-LOSS.md; a
+    Conrad/Aungier f_inc=0.5-0.8 reducing factor is a [DECIDE] refinement)."""
     xp = get_xp(xp)
     d = w_theta_flow - w_theta_blade
     return 0.5 * d * d
@@ -52,7 +62,9 @@ def incidence_loss(w_theta_flow, w_theta_blade, *, xp=None):
 
 def skin_friction_loss(w_avg, cf, l_over_dhyd, *, xp=None):
     """Passage skin-friction loss ``dh = 2 Cf (L/D_hyd) W_avg^2`` [J/kg]
-    (section 4.3; pipe-friction analogy; [VERIFY])."""
+    (section 4.3; Galvas ``4 Cf W^2/2`` leading factor CONFIRMED -- CENT-LOSS.md.
+    Caller passes ``W_avg = 1/2(W1+W2)``; Aungier's mean-of-squares
+    ``1/2(W1^2+W2^2)`` is the [DECIDE] alternative)."""
     xp = get_xp(xp)
     return 2.0 * cf * l_over_dhyd * w_avg * w_avg
 
