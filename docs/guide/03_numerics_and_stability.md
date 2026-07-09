@@ -74,7 +74,7 @@ its own stability constant:
 |---|---|---|---|
 | **A. Position ↔ curvature** | repositioning moves streamlines; curvature feeds back through the ODE | Wilkinson relaxation `ω_sl` + curvature lag | `wilkinson_c = 4.4`, `kappa_relax = 0.3` |
 | **B. Closure ↔ continuity** | swirl closure sets exit `rVθ`; continuity sets `Vm`; each shifts the other's input | closure under-relaxation | `closure_relax = 0.25` |
-| **C. Field ↔ field (multistage)** | loss stratifies entropy spanwise; that reshapes the loss | spanwise mixing (physical, not numerical) | `c_mix = 0.01` |
+| **C. Field ↔ field (multistage)** | loss stratifies entropy spanwise; that reshapes the loss | spanwise mixing (physical, not numerical) | `c_mix = 5e-4` |
 
 The three converge *together* — they are one coupled fixed point, which is
 why the convergence records (Guide 1 §6) show positions and closures
@@ -452,37 +452,43 @@ Three properties, each a deliberate numerical choice:
   gates it; 0 returns the input untouched, so the V3 Tier-2 ≡ Tier-3 identity
   is never disturbed by a mixing model being *present*.
 
-**What the multistage measurement actually shows (revised twice, and now a
-calibration casualty).** Guide 1 originally reported mixing as a *convergence
+**What the multistage measurement actually shows (revised three times — a
+cautionary tale).** Guide 1 originally reported mixing as a *convergence
 prerequisite* — that the un-mixed two-stage compressor "ran away and failed
 outright." The 2026-07 stabilization (§4) showed that non-convergence was the
 driver artifact, not physics: post-fix the un-mixed case **converges
-cleanly**. That refutation is stable. The *quantitative* benefit, however,
-has evaporated under loss calibration — a textbook example of why this guide
-carries a snapshot discipline rather than trusting inline numbers:
+cleanly**. That refutation is stable. The *quantitative* benefit was then
+reported as *dramatic* (~25×, then ~6× as the Lieblein loss was corrected) —
+but that too was an artifact, of two compounding calibration errors. At the
+honest coefficient it is **modest**:
 
-| Multistage V5, n_sl=9, Tier 3 — snapshot @ `96e9d4a` | Converged | validity | exit Δs spread |
+| Multistage V5, n_sl=9, Tier 3 — snapshot @ `13e8978` | Converged | validity | exit Δs spread |
 |---|---|---|---|
-| mixing **off** | yes (92 it) | **0.0** | 1.88 J/(kg·K) |
-| mixing **on** (Gallimore, c_mix=0.01) | yes (94 it) | **0.0** | 1.68 J/(kg·K) |
+| mixing **off** | yes | **0.0** | 1.88 J/(kg·K) |
+| mixing **on** (Gallimore, c_mix=5e-4) | yes | **0.0** | 1.68 J/(kg·K) |
 
-The reduction is now only ~1.1× — and, decisively, **both runs sit at
-validity 0**: the ω̄-inversion fix (`96e9d4a`) pushed the matched-stage metal
-angles fully out of the Lieblein calibration range, so the compressor loss is
-running saturated and the mixing ratio is not a clean measurement. Read the
-history as a warning, not a result: the ratio was ~25× before any loss
-calibration, ~6× after the K_ti fix, ~1.1× (saturated) now. The
-`V5MultistageCompressor` case wants its metal angles re-tuned to the
-corrected loss before it can showcase mixing again.
+The reduction is ~1.1× (~11%), and it does *not* catch up as stratification
+grows (off→on: 3 stages 6.83→6.29 = 8%, 4 stages 10.32→9.42 = 9%). Read the
+history as a warning: the ratio was ~25× when the compressor loss was ~4× too
+high (the Lieblein ω̄ inversion) **and** `c_mix` was ~20× too strong
+(`0.01`); ~6× after the ω̄ fix alone; ~1.1× now that `c_mix` is
+Gallimore–Cumpsty-calibrated (`5e-4`, §5 below / `docs/references/GC86.md`).
+The "mixing flattens multistage stratification" narrative does **not** survive
+an honest coefficient on this case. One caveat keeps the absolute numbers
+soft: **both runs sit at validity 0** — but that is a *family-wide* property
+(the representative V5 metal angles sit outside the Lieblein calibration
+window, so *every* V5 case runs saturated; even the single-stage rotor reads
+validity 0), a standing `[VERIFY]`, not something unique to this case.
 
 What survives is **structural**, and it is what the guide should lean on:
 mixing is provably conservative (machine-precision, tested), it reduces
-spanwise stratification *by construction*, and the un-mixed solve converges.
-The `c_mix = 0.01` constant is `[VERIFY]`/`[DECIDE]` (the code
-non-dimensionalizes on radius not stage length, so 0.01 is ~10–50× the
-Gallimore–Cumpsty source value), and the mixing entropy-*production* term is
-a recorded refinement. The normative Appendix C.5m still carries the
-pre-calibration ~25× figure.
+spanwise stratification *by construction* (the direction is guaranteed; the
+*smallness* is the measured finding), and the un-mixed solve converges. `c_mix`
+is now G–C-calibrated (`5e-4`; the code non-dimensionalizes on radius not
+stage length, so the constant carries an implicit `L_s/r` factor — the
+accepted cost of the r-based retune, GC86.md option B); the mixing
+entropy-*production* term is a recorded refinement. The normative Appendix
+C.5m now carries this ~11% reality.
 
 ## 6. Continuation and BC switching (§6.6–6.7)
 
@@ -531,10 +537,8 @@ cut of overview §10:
   measured on the cases to hand, not swept across a family.
 - The loss/deviation `CorrelationSet` coefficients are under active
   calibration against the reference library (a real Lieblein `K_ti` bug was
-  fixed 2026-07-08; a Lieblein `ω̄`-inversion bug is flagged and xfail-pinned)
+  fixed 2026-07-08; the Lieblein `ω̄`-inversion bug was fixed 2026-07-09)
   — every performance number in this series moves with that work.
-- `c_mix = 0.01` is `[VERIFY]`/`[DECIDE]` (§5: ~10–50× the source value on the
-  code's radius non-dimensionalization).
 
 **Open (recorded, unstarted or deliberately deferred):**
 - **`ln Vm` positivity-safe integration** — the principled fix for the §4
@@ -585,11 +589,13 @@ cut of overview §10:
    geometry, where curvature couples the stations globally and the coloring
    degrades to per-column `q`. The lever that would have paid does not pay
    here; the remaining gate is closure-in-Newton (§4.5).
-7. **Mixing is now known *not* to be a convergence prerequisite. What is the
-   surviving, tested claim for why multistage machines need it?** That it is
-   conservative (machine-precision) and reduces spanwise entropy
-   stratification *by construction* — a physical redistribution the solve
-   otherwise gets wrong even though it converges without it. The *quantity*
-   of reduction is not currently a clean measurement: the showcase case runs
-   at validity 0 after the ω̄ fix (§5), and the historical ratio (~25× →
-   ~6× → ~1.1×) is entirely calibration-dependent.
+7. **Mixing is now known *not* to be a convergence prerequisite, *and* not a
+   dramatic homogenizer. What is the surviving, tested claim for why multistage
+   machines need it?** That it is conservative (machine-precision) and reduces
+   spanwise entropy stratification *by construction* (the *direction* is
+   guaranteed). At the Gallimore–Cumpsty-calibrated `c_mix = 5e-4` the *size*
+   of the reduction is **modest** — ~11% on two stages, not catching up as
+   stratification grows (§5). The historical ratio (~25× → ~6× → ~1.1×) is
+   the story of two compounding calibration errors (the Lieblein ω̄ inversion
+   and a ~20×-strong `c_mix`) being removed one at a time — a cautionary
+   example of an inflated claim, not a moving physical target.

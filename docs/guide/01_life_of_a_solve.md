@@ -427,23 +427,29 @@ Positions and closures converge together — they are one coupled fixed
 point, which is the whole point of the nested scheme. That structural shape
 is the stable lesson here.
 
-The *quantitative* mixing story, by contrast, is a cautionary example of
-calibration drift. Mixing is a **physical** model, not a convergence device:
-the un-mixed multistage case converges too (94 vs 92 iterations), refuting
-Guide 1's original "convergence prerequisite" claim — that was a
-pre-stabilization driver artifact (Guide 3 §4–5). What mixing *should* do is
-bound the spanwise entropy stratification, and it is provably conservative
-(machine-precision, tested). But the size of the effect on this showcase case
-has collapsed as the compressor loss was corrected: ~25× reduction before the
-loss calibration, ~6× after the K_ti fix, and — at this commit, after the
-ω̄-inversion fix pushed the matched-stage angles fully out of the Lieblein
-calibration range — only ~1.1× (spread 1.68 vs 1.88 J/(kg·K)) **running at
-validity 0**. So the `V5MultistageCompressor` case now needs its metal angles
-re-tuned to the corrected loss before it can serve as a clean mixing
-demonstration again. The durable claims (mixing conserves; mixing reduces
-stratification by design; the un-mixed solve converges) hold; the *number*
-is currently unreliable, and the normative Appendix C.5m still carries the
-old ~25× figure. This is exactly what the snapshot discipline is for.
+The *quantitative* mixing story, by contrast, is a cautionary example of how
+two compounding calibration errors inflated a claim. Mixing is a **physical**
+model, not a convergence device: the un-mixed multistage case converges too
+(94 vs 92 iterations), refuting Guide 1's original "convergence prerequisite"
+claim — that was a pre-stabilization driver artifact (Guide 3 §4–5). What
+mixing *should* do is bound the spanwise entropy stratification, and it is
+provably conservative (machine-precision, tested). But the *size* of the
+effect on this showcase case has collapsed as two calibrations were corrected:
+~25× reduction was reported when the compressor loss was ~4× too high (the
+Lieblein ω̄ inversion) **and** the mixing coefficient was ~20× too strong
+(`c_mix = 0.01`); ~6× after the ω̄ fix alone; and — now that `c_mix` is
+Gallimore–Cumpsty-calibrated (`5×10⁻⁴`, Guide 3 §5) — only ~1.1× (spread 1.68
+vs 1.88 J/(kg·K)). That last number is the *honest* one: at a correctly
+calibrated coefficient, spanwise mixing on this two-stage case is a **modest
+~11% damping, not a homogenizer**, and it does not catch up as stratification
+grows with stage count (Guide 3 §5). Two caveats keep it soft rather than
+sharp: the whole V5 Lieblein family runs at closure **validity 0** (the
+representative metal angles sit outside the correlation's calibration window —
+a family-wide `[VERIFY]`, not unique to this case), so the absolute spreads
+come from smoothly-saturated loss; and the normative Appendix C.5m has been
+updated to this ~1.1× reality. The durable claims (mixing conserves; mixing
+reduces stratification by design; the un-mixed solve converges) hold. This is
+exactly what the snapshot discipline is for.
 
 **A consistency check you can do by eye.** Run A's exit: `rVθ = 41.16
 m²/s`, `h0 = 316 463 J/kg`. Euler's work: `Δh0 = ω·ΔrVθ = 400 × 41.16 =
