@@ -59,6 +59,13 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **AM-ANGLE (Ainley turbine exit angle) — throat rule CONFIRMED**, see
+  [`AM-ANGLE.md`](AM-ANGLE.md) and `tests/test_ainley_reference.py`. The
+  coded `α2 = arccos(o/s)` is AM's M2=1 gauge angle (Eq 2) — the correct
+  sonic asymptote. The deferred low-speed correction is now precisely pinned:
+  `α2 = α2* − 4(s/e)` (AM Eq 1) + linear M2∈[0.5,1.0] blend (needs exit Mach
+  + back-surface `e`). No bug; sign handling consistent with the `orientation_te`
+  audit fix.
 - **CENT-LOSS (centrifugal incidence + skin friction) — both forms
   CONFIRMED**, see [`CENT-LOSS.md`](CENT-LOSS.md) and
   `tests/test_centrifugal_loss_reference.py`. Incidence `½(ΔWθ)²` = Galvas

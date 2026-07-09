@@ -10,8 +10,17 @@ deviation correction and the Mach interpolation between the low-speed
 correlation and this sonic value are **deferred to the M6 transonic step**
 (they need the exit Mach the M6-4 shock-loss work introduces); this module
 ships the throat cosine rule alone, which is the dominant term and the
-correct sonic asymptote. **[VERIFY: the deviation correction and its
-blend, against the library copies of Ainley-Mathieson / Kacker-Okapuu.]**
+correct sonic asymptote.
+
+Verified 2026-07-09 (docs/references/AM-ANGLE.md, vs AM R&M 2974 / K-O):
+``cos(alpha2) = o/s`` is CONFIRMED as AM's M2=1 value (Eq 2,
+``alpha2 = -cos^-1(A_t/A_n)`` -> gauge angle for straight backs; pinned in
+test_ainley_reference.py). The DEFERRED correction is now precisely: the
+low-speed AM Eq 1 ``alpha2 = alpha2* - 4(s/e)`` (constant 4; ``e`` = convex
+back-surface radius of curvature throat->TE; ``alpha2* = f(cos^-1 o/s)`` Fig 5),
+then a LINEAR interpolation of alpha2 in M2 over [0.5, 1.0] to the sonic value
+(K-O/Dunham-Came adopt this). Needs exit Mach + back-surface ``e`` (not yet in
+the section 4.1 contract). **[VERIFY when M6-transonic lands.]**
 
 Frame convention (section 2.4 + the [VERIFY per correlation] remap duty):
 the exit-angle magnitude ``arccos(o/s)`` is measured from the meridional;
@@ -63,7 +72,9 @@ def throat_exit_angle(os_ratio, *, xp=None):
     ``o/s`` is soft-clipped into the arccos domain (bounded derivative,
     section 7.3.2) and the result smoothly capped below 90 deg. Returns
     ``(alpha2_deg, validity)`` with the :data:`COS_ARG` compact-support
-    calibration window. [VERIFY: deviation correction deferred to M6-4.]"""
+    calibration window. The ``arccos(o/s)`` sonic value is CONFIRMED (AM Eq 2,
+    AM-ANGLE.md); the low-speed ``-4(s/e)`` term + linear M2 blend are deferred
+    to M6-transonic (need exit Mach + back-surface ``e``)."""
     xp = get_xp(xp)
     arg = soft_clip(os_ratio, _ARG_LO, _ARG_HI, _ARG_W, xp=xp)
     alpha2 = xp.rad2deg(xp.arccos(arg))
