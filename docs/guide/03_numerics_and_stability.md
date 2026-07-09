@@ -465,11 +465,14 @@ was retuned into the Lieblein validity window, it is **modest**:
 
 | Multistage V5, n_sl=9, Tier 3 — snapshot @ `HEAD` | Converged | validity | exit Δs spread |
 |---|---|---|---|
-| mixing **off** | yes | **1.0** | 0.267 J/(kg·K) |
-| mixing **on** (Gallimore, c_mix=5e-4) | yes | **1.0** | 0.218 J/(kg·K) |
+| mixing **off** | yes | **1.0** | 1.328 J/(kg·K) |
+| mixing **on** (Gallimore, c_mix=5e-4) | yes | **1.0** | 1.082 J/(kg·K) |
 
-The reduction is ~18%, and it does *not* catch up as stratification grows
-(off→on: 3 stages 2.73→2.36 = 14%, 4 stages 5.23→4.51 = 14%). Read the history
+The reduction is ~18%, and it does *not* catch up as the absolute spread grows
+with stage count (~14–18% ratio at 3 and 4 stages too). The absolute numbers
+are loss-model-dependent (they moved with the ω̄, c_mix, retune, and off-design
+corrections) but the ~18% ratio is stable; only the 2-stage row is
+regression-pinned. Read the history
 as a warning about compounding errors: the ratio read ~25× when the compressor
 loss was ~4× too high (the Lieblein ω̄ inversion) **and** `c_mix` was ~20× too
 strong (`0.01`); ~6× after the ω̄ fix; then ~1.1× at the calibrated `c_mix`

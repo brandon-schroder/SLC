@@ -21,11 +21,18 @@ lowers profile loss / raises efficiency. V5 is structural bands so it stayed in
 range; the M4 _WBAR_CEIL / 10-deg bucket were NOT retuned against the old value
 (verified by the full-suite re-run).
 
-**[DECIDE] off-design model:** the quadratic bucket (``w_bucket``, 10 deg
-default) is our substitution; Lieblein's published off-design extends D_eq by
-``+k(i-i*)^1.43`` (k=0.0117 NACA-65; Aungier 6-38 / Dixon 3.41). The theta/c
-fit's validity ends near D_eq ~ 2.35 (denominator zero); saturation reflects
-that.
+**Off-design model (resolved 2026-07):** the fixed-10-deg quadratic bucket
+(an unverified substitution) is replaced by Aungier's ch.6 normalized-incidence
+bucket -- a quadratic ``f = 1 + xi^2`` with PHYSICALLY-DERIVED asymmetric stall
+ranges (``xi`` normalized by the positive-stall ``R_s`` above the min-loss
+incidence and the choke ``R_c`` below), C1-matched to linear extrapolations in
+deep stall (``stall_choke_ranges`` / ``off_design_bucket``; the Aungier shape
+is itself a ``1 + xi^2`` bucket, so this is the *physical* width, not a new
+shape). ``f(0) = 1`` leaves the design-incidence loss unchanged. Deferred
+refinements ([VERIFY]): Mach-number adjustment of ``R_s``/``R_c``, and the
+``(i-i*)^1.43`` D_eq surface-velocity term (which feeds max surface velocity,
+not the loss bucket). The theta/c fit's validity ends near D_eq ~ 2.35
+(denominator zero); saturation reflects that.
 
 The native coefficient is the B.2 relative-total-pressure loss
 ``omega_bar`` referenced to the INLET relative dynamic head; conversion to
@@ -41,12 +48,13 @@ from dataclasses import dataclass
 from ..._namespace import get_xp
 from ..conversions import delta_s_compressor_omega_bar, relative_stagnation
 from ..interfaces import LossBreakdown, RowFlowView, RowView
-from ..smoothmath import blend, smooth_min, soft_clip, softplus
-from .lieblein import (deviation_slope, reference_deviation,
-                       reference_incidence)
+from ..smoothmath import (blend, blend_between, smooth_min, soft_clip,
+                          softplus)
+from .lieblein import reference_deviation, reference_incidence
 
 __all__ = ["equivalent_diffusion", "wake_momentum_thickness",
-           "profile_loss_coefficient", "LieblienLoss"]
+           "profile_loss_coefficient", "stall_choke_ranges",
+           "off_design_bucket", "LieblienLoss"]
 
 # theta/c fit domain: the denominator 1 - 1.17 ln(D_eq) vanishes at
 # D_eq = e^(1/1.17) ~ 2.35; saturate D_eq below that with a smooth ceiling,
@@ -60,6 +68,18 @@ _DEQ_FLOOR = 0.3
 # at M4-4: violent mid-transient velocity triangles (vm_te collapse) push
 # the raw chain to omega_bar ~ 40 and NaN the conversion without this.
 _WBAR_CEIL, _WBAR_W = 0.5, 0.05   # [VERIFY ceiling choice]
+
+# Aungier ch.6 OFF-DESIGN bucket (docs/references/LIEB59.md): the loss follows
+# a normalized-incidence bucket xi with PHYSICALLY-DERIVED asymmetric stall
+# ranges (positive-stall R_s, negative-stall/choke R_c), quadratic near design
+# and C1-matched to linear extrapolations in deep stall. Replaces the fixed
+# 10-deg quadratic bucket (an unverified substitution). [VERIFY constants]
+_RS_C = (10.3, 2.92, 15.6, 8.2)      # R_s = a0 + (a1 - b1/a2) theta/a3
+_RC_C = (9.0, 30.0, 0.48, 4.176)     # R_c = c0 - (1 - (c1/b1)^c2) theta/c3
+_R_FLOOR, _R_FW = 2.0, 0.5           # stall-range positivity floor [deg]
+_B1_FLOOR, _B1_FW = 5.0, 1.0         # beta1 floor for (30/b1)^0.48 [deg]
+_DI_W = 1.0                          # incidence blend width for the asym. xi
+_XI_POS, _XI_NEG, _XI_W = 1.0, -2.0, 0.3   # deep-stall breakpoints + blend
 
 
 def equivalent_diffusion(w1, w2, beta1_rad, beta2_rad, sigma, *, xp=None):
@@ -101,18 +121,77 @@ def profile_loss_coefficient(theta_c, sigma, beta2_rad, w1, w2, *, xp=None):
     return 2.0 * theta_c * sigma / xp.cos(beta2_rad) * (w2 / w1) ** 2
 
 
+def stall_choke_ranges(camber_deg, beta1_deg, *, xp=None):
+    """Aungier ch.6 low-speed positive-stall (``R_s``) and negative-stall /
+    choke (``R_c``) incidence ranges [deg] (docs/references/LIEB59.md;
+    [VERIFY constants]):
+
+        R_s = 10.3 + (2.92 - beta1/15.6) * theta / 8.2
+        R_c = 9.0  - (1 - (30/beta1)^0.48) * theta / 4.176
+
+    ``theta`` is the camber and ``beta1`` the (reference) inlet flow angle,
+    both in the cascade frame [deg]. These are the bucket half-widths, so they
+    are floored strictly positive (denominators downstream); ``beta1`` is
+    floored before the ``(30/beta1)`` power. Mach-number adjustment of the
+    ranges (Aungier's ``1 + 0.5 M^2`` / ``1 + 0.5 (K_sh M')^3`` factors) is a
+    deferred refinement -- these are the low-speed values."""
+    xp = get_xp(xp)
+    theta = camber_deg
+    b1 = _B1_FLOOR + softplus(beta1_deg - _B1_FLOOR, _B1_FW, xp=xp)
+    a0, a1, a2, a3 = _RS_C
+    r_s = a0 + (a1 - b1 / a2) * theta / a3
+    c0, c1, c2, c3 = _RC_C
+    r_c = c0 - (1.0 - (c1 / b1) ** c2) * theta / c3
+    r_s = _R_FLOOR + softplus(r_s - _R_FLOOR, _R_FW, xp=xp)
+    r_c = _R_FLOOR + softplus(r_c - _R_FLOOR, _R_FW, xp=xp)
+    return r_s, r_c
+
+
+def off_design_bucket(i, i_ref, r_s, r_c, *, xp=None):
+    """Aungier ch.6 normalized-incidence loss multiplier ``f(xi) =
+    omega/omega_min`` (docs/references/LIEB59.md; [VERIFY]).
+
+    The normalized incidence is asymmetric about the min-loss incidence
+    ``i_m`` (= ``i_ref`` at low speed):
+
+        xi = (i - i_ref) / R_s   for i >= i_ref   (positive-stall side)
+        xi = (i - i_ref) / R_c   for i <  i_ref   (choke side)
+
+    and the multiplier is a quadratic bucket C1-matched to linear
+    extrapolations in deep stall (``w_s`` shock term is 0 for the subsonic
+    Lieblein set, so ``omega = omega_min * f``):
+
+        f = 1 + xi^2          for -2 <= xi <= 1
+        f = 2 + 2 (xi - 1)    for xi > 1     (deep positive stall)
+        f = 5 - 4 (xi + 2)    for xi < -2    (deep negative stall / choke)
+
+    ``f(0) = 1`` so the design-incidence loss is unchanged; the branches meet
+    C1 at ``xi = 1, -2`` by construction (Aungier), so the smooth blends below
+    are C1 and near-exact. The asymmetric reciprocal half-width is itself
+    C1-blended across ``i_ref`` -- and since ``xi = 0`` there, ``f`` is C1
+    through it regardless of ``R_s != R_c``."""
+    xp = get_xp(xp)
+    di = i - i_ref
+    inv_w = blend_between(di, 1.0 / r_c, 1.0 / r_s, 0.0, _DI_W, xp=xp)
+    xi = di * inv_w
+    core = 1.0 + xi * xi
+    pos = 2.0 + 2.0 * (xi - 1.0)                # xi > 1 linear branch
+    neg = 5.0 - 4.0 * (xi + 2.0)                # xi < -2 linear branch
+    upper = blend_between(xi, core, pos, _XI_POS, _XI_W, xp=xp)
+    return blend_between(xi, neg, upper, _XI_NEG, _XI_W, xp=xp)
+
+
 @dataclass(frozen=True)
 class LieblienLoss:
     """LossModel (section 7.1): reference profile loss from the
-    equivalent-diffusion chain, quadratic off-design bucket, converted to
-    entropy per B.2 at the B.1-re-referenced exit state.
+    equivalent-diffusion chain, Aungier off-design incidence bucket (physical
+    stall/choke ranges), converted to entropy per B.2 at the B.1-re-referenced
+    exit state.
 
     Requires ``row.geometry`` (section 4.1 contract) and the view's lagged
-    TE fields. ``bucket_width_deg`` is the incidence half-width at which
-    the loss doubles [VERIFY]."""
+    TE fields."""
 
     k_sh: float = 1.0
-    bucket_width_deg: float = 10.0
 
     def evaluate(self, row: RowView, flow: RowFlowView) -> LossBreakdown:
         xp = get_xp(None)
@@ -130,21 +209,29 @@ class LieblienLoss:
         i = b1_flow - b1_blade
         i_ref, v_i = reference_incidence(b1_flow, sigma, tc, camber, xp=xp)
         d_ref, _ = reference_deviation(b1_flow, sigma, tc, camber, xp=xp)
-        dev = d_ref + deviation_slope(b1_flow, sigma, xp=xp) * (i - i_ref)
-        b2_deg = soft_clip(b2_blade + dev, -80.0, 80.0, 2.0, xp=xp)
 
-        # Velocity triangle magnitudes (relative frame): W = Vm / cos(beta).
+        # Actual inlet relative angle -> W1 for the B.2 conversion reference.
         b1r = xp.deg2rad(soft_clip(b1_flow, -80.0, 80.0, 2.0, xp=xp))
-        b2r = xp.deg2rad(b2_deg)
         w1 = flow.vm / xp.cos(b1r)
-        w2 = flow.vm_te / xp.cos(b2r)
 
-        d_eq = equivalent_diffusion(w1, w2, b1r, b2r, sigma, xp=xp)
+        # REFERENCE (min-loss) velocity triangle -> omega_min. Aungier: the
+        # off-design incidence bucket is the SOLE off-design mechanism, so the
+        # minimum-loss coefficient is evaluated at the reference incidence
+        # (b1_blade + i_ref, exit b2_blade + d_ref), not the actual off-design
+        # triangle -- otherwise D_eq and the bucket double-count incidence.
+        b1_ref = xp.deg2rad(soft_clip(b1_blade + i_ref, -80.0, 80.0, 2.0, xp=xp))
+        b2_ref = xp.deg2rad(soft_clip(b2_blade + d_ref, -80.0, 80.0, 2.0, xp=xp))
+        w1_ref = flow.vm / xp.cos(b1_ref)
+        w2_ref = flow.vm_te / xp.cos(b2_ref)
+        d_eq = equivalent_diffusion(w1_ref, w2_ref, b1_ref, b2_ref, sigma, xp=xp)
         theta_c, v_d = wake_momentum_thickness(d_eq, xp=xp)
-        omega_min = profile_loss_coefficient(theta_c, sigma, b2r, w1, w2,
-                                             xp=xp)
-        omega_raw = omega_min * (1.0 + ((i - i_ref)
-                                        / self.bucket_width_deg) ** 2)
+        omega_min = profile_loss_coefficient(theta_c, sigma, b2_ref, w1_ref,
+                                             w2_ref, xp=xp)
+        # Aungier off-design bucket: physically-derived asymmetric stall/choke
+        # ranges from the reference inlet flow angle, replacing the old fixed
+        # 10-deg width (section 4.3; docs/references/LIEB59.md).
+        r_s, r_c = stall_choke_ranges(camber, b1_blade + i_ref, xp=xp)
+        omega_raw = omega_min * off_design_bucket(i, i_ref, r_s, r_c, xp=xp)
         # Section 7.3.2 conservative asymptote: level off smoothly well
         # inside the B.2 conversion's domain; validity reflects binding.
         omega_bar = smooth_min(omega_raw, _WBAR_CEIL, _WBAR_W, xp=xp)

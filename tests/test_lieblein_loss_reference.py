@@ -12,7 +12,8 @@ import numpy as np
 import pytest
 
 from slcflow.closures.axial_compressor.loss import (
-    equivalent_diffusion, profile_loss_coefficient, wake_momentum_thickness)
+    equivalent_diffusion, off_design_bucket, profile_loss_coefficient,
+    stall_choke_ranges, wake_momentum_thickness)
 
 DEG = np.pi / 180.0
 
@@ -52,3 +53,42 @@ def test_omega_bar_uses_W2_over_W1_squared(b2d, theta_c, sigma, w1, w2):
     # Guard against a silent regression to the inverted form.
     inverted = 2.0 * theta_c * sigma / np.cos(b2) * (w1 / w2) ** 2
     assert got < inverted           # (W2/W1)^2 < (W1/W2)^2 since W2 < W1
+
+
+@pytest.mark.parametrize("theta,b1", [(12.0, 52.0), (25.0, 45.0), (8.0, 60.0)])
+def test_stall_choke_ranges_match_aungier(theta, b1):
+    # Aungier ch.6 low-speed stall/choke incidence ranges (LIEB59.md):
+    #   R_s = 10.3 + (2.92 - b1/15.6) theta/8.2
+    #   R_c = 9.0  - (1 - (30/b1)^0.48) theta/4.176
+    # Chosen well inside so the positivity floors do not bind.
+    rs_ref = 10.3 + (2.92 - b1 / 15.6) * theta / 8.2
+    rc_ref = 9.0 - (1.0 - (30.0 / b1) ** 0.48) * theta / 4.176
+    rs, rc = stall_choke_ranges(np.array([theta]), np.array([b1]))
+    assert float(rs[0]) == pytest.approx(rs_ref, rel=1e-6)
+    assert float(rc[0]) == pytest.approx(rc_ref, rel=1e-6)
+
+
+def test_off_design_bucket_is_aungier_piecewise():
+    # Aungier ch.6 normalized-incidence multiplier (w_s = 0 subsonic):
+    #   f = 1 + xi^2       for -2 <= xi <= 1
+    #   f = 2 + 2(xi - 1)  for xi > 1        (deep positive stall)
+    #   f = 5 - 4(xi + 2)  for xi < -2       (deep negative stall / choke)
+    # xi = (i - i_ref)/R_s for i>=i_ref, /R_c below. Pin at points clear of the
+    # C1 blend transitions (breakpoints xi = 1, -2).
+    r_s, r_c = np.array([10.0]), np.array([8.0])
+
+    def f(di):
+        return float(off_design_bucket(np.array([di]), np.array([0.0]),
+                                       r_s, r_c)[0])
+
+    assert f(0.0) == pytest.approx(1.0, abs=1e-9)        # min-loss at reference
+    assert f(5.0) == pytest.approx(1.0 + 0.5 ** 2, rel=2e-3)   # xi=0.5 core
+    assert f(-4.0) == pytest.approx(1.0 + 0.5 ** 2, rel=2e-3)  # xi=-0.5 core
+    # xi = 1 boundary: both core and linear branch give 2 (C1-matched).
+    assert f(10.0) == pytest.approx(2.0, rel=1e-2)
+    # xi = 2 deep positive stall (well past the blend): 2 + 2(2-1) = 4.
+    assert f(20.0) == pytest.approx(4.0, rel=2e-2)
+    # xi = -3 deep negative stall: 5 - 4(-3+2) = 9.
+    assert f(-24.0) == pytest.approx(9.0, rel=2e-2)
+    # Asymmetry: positive side uses R_s, negative uses R_c (R_s != R_c).
+    assert f(8.0) != pytest.approx(f(-8.0), rel=1e-3)

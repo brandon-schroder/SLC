@@ -91,8 +91,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   (0.004, 1.17) verified vs Aungier/Cumpsty/Dixon. The ω̄ velocity-ratio
   inversion (code `(W1/W2)²` vs source `(W2/W1)²`, ~4× overestimate) is
   **fixed** (resolution pass) — extracted to `profile_loss_coefficient`,
-  V5 bands + full suite green. Remaining `[DECIDE]`: off-design model
-  (quadratic bucket vs Lieblein's `D_eq += k(i−i*)^1.43`).
+  V5 bands + full suite green. The **off-design model** is also **resolved**:
+  the fixed-10° quadratic bucket → Aungier's normalized-incidence bucket
+  (`1 + ξ²` with physically-derived asymmetric stall/choke ranges `R_s`/`R_c`,
+  C1-matched deep-stall linear branches; min-loss `ω̄` now evaluated at the
+  reference triangle so the bucket is the sole off-design mechanism — no D_eq
+  double-count). Note: the `(i−i*)^1.43` term is Aungier's **surface-velocity**
+  term, not the loss bucket (a common conflation). Deferred `[VERIFY]`: the
+  Mach adjustment of `R_s`/`R_c`.
 - **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` RESOLVED**,
   see [`GC86.md`](GC86.md). The turbulent-diffusion form is right, but the old
   `c_mix=0.01` did NOT match G-C: they recommend `ε/(V_z·L_s) ≈ 1.8e-3` on the

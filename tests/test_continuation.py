@@ -108,9 +108,11 @@ def test_speedline_config_guards():
 def test_v5_meanline_characteristic_rises_then_flags_stall():
     case, topo, inlet, row = _v5_meanline()
     # mdot_start below the retuned annulus's choke (~118); the traversal runs
-    # in-window (validity 1.0) down to ~80 kg/s, then saturates near stall.
+    # in-window down to ~50 kg/s (the Aungier off-design model keeps the loss
+    # in-domain far further than the old pessimistic bucket), then saturates
+    # near stall (~45 kg/s).
     m = solve_speedline(topo, case.gas, FidelityConfig.tier1(), inlet,
-                        rows=[row], mdot_start=110.0, mdot_min=55.0,
+                        rows=[row], mdot_start=110.0, mdot_min=40.0,
                         mdot_step=10.0)
     # Real compressor characteristic: PR rises monotonically toward stall...
     prs = [p.pressure_ratio for p in m.points]

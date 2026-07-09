@@ -121,17 +121,23 @@ def test_loss_band_and_positivity_typical_section():
 
 
 def test_off_design_bucket_minimum_near_reference():
-    # Section 4.3: the loss bucket's minimum sits near the reference
-    # incidence; both deep-positive and deep-negative incidence cost more.
+    # Section 4.3 / Aungier: the loss bucket's minimum sits at the reference
+    # (min-loss) incidence; both higher and lower incidence cost more. The vm
+    # sweep moves beta1_flow, hence incidence, so the minimum is INTERIOR to a
+    # sweep that straddles the min-loss point. (After the 2026-07 Aungier
+    # off-design model, the min sits exactly at i_ref -- the bucket is the sole
+    # off-design mechanism, no D_eq double-count -- so this locates it robustly
+    # rather than assuming a fixed "design" vm.)
     def wbar_at(vm):
         row, view = make_view_and_row(vm=vm)
         return float(LieblienLoss().evaluate(
             row, view).components["profile_omega_bar"][0])
 
-    # vm sweep moves beta1_flow, hence incidence.
-    w_design = wbar_at(110.0)
-    assert wbar_at(80.0) > w_design      # higher |beta1| -> +incidence
-    assert wbar_at(160.0) > w_design     # lower |beta1| -> -incidence
+    vms = [60.0, 70.0, 80.0, 90.0, 100.0, 120.0, 150.0, 180.0]
+    w = [wbar_at(v) for v in vms]
+    i_min = int(np.argmin(w))
+    assert 0 < i_min < len(vms) - 1          # interior minimum (a bucket)
+    assert w[0] > w[i_min] and w[-1] > w[i_min]   # both flanks cost more
 
 
 def test_delta_s_matches_b2_conversion_of_native_coefficient():
