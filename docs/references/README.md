@@ -59,6 +59,13 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **AUN-C (Aungier compressor fits) — all incidence/deviation coefficients
+  CONFIRMED**, see [`AUN-C.md`](AUN-C.md) and
+  `tests/test_lieblein_reference.py`. Nine fits verified verbatim vs Aungier
+  ch. 6 (the SP-36 *coefficient* half). Found + **FIXED a real bug**: the
+  `K_ti` thickness exponent had an extra ×10 (`(10 t/c)^0.3` vs Aungier Eq
+  6-11 `(t/c)^0.3`). Residual: SP-36 chart-point reproduction of the fit
+  outputs; the `loss.py` (θ*/c, D_eq) side is a separate pass.
 - **WIE67 (Wiesner slip) — base form CONFIRMED**, see [`WIE67.md`](WIE67.md)
   and `tests/test_wiesner_reference.py` (cross-agreeing across six texts).
   `σ = 1 − √(cos β2b)/Z^0.7`, β2b from radial, exponent 0.7 — verified. Found:

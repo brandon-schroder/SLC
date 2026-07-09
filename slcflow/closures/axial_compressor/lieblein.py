@@ -5,9 +5,15 @@ analytic curve fits).
 Provenance: the working equations below are Aungier's published fits
 (*Axial-Flow Compressors*, ch. 6) to Lieblein's NASA SP-36 low-speed
 cascade charts for NACA-65 profiles (shape factor ``K_sh = 1``).
-**[VERIFY: every fit coefficient against the library copies of Aungier and
-SP-36, and the reference-figure reproduction points in the tests — encoded
-from general knowledge pending the library pass; see test file docstring.]**
+
+Verification status (see ``docs/references/AUN-C.md``, 2026-07-09): every
+incidence/deviation/off-design-slope **fit coefficient** is CONFIRMED against
+Aungier ch. 6 (Eqs 6-13/6-14/6-15/6-20/6-21/6-22/6-24/6-25/6-76), pinned in
+``tests/test_lieblein_reference.py``. One transcription bug was found and
+FIXED: the ``K_ti`` exponent used ``(10 t/c)^0.3`` where Aungier Eq 6-11 has
+``(t/c)^0.3``. **Residual [VERIFY]**: whether these fit *outputs* reproduce the
+SP-36 *chart points* (a figure-digitization task, distinct from the coefficient
+check) -- and ``K_sh``/ranges for non-NACA-65 profiles.
 
 Frame convention (section 2.4 + the [VERIFY per correlation] remap duty):
 the fits are written in the *cascade frame* — angles in DEGREES, measured
@@ -74,7 +80,10 @@ def reference_incidence(beta1_deg, sigma, tc, camber_deg, *, xp=None):
     p = 0.914 + s ** 3 / 160.0
     i0_10 = (b ** p / (5.0 + 46.0 * xp.exp(-2.3 * s))
              - 0.1 * s ** 3 * xp.exp((b - 70.0) / 4.0))
-    k_ti = (10.0 * t) ** (0.28 / (0.1 + (10.0 * t) ** 0.3))
+    # Aungier Eq 6-10/6-11: K_ti = (10 t/c)^q, q = 0.28/[0.1 + (t/c)^0.3].
+    # The 0.3-power base is t/c (NOT 10 t/c) -- verified, docs/references/
+    # AUN-C.md; corrected here (was an extra x10 in the exponent denominator).
+    k_ti = (10.0 * t) ** (0.28 / (0.1 + t ** 0.3))
     n = (0.025 * s - 0.06
          - (b / 90.0) ** (1.0 + 1.2 * s) / (1.5 + 0.43 * s))
     return k_ti * i0_10 + n * camber_deg, v1 * v2 * v3
