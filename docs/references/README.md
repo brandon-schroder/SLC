@@ -59,6 +59,15 @@ below cannot read scanned PDFs). Relevant notebooks:
   `[VERIFY]`: the nozzle/impulse + TE **chart** reference curves (need figure
   digitization), and a `[DECIDE]` on the negative-incidence interpolation
   weight (AM-1957 `(b1/b2)^2` as coded vs KO82 signed `|b1/b2|(b1/b2)`).
+- **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` value is a
+  `[DECIDE]`**, see [`GC86.md`](GC86.md). The turbulent-diffusion form is
+  right, but the coded `c_mix=0.01` does NOT match G-C: they recommend
+  `ε/(V_z·L_s) ≈ 1.8e-3` on the axial *stage length*, whereas the code
+  nondimensionalizes on *radius* — reconciled, a G-C-consistent value is
+  ~`5e-4` (the default is ~10–50× too strong). Left unchanged pending a
+  decision + V5-stratification re-run. Primary G-C source is in the
+  **"Reduced-Order Aerodynamic Solvers"** notebook; Wisler-1987 evaluation in
+  the loss notebook.
 - **AUN-C (Aungier compressor fits) — all incidence/deviation coefficients
   CONFIRMED**, see [`AUN-C.md`](AUN-C.md) and
   `tests/test_lieblein_reference.py`. Nine fits verified verbatim vs Aungier

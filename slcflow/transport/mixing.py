@@ -20,7 +20,9 @@ This runs in the driver's **lagged field refresh** (section 6.2.2.4 step 4,
 AD-4), on the frozen transported fields between outer iterates -- never on the
 pure residual path (AD-3). The coefficient field ``mu_mix`` comes from a
 :class:`~slcflow.closures.interfaces.MixingModel`; the default Gallimore form
-and its constant are ``[VERIFY]`` (calibration deferred, ARCH-9).
+is verified but its constant ``c_mix`` is a ``[DECIDE]`` -- it does NOT match
+the Gallimore-Cumpsty calibration (see :class:`GallimoreMixing` and
+``docs/references/GC86.md``).
 
 Off by default in all tiers (``FidelityConfig.mixing_term = 0``); multistage
 axial Tier-3 cases opt in.
@@ -144,9 +146,18 @@ class GallimoreMixing:
     ``mu_mix = c_mix * rho * Vm * r`` -- a dynamic eddy-diffusivity whose
     effective per-metre spanwise diffusion length is ``c_mix * r / (1-B)``
     (the operator's ``mu_mix r / (r(1-B)rho Vm)``). ``c_mix`` sets the mixing
-    intensity; the Gallimore value corresponds to a few-percent non-dimensional
-    diffusivity. **[VERIFY the form and c_mix against a library calibration]**;
-    a spanwise-velocity (Adkins-Smith) alternative is the recorded refinement.
+    intensity; a spanwise-velocity (Adkins-Smith) alternative is the recorded
+    refinement.
+
+    **[DECIDE] c_mix -- verified NOT to match Gallimore-Cumpsty (see
+    docs/references/GC86.md).** The turbulent-diffusion FORM is confirmed, but
+    G-C nondimensionalize the diffusivity on the axial STAGE LENGTH,
+    ``eps/(V_z L_s) ~= 1.8e-3`` (range 1.6-2.7e-3, "good to one significant
+    figure"), while this form uses the local RADIUS ``r``. Reconciling,
+    ``c_mix ~= 1.8e-3*(L_s/r)/(1-B) ~= 2e-4..9e-4`` for typical geometry -- so
+    the default 0.01 is ~10-50x stronger than G-C. Left at 0.01 pending a
+    deliberate choice (re-base on L_s, or set ~5e-4) paired with a re-run of
+    the multistage V5 stratification measurement (which is sensitive to it).
     """
 
     c_mix: float = 0.01
