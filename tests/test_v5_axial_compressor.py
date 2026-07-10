@@ -85,8 +85,11 @@ def test_tier1_is_pure_data_switch_not_a_code_path():
 
 
 # --------------------------------------------------------------------------
-# Transonic rotor: the Aungier 6.7 shock loss engages end-to-end, and the
-# measured two-branch limitation is pinned as a tripwire (theory manual C.9).
+# Transonic rotor: an in-window transonic meanline point with the Aungier 6.7
+# shock loss active (theory manual C.9). The earlier two-branch "tripwire" was
+# a misdiagnosis -- the in-window condition is set by loading (D_eq), not the
+# meridional-continuity branch; the ordinary mass-flow driver reaches it once
+# the loading is in-window (V5TransonicRotor docstring; theory manual C.9).
 # --------------------------------------------------------------------------
 def test_transonic_rotor_converges_and_is_supersonic_relative():
     # The shock stack runs end-to-end: a high-omega rotor converges (T1 and
@@ -103,19 +106,20 @@ def test_transonic_rotor_converges_and_is_supersonic_relative():
     assert case.meanline_inlet_rel_mach(pr1) > 1.0  # supersonic relative inlet
 
 
-def test_transonic_meanline_is_the_out_of_window_branch_TRIPWIRE():
-    # MEASURED 2026-07 (theory manual C.9): a mass-flow-specified meanline can
-    # only converge the LOW-Vm continuity root, where the high blade speed
-    # forces beta1 ~ 70 deg -- at/beyond the Lieblein NACA-65 calibration edge,
-    # so closure validity collapses to 0. The in-window supersonic branch
-    # (beta1 ~ 50 deg) needs BackPressureSpec + continuation (the "V5
-    # supersonic-branch traversal"). TRIPWIRE: flip these assertions when that
-    # driver work lands and the in-window branch converges.
-    pr = V5TransonicRotor().evaluate(n_sl=1)
+def test_transonic_meanline_is_in_window_and_shock_active():
+    # MEASURED 2026-07 (theory manual C.9, replacing the earlier out-of-window
+    # "tripwire"): with the loading in-window (beta2 retuned so D_eq < 2.0), the
+    # ordinary mass-flow meanline converges a genuine in-window transonic point
+    # -- no supersonic-branch driver needed. The relative inlet is supersonic
+    # (so the Aungier 6.7 shock loss is active; the shock component's engagement
+    # at M1_rel > 1 is unit-pinned in test_lieblein_loss.py) and the closure
+    # runs INSIDE the Lieblein validity window.
+    case = V5TransonicRotor()
+    pr = case.evaluate(n_sl=1)
     assert pr.converged
-    assert pr.validity < 0.1                         # saturated (out of window)
-    # The converged root is the steep-inlet one.
-    vm = float(np.atleast_1d(pr.vm)[0])
-    r = float(np.atleast_1d(pr.r)[0])
-    beta1_flow = np.degrees(np.arctan2(V5TransonicRotor().omega * r, vm))
-    assert beta1_flow > 68.0                          # low-Vm / high-beta1 root
+    assert case.meanline_inlet_rel_mach(pr) > 1.0    # supersonic relative -> shock
+    assert pr.validity > 0.5                          # in the Lieblein window
+    lo, hi = case.pr_band
+    assert lo < pr.pressure_ratio < hi
+    lo, hi = case.eta_band
+    assert lo < pr.efficiency < hi

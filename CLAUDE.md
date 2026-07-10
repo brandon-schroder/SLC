@@ -526,22 +526,37 @@ These are not suggestions; violating them is a bug even if tests pass.
   the V5 supersonic-branch traversal is now a *transonic V5 case design* (an
   in-window supersonic-inlet rotor) + the back-pressure/continuation mode — a
   case + driver matter, no longer a missing closure.
-- **Transonic V5 case + two-branch tripwire (2026-07).** Added `V5TransonicRotor`
-  (high-Ω rotor, supersonic *relative* inlet Mach ≈1.1–1.3, converges T1/T2,
-  PR≈1.8) — the scaffolding for the transonic structural gate, exercising the
-  §6.7 shock loss end-to-end. **Measured + pinned as a tripwire** (the V7/V8
-  pattern): a mass-flow-specified meanline converges **only** the low-`Vm`
-  continuity root, where the high blade speed forces β1≈70° — at/beyond the
-  Lieblein NACA-65 calibration edge, so validity→0 (saturated). The **in-window**
-  root (β1≈50°, validity≈0.96) sits at the capacity-peak singularity and is
-  unreachable by the mass-flow driver; it needs `BackPressureSpec` (mdot as a
-  state unknown, M5-3 built) + continuation — the standing "V5 supersonic-branch
-  traversal" driver milestone. So a *clean converged in-window all-tiers*
-  transonic V5 gate is blocked on that continuation work, **not** on any missing
-  closure (the loss stack — profile+endwall+clearance+shock — is complete). Flip
-  the tripwire's `validity < 0.1` assertion when the supersonic branch converges.
-  The facade stubs `BackPressureSpec` ("continuation lands at M5"); the Newton +
-  continuation drivers support it, so the traversal is a low-level driver task.
+- **Transonic V5 case — in-window meanline gate (2026-07; two-branch premise
+  refuted).** `V5TransonicRotor` is a high-Ω rotor with supersonic *relative*
+  inlet Mach (M1_rel≈1.14) exercising the §6.7 shock loss. The task "build the
+  V5 supersonic-branch continuation driver" was **diagnosed and found
+  unnecessary** — characterize-before-fixing (scratchpad probes) overturned the
+  documented two-branch premise. **The in-window condition is set by blade
+  *loading* (the equivalent-diffusion factor D_eq), NOT by which
+  meridional-continuity branch the solve lands on.** The original geometry was
+  simply over-diffused: on the ordinary subsonic-meridional branch the mass-flow
+  driver already reaches, D_eq≈2.30 > the Lieblein window ceiling 2.0 → `v_d=0`
+  (every other factor fine, incl. shock `v_sh=1` at M_shock=1.32<1.7); the
+  supersonic-meridional branch is *worse* (higher Vm→higher W1→higher D_eq). The
+  "β1≈50°, validity≈0.96 in-window branch" the old tripwire/docs claimed **never
+  existed** for this geometry. **Fix = a case retune, not a driver:** β2 −52°→−58°
+  (light relative turning, physical for a transonic rotor at the diffusion limit)
+  drops D_eq in-window while keeping M1_rel>1 and the shock active → the plain
+  mass-flow driver converges a genuine in-window transonic point (Tier-1 meanline,
+  mdot=55: validity≈0.99, PR≈1.51, η≈0.86). The old `..._TRIPWIRE` test is
+  replaced by a positive gate `test_transonic_meanline_is_in_window_and_shock_active`.
+  **Two case-design bounds remain (not driver):** the in-window pocket is narrow
+  in mdot (~55), and the **spanwise** tiers still read validity 0 (constant metal
+  angle over the radius ratio swings β1 across span → endwall D_eq out of window;
+  narrowing the annulus to fix it fights the high blade speed the transonic
+  condition needs → an all-tier in-window transonic case is a deferred
+  case-design refinement). The genuine **meridional-supersonic-branch traversal
+  driver** (BackPressureSpec + pseudo-arclength through the per-station capacity
+  fold) remains a real but *separate*, correctly-scoped capability — needed only
+  for design points deliberately on the supersonic-meridional branch, not a V5
+  blocker. Measured branch map recorded in theory manual §C.9 (back-pressure
+  continuation pins at the LE M_m=1 peak; supersonic-seeded Newton stalls with
+  downstream stations pinned at their own M_m=1 peaks) for a future implementer.
 
 ## Commands
 

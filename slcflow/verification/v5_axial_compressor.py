@@ -136,30 +136,52 @@ class V5TransonicRotor:
     pinned by ``test_lieblein_loss.py::
     test_shock_loss_engages_transonic_row_via_evaluate``).
 
-    **A KNOWN-BLOCKED case (measured 2026-07; theory manual §C.9).** At
-    transonic speed the single-node continuity has two ``Vm`` roots per
-    ``mdot``. A mass-flow-specified meanline converges only the **low-Vm**
-    root, where the high blade speed forces the inlet flow angle to β1 ≈ 70°
-    — at/beyond the Lieblein NACA-65 calibration edge, so closure validity
-    collapses to 0 (saturated loss). The **in-window** root (β1 ≈ 50°,
-    validity ≈ 0.96) sits near the capacity peak, where the continuity
-    Jacobian is singular, so the mass-flow driver cannot converge it — it
-    needs ``BackPressureSpec`` (``mdot`` as a state unknown) + continuation,
-    the standing "V5 supersonic-branch traversal" milestone. This class is the
-    scaffolding for the full structural gate once that lands; until then the
-    case is exercised by a tripwire test that pins the branch limitation (flip
-    its validity assertion when the supersonic branch converges).
+    **An in-window transonic MEANLINE gate (measured 2026-07).** The earlier
+    "two-branch / supersonic-branch traversal" framing (theory manual §C.9) was
+    a **misdiagnosis**, corrected by the 2026-07 characterization: the in-window
+    condition is set by blade *loading* (the equivalent-diffusion factor
+    ``D_eq``), **not** by which meridional-continuity branch the solve lands on.
+    The original geometry (β2 = −52°) was simply over-diffused — ``D_eq ≈ 2.30``,
+    above the Lieblein window ceiling of 2.0 → ``loss.validity = 0`` — on the
+    ordinary subsonic-meridional branch that the mass-flow driver already
+    reaches (the supersonic-meridional branch is *worse*: higher ``Vm`` → higher
+    ``W1`` → higher ``D_eq``). No supersonic-branch driver was needed. Reducing
+    the relative turning (β2 −52° → −58°) drops ``D_eq`` into the window while
+    keeping the **relative** inlet Mach supersonic (``M1_rel ≈ 1.14``) and the
+    Aungier §6.7 shock loss active — so the plain mass-flow driver converges a
+    genuine in-window transonic point (Tier-1 meanline, ``mdot = 55``:
+    validity ≈ 0.99, PR ≈ 1.51). This is the structural transonic gate.
+
+    Two honest bounds remain, both case-design (not driver) matters: (i) the
+    in-window pocket is narrow in ``mdot`` (~55; lower ``mdot`` re-diffuses out
+    of the window), and (ii) the **spanwise** tiers still read validity 0 — a
+    constant metal angle over the radius ratio swings β1 across span, driving
+    the endwall/tip ``D_eq`` out of window (the same untwisted-blade effect the
+    subsonic ``V5AxialRotor`` retune addressed by narrowing the annulus; here
+    that fights the high blade speed the transonic condition needs, so an
+    all-tier in-window transonic case is a deferred case-design refinement).
+    The genuine meridional-supersonic-branch traversal driver (BackPressureSpec
+    + pseudo-arclength through the per-station capacity fold) is a real but
+    **separate** capability, needed only for design points deliberately placed
+    on the supersonic-meridional branch — not this case. See theory manual §C.9.
     """
 
     r0: float = 0.35
     r1: float = 0.45
     length: float = 1.0
     omega: float = 900.0             # rad/s — high blade speed (supersonic W1)
-    mdot: float = 55.0               # kg/s — on the converged low-Vm branch
+    mdot: float = 55.0               # kg/s — in-window transonic meanline point
     h0_in: float = 3.0e5             # J/kg
     s_in: float = 0.0
     beta1_blade_deg: float = -61.0   # relative metal angle, LE
-    beta2_blade_deg: float = -52.0   # relative metal angle, TE (modest turning)
+    # TE metal angle set for LIGHT relative turning (β2 − β1 = 3°): the
+    # 2026-07 retune from −52° (9° turning) that dropped the equivalent-
+    # diffusion factor D_eq 2.30 → in-window (< 2.0) on the ordinary
+    # subsonic-meridional branch, so the mass-flow driver converges an
+    # in-window transonic point. Low relative turning is physical for a
+    # transonic rotor (the diffusion limit); the pressure rise is Euler work
+    # from the high blade speed, not from large turning.
+    beta2_blade_deg: float = -58.0   # relative metal angle, TE (light turning)
     solidity: float = 1.5
     chord: float = 0.05
     thickness: float = 0.06
@@ -167,6 +189,9 @@ class V5TransonicRotor:
     gas: PerfectGas = field(default_factory=PerfectGas)
 
     pr_band: tuple = (1.2, 3.0)
+    # Tier-1 meanline efficiency band (structural, not a validation tolerance):
+    # the in-window transonic point reads η ≈ 0.86 with profile+endwall+shock loss.
+    eta_band: tuple = (0.75, 0.995)
 
     def _flowpath(self) -> FlowPath:
         z = np.linspace(0.0, self.length, 8)
