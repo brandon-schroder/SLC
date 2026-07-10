@@ -43,11 +43,29 @@ the cited source, not a modeling choice — **corrected** to `0.1 + t**0.3` and
 pinned against Eq 6-11 in the reference test. (V4/V5 are structural-band checks
 so the shift stays in-band; the full suite re-run confirmed green.)
 
-## Residual
+## SP-36 output validation — DONE 2026-07 (chart digitization)
 
-Every incidence/deviation/off-design-slope fit constant is now discharged.
 The SP-36-side `[VERIFY]` (do these fit *outputs* reproduce the SP-36 chart
-points?) remains a chart-digitization item, separate from the coefficient
-check done here. The **loss** side (`axial_compressor/loss.py`: equivalent-
-diffusion θ*/c, the D_eq form) is a separate Aungier/Lieblein-1959 pass, not
-covered by this note.
+points?) is now **closed**. The original NASA SP-36 was obtained (Johnsen &
+Bullock 1965, NTRS `19650013744`; public-domain) and its four Chapter-VI
+(Lieblein) design charts digitized (`tools/digitize_sp36.py`,
+`tests/test_lieblein_sp36_charts.py`):
+
+| Chart | Quantity | Fit | End-to-end agreement |
+|-------|----------|-----|----------------------|
+| Fig. 137 | `(i0)_10` zero-camber incidence | 6-13 | **RMS 0.10°, max 0.17°** (18 pts, β1=40/50 × σ=0.4–2.0) |
+| Fig. 161 | `(δ0)_10` zero-camber deviation | 6-20 | **RMS 0.17°, max 0.25°** (8 pts) |
+| Fig. 138 | slope factor `n` | 6-15 | overlay-coincident; `n(70,0.4)=−0.45` vs chart ~−0.46 |
+| Fig. 162 | slope factor `m` | 6-22 | overlay-coincident; `m(70,0.4)=0.51` vs chart ~0.52 |
+
+Method: rasterize the figure page, calibrate the plot box off the fine grid
+(dark-pixel line-sums — the *frame* is NOT distinguishable by ink weight here,
+so anchor to the uniform grid), extract curves by a grid-removed column scan,
+and **overlay the coded fit on the chart image** as the decisive visual check.
+(An early ~0.5–1° "discrepancy" was a calibration error — my frame detection
+locked onto interior lines; the fine-grid anchor fixed it.) **No bug found** —
+the Aungier fits are faithful to SP-36 and our transcription is faithful to
+Aungier, end to end. Reading precision ~±0.15° (1965 raster, fine grid).
+
+The **loss** side (`axial_compressor/loss.py`: equivalent-diffusion θ*/c, the
+D_eq form) is a separate Aungier/Lieblein-1959 pass, not covered by this note.

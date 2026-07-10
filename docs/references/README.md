@@ -18,11 +18,12 @@ often live in *different* documents:
 
 - The axial-compressor incidence/deviation/loss fits in
   `closures/axial_compressor/` are **Aungier's analytic curve-fits** to the
-  SP-36 cascade charts, not SP-36 formulas. **SP-36 can validate the fit
-  _outputs_** at chart points (feed β1, σ, t/c → read (i0)10, (δ0)10, m off
-  the figures → compare to the fit). **Only Aungier's book validates the fit
-  _coefficients_** (0.914, s³/160, the K_ti/K_td forms, …). The tag at
-  `lieblein.py:8` therefore needs *both* sources, and the two do different
+  SP-36 cascade charts, not SP-36 formulas. **SP-36 validates the fit
+  _outputs_** at chart points (feed β1, σ, t/c → read (i0)10, (δ0)10, n, m off
+  the figures → compare to the fit) — **DONE 2026-07** (Figs 137/138/161/162,
+  RMS ~0.1–0.2°, no bug; see the AUN-C bullet below). **Only Aungier's book
+  validates the fit _coefficients_** (0.914, s³/160, the K_ti/K_td forms, …),
+  also done. The tag at `lieblein.py:8` needed *both* sources, doing different
   jobs. Same pattern for the K-O and Wiesner coded forms.
 
 ## Tooling note (why some of this is on you)
@@ -126,8 +127,12 @@ below cannot read scanned PDFs). Relevant notebooks:
   `tests/test_lieblein_reference.py`. Nine fits verified verbatim vs Aungier
   ch. 6 (the SP-36 *coefficient* half). Found + **FIXED a real bug**: the
   `K_ti` thickness exponent had an extra ×10 (`(10 t/c)^0.3` vs Aungier Eq
-  6-11 `(t/c)^0.3`). Residual: SP-36 chart-point reproduction of the fit
-  outputs; the `loss.py` (θ*/c, D_eq) side is a separate pass.
+  6-11 `(t/c)^0.3`). **SP-36 fit-output reproduction now DONE** (resolution
+  pass): the original NASA SP-36 was obtained (NTRS 19650013744) and Figs
+  137/138/161/162 digitized — `(i0)_10` RMS 0.10°, `(δ0)_10` RMS 0.17°, n/m
+  overlay-coincident, no bug (`tools/digitize_sp36.py`,
+  `tests/test_lieblein_sp36_charts.py`). The `loss.py` (θ*/c, D_eq) side is a
+  separate pass.
 - **WIE67 (Wiesner slip) — base form CONFIRMED**, see [`WIE67.md`](WIE67.md)
   and `tests/test_wiesner_reference.py` (cross-agreeing across six texts).
   `σ = 1 − √(cos β2b)/Z^0.7`, β2b from radial, exponent 0.7 — verified. The

@@ -11,9 +11,12 @@ incidence/deviation/off-design-slope **fit coefficient** is CONFIRMED against
 Aungier ch. 6 (Eqs 6-13/6-14/6-15/6-20/6-21/6-22/6-24/6-25/6-76), pinned in
 ``tests/test_lieblein_reference.py``. One transcription bug was found and
 FIXED: the ``K_ti`` exponent used ``(10 t/c)^0.3`` where Aungier Eq 6-11 has
-``(t/c)^0.3``. **Residual [VERIFY]**: whether these fit *outputs* reproduce the
-SP-36 *chart points* (a figure-digitization task, distinct from the coefficient
-check) -- and ``K_sh``/ranges for non-NACA-65 profiles.
+``(t/c)^0.3``. The fit **outputs** are also now validated end-to-end against
+the digitized NASA SP-36 (Lieblein) design charts (Figs 137/138/161/162):
+(i0)_10 to RMS 0.10 deg, (delta0)_10 to RMS 0.17 deg, and the n/m camber slopes
+overlay-coincident -- no discrepancy (``tools/digitize_sp36.py``,
+``tests/test_lieblein_sp36_charts.py``, docs/references/AUN-C.md). Residual
+``[VERIFY]``: ``K_sh``/ranges for non-NACA-65 profiles.
 
 Frame convention (section 2.4 + the [VERIFY per correlation] remap duty):
 the fits are written in the *cascade frame* — angles in DEGREES, measured
