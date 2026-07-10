@@ -105,8 +105,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   C1-matched deep-stall linear branches; min-loss `ω̄` now evaluated at the
   reference triangle so the bucket is the sole off-design mechanism — no D_eq
   double-count). Note: the `(i−i*)^1.43` term is Aungier's **surface-velocity**
-  term, not the loss bucket (a common conflation). Deferred `[VERIFY]`: the
-  Mach adjustment of `R_s`/`R_c`.
+  term, not the loss bucket (a common conflation). **`θ*/c` fit-output chart
+  validation now DONE** (2026-07-10): the primary paper (Lieblein 1959, ASME,
+  in the user's Drive) **Fig. 6** was digitized — the coded curve rides the
+  published dashed EQUATION-[8] line and the data cloud, max |coded − chart|
+  = 0.0003, **clean, no bug**; it also pins the validity window (data DR ≈
+  1.15–2.25) and the 2.35 divergence limit (`tools/digitize_lieblein_loss.py`,
+  `test_wake_momentum_thickness_matches_lieblein_fig6`). Deferred `[VERIFY]`:
+  the Mach adjustment of `R_s`/`R_c`.
 - **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` RESOLVED**,
   see [`GC86.md`](GC86.md). The turbulent-diffusion form is right, but the old
   `c_mix=0.01` did NOT match G-C: they recommend `ε/(V_z·L_s) ≈ 1.8e-3` on the
@@ -131,8 +137,8 @@ below cannot read scanned PDFs). Relevant notebooks:
   pass): the original NASA SP-36 was obtained (NTRS 19650013744) and Figs
   137/138/161/162 digitized — `(i0)_10` RMS 0.10°, `(δ0)_10` RMS 0.17°, n/m
   overlay-coincident, no bug (`tools/digitize_sp36.py`,
-  `tests/test_lieblein_sp36_charts.py`). The `loss.py` (θ*/c, D_eq) side is a
-  separate pass.
+  `tests/test_lieblein_sp36_charts.py`). The `loss.py` (θ*/c, D_eq) side was a
+  separate pass, now **also DONE** (Lieblein 1959 Fig. 6 — see LIEB59 above).
 - **WIE67 (Wiesner slip) — base form CONFIRMED**, see [`WIE67.md`](WIE67.md)
   and `tests/test_wiesner_reference.py` (cross-agreeing across six texts).
   `σ = 1 − √(cos β2b)/Z^0.7`, β2b from radial, exponent 0.7 — verified. The

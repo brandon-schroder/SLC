@@ -91,8 +91,43 @@ loss bucket — a common conflation; it is not needed for the off-design loss.
   as an alternative to the Dixon 3.37 log form the code uses. Both are legitimate
   Lieblein forms; noting the alternative, no action.
 
+## θ*/c fit output — DIGITIZED vs Lieblein Fig. 6 (2026-07-10), clean
+
+The `θ*/c` **chart output** (not just the textbook constants) was validated
+against Lieblein's own figure. The primary paper — S. Lieblein, "Loss and Stall
+Analysis of Compressor Cascades," ASME *J. Basic Eng.* **81** (1959) 387–400 —
+is in the user's Google Drive (`lieblein_loss_1959.pdf`). Its **Fig. 6**,
+"Experimental variation of wake momentum thickness with suction-surface
+diffusion ratio at minimum loss," plots `(θ/c)₂` vs the diffusion ratio
+`V_max,s/V₂` for NACA 65-(A₁₀) and C.4 cascade data, with the **dashed curve
+labelled "EQUATION [8] WITH k_s = 1.17 AND ε = 0.004"** — i.e. the coded
+`0.004/(1 − 1.17 ln D_eq)`.
+
+- **Method** (`tools/digitize_lieblein_loss.py`, rerunnable): rendered at 600
+  dpi, axes calibrated off the tick labels (DR 1.0→2.4; θ/c 0→.05), the dashed
+  curve read by column scan where it separates from the data markers. The
+  coded curve was **overlaid on the chart image** (the decisive check) — it
+  lands on the dashed EQUATION-[8] line and through the centre of the data
+  cloud across the whole range. **Max |coded − chart| = 0.0003** (reading
+  precision ~0.0006). **Clean validation, no bug** (like the SP-36
+  incidence/deviation pass). Pinned:
+  `tests/test_lieblein_loss_reference.py::test_wake_momentum_thickness_matches_lieblein_fig6`.
+- **Provenance note.** Lieblein's independent variable in Fig. 6 is the *actual*
+  suction-surface diffusion ratio `V_max,s/V₂`; `D_eq` is his **computable
+  estimate** of that ratio (Eq. for `D_eq` from inlet/outlet conditions). The
+  code substitutes `D_eq` for `V_max,s/V₂` in Eq. 8 — the standard usage.
+- **Validity window.** The data span DR ≈ **1.15 to ≈ 2.25**; the code's
+  compact-support calibration window `_DEQ_CAL = (1.0, 2.0)` is sound and
+  slightly conservative on the upper end (safe — the curve steepens sharply and
+  the fit gets sensitive past 2.0). Lieblein states the fit diverges at the
+  **"limit V_max,s/V₂ = 2.35"** — exactly the code's denominator zero
+  `e^(1/1.17) = 2.351`; the ceiling at 2.2 sits safely at the data edge. Pinned:
+  `test_wake_momentum_thickness_diverges_at_lieblein_2p35_limit`.
+
 ## Residual
 
-Constants confirmed; the ω̄ inversion (fixed) and the off-design model
-(resolved, Aungier) are closed. Open [VERIFY]: SP-36 chart-point digitization
-of the fit outputs, and the two deferred off-design refinements above.
+Constants confirmed; the ω̄ inversion (fixed), the off-design model (resolved,
+Aungier), and the θ*/c fit-output chart validation (Fig. 6, clean) are closed.
+Open [VERIFY]: the two deferred off-design refinements above (Mach adjustment of
+`R_s`/`R_c`; the `(i−i*)^1.43` max-surface-velocity term — not a loss-bucket
+term).

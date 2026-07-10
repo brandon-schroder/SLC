@@ -57,8 +57,12 @@ __all__ = ["equivalent_diffusion", "wake_momentum_thickness",
            "off_design_bucket", "LieblienLoss"]
 
 # theta/c fit domain: the denominator 1 - 1.17 ln(D_eq) vanishes at
-# D_eq = e^(1/1.17) ~ 2.35; saturate D_eq below that with a smooth ceiling,
-# calibration window [1.0, 2.0] for validity. [VERIFY range]
+# D_eq = e^(1/1.17) ~ 2.35 -- Lieblein's stated "limit V_max,s/V2 = 2.35"
+# (1959 paper p.5); saturate D_eq below that with a smooth ceiling. The
+# calibration window [1.0, 2.0] and the theta/c curve were digitized-verified
+# against Lieblein Fig. 6 (docs/references/LIEB59.md, 2026-07-10): the data
+# span DR ~ 1.15-2.25, so [1.0, 2.0] is sound (conservative on the upper end);
+# the ceiling 2.2 sits at the data edge, safely below the 2.35 divergence.
 _DEQ_CEIL, _DEQ_W = 2.2, 0.05
 _DEQ_CAL = (1.0, 2.0, 0.05)
 _DEQ_FLOOR = 0.3
@@ -92,7 +96,8 @@ def equivalent_diffusion(w1, w2, beta1_rad, beta2_rad, sigma, *, xp=None):
 
 
 def wake_momentum_thickness(d_eq, *, xp=None):
-    """``theta*/c`` from ``D_eq`` (Lieblein 1959 fit; [VERIFY]).
+    """``theta*/c`` from ``D_eq`` (Lieblein 1959 Eq. 8, digitized-verified
+    against the paper's Fig. 6 -- docs/references/LIEB59.md).
 
     ``D_eq`` is smoothly saturated into the fit's mathematical domain
     (floor + ceiling below the denominator zero) per section 7.3.2;

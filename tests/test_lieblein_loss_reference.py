@@ -7,6 +7,11 @@ confirmed term-by-term against Aungier ch.6 / Cumpsty / Dixon in
 Scope: D_eq (1.12/0.61), theta/c (0.004/1.17), and the omega_bar assembly
 (2 (theta/c)(sigma/cos b2)(W2/W1)^2, Aungier 6-27 / Cumpsty 1.32 -- the
 velocity-ratio inversion bug found in this pass is now FIXED, 2026-07).
+
+Also pins the chart-OUTPUT validation of ``wake_momentum_thickness`` against
+Lieblein's own Fig. 6 (``tools/digitize_lieblein_loss.py``): the coded curve
+was digitized-verified to ride the published dashed EQUATION-[8] line and the
+cascade data cloud (max |coded - chart| = 0.0003; clean validation, no bug).
 """
 import numpy as np
 import pytest
@@ -39,6 +44,34 @@ def test_wake_momentum_thickness_0p004_1p17(d_eq):
     ref = 0.004 / (1.0 - 1.17 * np.log(d_eq))
     assert float(wake_momentum_thickness(d_eq)[0]) == pytest.approx(
         ref, rel=3e-3)
+
+
+# Digitized Lieblein (1959) Fig. 6 dashed-curve readings (DR, (theta/c)_2);
+# see tools/digitize_lieblein_loss.py for provenance + the overlay check.
+_FIG6 = [(1.10, 0.0046), (1.15, 0.0049), (1.20, 0.0049), (1.40, 0.0063),
+         (1.60, 0.0089), (1.80, 0.0128), (2.05, 0.0247), (2.10, 0.0298)]
+
+
+@pytest.mark.parametrize("d_eq,chart", _FIG6)
+def test_wake_momentum_thickness_matches_lieblein_fig6(d_eq, chart):
+    # Lieblein 1959 Fig. 6: the theta/c = 0.004/(1 - 1.17 ln D_eq) curve
+    # digitized off the primary paper (not just the textbook algebra). The
+    # coded output must reproduce the published dashed EQUATION-[8] curve to
+    # chart reading precision (~0.0006 in theta/c).
+    got = float(wake_momentum_thickness(d_eq)[0])
+    assert got == pytest.approx(chart, abs=1.5e-3)
+
+
+def test_wake_momentum_thickness_diverges_at_lieblein_2p35_limit():
+    # Lieblein 1959 (p.5): the k_s = 1.17 fit diverges at the "limit
+    # V_max,s/V2 = 2.35" -- exactly the denominator zero e^(1/1.17). The code
+    # saturates D_eq below this (ceiling 2.2) so the output stays finite and
+    # rises steeply toward it, never crossing.
+    assert np.exp(1.0 / 1.17) == pytest.approx(2.35, abs=5e-3)
+    below = float(wake_momentum_thickness(2.30)[0])   # near the limit
+    mid = float(wake_momentum_thickness(1.80)[0])
+    assert below > mid > 0.0                          # monotone rise, finite
+    assert np.isfinite(below)
 
 
 @pytest.mark.parametrize("b2d,theta_c,sigma,w1,w2", [(25.0, 0.01, 1.2, 1.0, 0.72),
