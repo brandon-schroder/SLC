@@ -212,7 +212,12 @@ def test_loss_band_positivity_and_validity():
     row, view = _rotor_view_and_row()
     out = KackerOkapuuLoss().evaluate(row, view)
     Y = float(out.components["profile_Y"][0])
-    assert 0.02 < Y < 0.2
+    # Modern-blade profile loss is SMALL (K-O's 2/3 factor on the AM chart, a
+    # thin t/c=0.12 blade, and K_p<1); secondary/shock dominate. The band was
+    # retuned down 2026-07 when the AM Fig.4 recalibration + the positivity-
+    # floor width fix removed a spurious ~0.037 profile-Y inflation (the old
+    # 0.1 angle-ratio smooth_max width; see kacker_okapuu.py). ~0.007 here.
+    assert 0.004 < Y < 0.1
     # All three subsonic components are present, positive, and the total
     # exceeds the profile term alone (section 4.4; B.5.3 auditability).
     assert float(out.components["secondary_Y"][0]) > 0.0

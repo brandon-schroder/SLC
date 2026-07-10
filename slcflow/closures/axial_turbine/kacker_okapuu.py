@@ -22,10 +22,13 @@ Mach endpoints + K2, f_Re knees/exponents, the secondary 0.0334 (DC) x 1.2
 (K-O) + f_AR, the shock 0.75/(M-0.4)^1.75, and the (t/c/0.2)^(b1/b2) thickness
 exponent. The **loading sign convention** is confirmed frame-consistent (KO82
 uses sum-of-tangents for load / difference for mean angle; our signed frame
-swaps them — same physics, see the secondary_loss note). **Still [VERIFY]:**
-the two nozzle/impulse reference curves ``yp1``/``yp2`` and the TE ``phi2``
-curves are surrogate fits to the AM/K-O *charts* — they need reference-figure
-points (digitization), not a formula lookup. The profile interpolation weight
+swaps them — same physics, see the secondary_loss note). The two nozzle/impulse
+reference curves ``yp1``/``yp2`` are now **calibrated to digitized points off
+Ainley-Mathieson R&M 2974 Fig. 4** (``tools/digitize_am_fig4.py``; the u^4
+level law reproduces the chart minima to <0.003 in Y_p). **Still [VERIFY]:**
+the TE ``phi2`` curves and the ``K_p`` Mach ``K1`` ramp remain surrogates —
+their source figures are in the paywalled K-O paper, not the library. The
+profile interpolation weight
 uses KO82's signed ``|b1/b2|(b1/b2)`` (**resolved 2026-07** from the prior
 AM-1957 symmetric ``(b1/b2)^2``; identical for ``b1>=0`` so behavior-preserving
 for every in-domain case, differs only at negative incidence) — see
@@ -65,8 +68,12 @@ _R_LO, _R_HI, _R_W = -1.0, 1.2, 0.1
 # scale, so the weight ~ r^2 away from 0 and C1 through it), and a positivity
 # floor (fraction of the nozzle loss) the signed weight may not drive the
 # bracket below -- an AD-10 safety on deep negative-incidence EXTRAPOLATION
-# only (no in-domain case reaches it; V6 runs r in [0.04, 0.72]).
-_WEIGHT_EPS, _YP_FLOOR_FRAC = 0.05, 0.5
+# only (no in-domain case reaches it; V6 runs r in [0.04, 0.72]). The floor's
+# smooth_max transition width is LOSS-scaled (Y_p ~ 0.02-0.15), NOT the
+# angle-ratio _R_W=0.1 -- smooth_max overestimates by up to width*ln2, so a
+# 0.1 width silently inflated every profile loss by ~0.06 (fixed 2026-07 with
+# the AM Fig.4 recalibration; the old surrogate hid it in structural bands).
+_WEIGHT_EPS, _YP_FLOOR_FRAC, _YP_FLOOR_W = 0.05, 0.5, 0.003
 # Mach-correction constants (K-O): K1 ramps 1 -> 0 over M2 in [0.2, 1.0].
 _M2_FLOOR, _M_W, _KP_FLOOR = 0.05, 0.05, 0.10
 
@@ -97,11 +104,20 @@ def profile_loss_am(s_c, beta1_deg, beta2_deg, tc, *, xp=None):
     u = a2 / 70.0                                   # normalized exit angle
 
     # Nozzle and impulse reference curves: parabola in s/c about a
-    # loading-optimal pitch/chord that tightens with exit angle. [VERIFY]
-    s_opt_n = 0.80 - 0.08 * u
-    yp1 = 0.025 + 0.020 * u * u + 0.035 * ((sc - s_opt_n) / 0.35) ** 2
-    s_opt_i = 0.62 - 0.10 * u
-    yp2 = 0.045 + 0.055 * u * u + 0.070 * ((sc - s_opt_i) / 0.35) ** 2
+    # loading-optimal pitch/chord that tightens with exit angle. The minimum
+    # level (u^4), the optimum-pitch line (linear in u), and the curvature are
+    # CALIBRATED to digitized points off Ainley-Mathieson R&M 2974 Fig. 4a/4b
+    # (t/c=20%, Re=2e5, M<0.6; docs/references/KO82.md, tools/digitize_am_fig4.py).
+    # The u^4 minimum-loss law reproduces the chart minima to <0.003 in Y_p (the
+    # earlier u^2 constants over-predicted the level by ~0.01). The curvature is
+    # a single symmetric-parabola compromise for the chart's (real) asymmetry --
+    # steep for crowded blades s/c<s_opt, flat for sparse s/c>s_opt -- accurate
+    # near the loading optimum where rows operate; it over-predicts only at
+    # simultaneously high exit angle AND high s/c (documented, KO82.md).
+    s_opt_n = 1.109 - 0.397 * u
+    yp1 = 0.0178 + 0.0179 * u ** 4 + 0.020 * ((sc - s_opt_n) / 0.35) ** 2
+    s_opt_i = 1.000 - 0.408 * u
+    yp2 = 0.0572 + 0.0782 * u ** 4 + 0.045 * ((sc - s_opt_i) / 0.35) ** 2
 
     r = soft_clip(beta1_deg / a2, _R_LO, _R_HI, _R_W, xp=xp)
     tfac = (t / 0.20) ** r
@@ -116,7 +132,7 @@ def profile_loss_am(s_c, beta1_deg, beta2_deg, tc, *, xp=None):
     # off-design safety, not a calibration -- no in-domain case reaches it).
     weight = abs_smooth(r, _WEIGHT_EPS, xp=xp) * r
     bracket = smooth_max(yp1 + weight * (yp2 - yp1), _YP_FLOOR_FRAC * yp1,
-                         _R_W, xp=xp)
+                         _YP_FLOOR_W, xp=xp)
     yp_am = bracket * tfac
     return yp_am, v1 * v2 * v3
 

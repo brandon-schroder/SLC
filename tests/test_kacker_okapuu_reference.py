@@ -7,10 +7,11 @@ that were confirmed term-by-term against the source in
 loss-model library, citation-backed). If a future refactor drifts one of
 these numbers, that is a regression against the paper, and this file goes red.
 
-Scope: only the confirmed *formula* constants are pinned. The nozzle/impulse
-``yp1``/``yp2`` and TE ``phi2`` reference curves are surrogate fits to the
-AM/K-O charts and are NOT pinned here (they need figure-point digitization —
-the residual [VERIFY], see KO82.md).
+Scope: the confirmed *formula* constants, plus (2026-07) the nozzle/impulse
+``yp1``/``yp2`` reference curves now that they are calibrated to digitized
+points off Ainley-Mathieson R&M 2974 Fig. 4 (``tools/digitize_am_fig4.py``,
+KO82.md). The TE ``phi2`` curve remains a surrogate NOT pinned here (its
+source is the paywalled K-O TE figure, not in the library — still [VERIFY]).
 """
 import numpy as np
 import pytest
@@ -20,6 +21,46 @@ from slcflow.closures.axial_turbine.kacker_okapuu import (
     reynolds_correction, secondary_loss, shock_loss)
 
 DEG = np.pi / 180.0
+
+# Digitized minima off Ainley-Mathieson R&M 2974 Fig. 4 (t/c=20%, Re=2e5,
+# M<0.6): (alpha2_deg, s/c at minimum, Y_p,min). These ARE the reference the
+# yp1/yp2 surrogate is calibrated to (tools/digitize_am_fig4.py fits the same
+# points); read to ~+/-0.005 off the 1951 raster chart, cross-checked against
+# an automated column scan and the canonical Dixon / CRS values. See KO82.md.
+NOZZLE = [(40, 0.86, 0.021), (50, 0.83, 0.023), (60, 0.79, 0.026),
+          (65, 0.76, 0.030), (70, 0.72, 0.035), (75, 0.68, 0.042),
+          (80, 0.63, 0.049)]
+IMPULSE = [(40, 0.75, 0.067), (50, 0.72, 0.075), (55, 0.70, 0.086),
+           (60, 0.65, 0.102), (65, 0.62, 0.115), (70, 0.58, 0.135)]
+
+
+@pytest.mark.parametrize("a2,sc,ymin", NOZZLE)
+def test_nozzle_curve_matches_am_fig4a(a2, sc, ymin):
+    # yp1 (beta1=0, r=0) reproduces the digitized R&M 2974 Fig. 4a nozzle
+    # minima. t/c=0.20 (the chart condition) makes the thickness factor unity.
+    # Tolerance = chart read precision (~+/-0.005) + fit residual; a drift in
+    # the u^4 level law or the optimum-pitch line turns this red.
+    got = float(profile_loss_am(sc, 0.0, float(a2), 0.20)[0])
+    assert got == pytest.approx(ymin, abs=6e-3)
+
+
+@pytest.mark.parametrize("a2,sc,ymin", IMPULSE)
+def test_impulse_curve_matches_am_fig4b(a2, sc, ymin):
+    # yp2 (beta1=beta2, r=1) reproduces the digitized Fig. 4b impulse minima.
+    got = float(profile_loss_am(sc, float(a2), float(a2), 0.20)[0])
+    assert got == pytest.approx(ymin, abs=6e-3)
+
+
+def test_profile_loss_floor_width_is_loss_scaled_not_angle_scaled():
+    # Regression for the 2026-07 fix: the AD-10 positivity floor's smooth_max
+    # transition width must be LOSS-scaled (Y_p ~ 0.02-0.15), not the
+    # angle-ratio _R_W=0.1. smooth_max overestimates by up to width*ln2, so a
+    # 0.1 width inflated every nozzle/impulse loss by ~0.06. Guard it: the
+    # nozzle minimum must sit near the digitized ~0.021 (Fig. 4a, a2=40), NOT
+    # ~0.084 as the mis-scaled width produced.
+    y = float(profile_loss_am(0.86, 0.0, 40.0, 0.20)[0])
+    assert y < 0.030          # would be ~0.084 with the 0.1 angle-ratio width
+    assert y == pytest.approx(0.021, abs=6e-3)
 
 
 def test_reynolds_exponents_match_ko82():

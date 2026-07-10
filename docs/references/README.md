@@ -61,8 +61,13 @@ below cannot read scanned PDFs). Relevant notebooks:
   **fixed** (resolution pass): AM-1957's symmetric `(b1/b2)^2` → KO82's signed
   `|b1/b2|(b1/b2)` — behavior-preserving for `b1≥0` (all in-domain cases;
   V6 runs `r∈[0.04,0.72]`), with a C¹ positivity floor for deep-negative
-  extrapolation. Residual `[VERIFY]`: the nozzle/impulse + TE **chart**
-  reference curves (need figure digitization).
+  extrapolation. **The nozzle/impulse profile-loss curves are now DIGITIZED**
+  (resolution pass): `yp1`/`yp2` calibrated to Ainley-Mathieson R&M 2974 Fig. 4
+  points (`tools/digitize_am_fig4.py`; u⁴ level law, <0.003 in Y_p), which also
+  **surfaced a real bug** — the positivity-floor `smooth_max` width was
+  angle-scaled (`_R_W=0.1`), inflating every profile-Y by ~0.037; fixed to a
+  loss-scaled 0.003. Residual `[VERIFY]`: the TE `φ²` + `K_p` `K1` Mach curves
+  (their figures are in the paywalled K-O paper, not the library).
 - **CONV-B (Appendix-B loss→entropy definitions) — all CONFIRMED**, see
   [`CONV-B.md`](CONV-B.md) and `tests/test_conversions_reference.py`. The
   foundational layer: master `Δs=−R ln(p02/p01)` (Denton 4a), compressor `ω̄`
