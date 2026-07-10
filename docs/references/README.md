@@ -125,12 +125,14 @@ below cannot read scanned PDFs). Relevant notebooks:
   outputs; the `loss.py` (θ*/c, D_eq) side is a separate pass.
 - **WIE67 (Wiesner slip) — base form CONFIRMED**, see [`WIE67.md`](WIE67.md)
   and `tests/test_wiesner_reference.py` (cross-agreeing across six texts).
-  `σ = 1 − √(cos β2b)/Z^0.7`, β2b from radial, exponent 0.7 — verified. Found:
-  the code omits the radius-ratio limit correction (`ε=exp(−8.16 cos β2b/Z)`
-  + cubic reduction) — `[DECIDE]`, off-limit only; von Backström not in the
-  library; a sin/cos docstring slip corrected. NB the Wiesner source lives in
-  the **"Staging Area (Theory)"** notebook (centrifugal texts), not the loss
-  notebook.
+  `σ = 1 − √(cos β2b)/Z^0.7`, β2b from radial, exponent 0.7 — verified. The
+  radius-ratio limit correction (`ε=exp(−8.16 cos β2b/Z)` + Braembussche cubic)
+  is now **implemented** (RESOLVED 2026-07): the cube adopted over Aungier's
+  `β2/10` on 3-source consensus; `r1/r2 = flow.r/flow.r_te` from the flow view
+  (no geometry-contract change); off-limit only, so V7 stays in-band. von
+  Backström not in the library; a sin/cos docstring slip corrected. NB the
+  Wiesner source lives in the **"Staging Area (Theory)"** notebook (centrifugal
+  texts), not the loss notebook.
 
 Query mechanics (for the next pass): NotebookLM persists chat server-side and
 will anchor on it — **clear the chat between topics** (`scripts/clear_chat.py`,

@@ -116,7 +116,9 @@ class CentrifugalLoss:
         # W_theta2 = (sigma - 1) U2 - Vm2 tan(beta2b).
         b2b = soft_clip(sgn * g.beta2_blade(y), -_ANG_CAP, _ANG_CAP, _ANG_W,
                         xp=xp)
-        sigma, v_s = wiesner_slip(b2b, g.blade_count, xp=xp)
+        # r1/r2 drives the same radius-ratio limit correction as the swirl
+        # closure (shared Wiesner slip, consistent exit velocity).
+        sigma, v_s = wiesner_slip(b2b, g.blade_count, flow.r / flow.r_te, xp=xp)
         u1 = row.omega * flow.r
         u2 = row.omega * flow.r_te
         w_theta_2 = (sigma - 1.0) * u2 - flow.vm_te * xp.tan(b2b)
