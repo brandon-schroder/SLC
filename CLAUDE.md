@@ -439,6 +439,41 @@ These are not suggestions; violating them is a bug even if tests pass.
   streamline fit, or documenting ib≈6 as the supported radial/mixed
   layout. Until then 55°-class bends with ib far from 6 are a
   known-unsupported region, honestly reported by typed statuses.
+- **Reference-library calibration pass — COMPLETE (2026-07).** A systematic
+  discharge of the `[VERIFY]`/`[DECIDE]` correlation backlog, checking every
+  closure coefficient and every fitted chart output against authoritative
+  library sources (the user's NotebookLM notebooks + Google Drive papers +
+  public archives; transcription notes live in `docs/references/<KEY>.md`,
+  index in `docs/references/README.md`). Coefficient level (9 sources
+  discharged): confirmed the K-O (KO82), Wiesner (WIE67), Aungier compressor
+  fits (AUN-C), Gallimore-Cumpsty mixing (GC86), Lieblein loss (LIEB59),
+  centrifugal loss (CENT-LOSS), Ainley angle (AM-ANGLE), and Appendix-B
+  conversions (CONV-B) constants verbatim. **Real bugs found + fixed:** the
+  Lieblein ω̄ velocity-ratio inversion `(W1/W2)²`→`(W2/W1)²` (~4× profile-loss
+  overestimate, `loss.py`); the `K_ti` thickness-exponent ×10 (`lieblein.py`);
+  the AM-Fig4 positivity-floor width (angle-scaled on loss-scale values, ~0.06
+  inflation of every profile-Y); the K-O TE φ² curves (nozzle/impulse swapped +
+  ~3× high + symmetric weight, `kacker_okapuu.py`). **`[DECIDE]`s resolved:**
+  GC `c_mix` 0.01→5e-4 (refuting the M8 "mixing homogenizes multistage" claim —
+  it is a modest ~18% damping, re-measured after a V5 annulus retune that put
+  the Lieblein loss in its validity window); Lieblein off-design bucket →
+  Aungier ξ-model; centrifugal `f_inc`/`W_avg` → Aungier 2000; Wiesner
+  radius-ratio limit → Braembussche cubic; KO82 interp weight → signed `|r|r`.
+  **Chart-output digitizations (all clean-or-fixed, rerunnable
+  `tools/digitize_*.py` + pinned reference tests):** SP-36 incidence/deviation
+  (i0/n/δ0/m, RMS ≤0.17°, no bug), AM R&M2974 Fig.4 turbine profile loss
+  (floor bug fixed), K-O Fig.8 K1 (confirmed exact — printed on the chart) +
+  Fig.14 TE φ², and Lieblein 1959 Fig.6 θ*/c loss magnitude (clean, max
+  |coded−chart|=0.0003; pinned the D_eq validity window + the 2.35 divergence
+  limit). Method lesson (recorded in the tools' docstrings): on fine-grid
+  rasters the frame is not distinguishable by ink weight — anchor to the
+  uniform tick grid, and OVERLAY the coded fit on the chart image as the
+  decisive check. **No known reference/chart work remains**; residual
+  `[VERIFY]`s in the closures are genuine deferred *refinements* (e.g. the
+  Lieblein off-design `R_s`/`R_c` Mach adjustment, the K-O `K_s`/shock geometric
+  factors, per-node Reynolds), not calibration gaps. Point-by-point
+  published-figure / NASA-data *case* reproduction (V4–V8 speedlines) stays
+  `[VERIFY]` — a validation-dataset matter, separate from this coefficient pass.
 
 ## Commands
 
