@@ -503,6 +503,29 @@ These are not suggestions; violating them is a bug even if tests pass.
   (transonic V5). Point-by-point V5 still needs a subsonic-stage validation
   dataset (absent from the library) — the efficiency-physics blocker is now
   lifted, the dataset one is not.
+- **Axial-compressor transonic shock loss (2026-07).** Added the deferred
+  compressor **shock** loss (the theory-manual §C.9 M6-4 deferral: the *turbine*
+  K-O shock term doesn't apply to the Lieblein set by AD-5). **Aungier §6.7**,
+  verified vs the library: a normal shock at the **geometric-mean Mach**
+  `M_shock = √(M1·M_ss)` (Eq 6-71), with the suction-surface Mach
+  `M_ss = M1·(W_max,s/W1)` taken from the **equivalent-diffusion bracket**
+  (Aungier's own `D_eq = W_max,s/W2` estimate — used in lieu of the Eq 6-69/70
+  Prandtl-Meyer surface-curvature expansion, whose `R_u` isn't in the §4.1
+  contract). Normal-shock Pt loss (perfect-gas Rayleigh pitot, exact reduction
+  of Aungier's real-gas 6-72..74) referenced to inlet dynamic head (Eq 2-68) and
+  added to the profile+endwall `omega_bar`. **C¹ at the M=1 onset** (loss ∝
+  (M−1)³ per Cumpsty, held C¹ by a softplus floor — pinned by a refinement-scaling
+  test), and **inert subsonic** (0 to reading precision below onset → all current
+  V5 cases unchanged; V5 rotor η 0.922 preserved). Because `M_shock > M1` it
+  engages Aungier's *supercritical* regime (shock while the inlet is subsonic).
+  New pure functions `normal_shock_pt_ratio`/`shock_loss`; reference tests pin
+  the normal-shock ratio vs gas tables (M=2.0→0.7209), the formula, the
+  supercritical onset, and end-to-end engagement (η falls with speed on a
+  high-Ω rotor). Deferred `[VERIFY]`: the Prandtl-Meyer `M_ss` (needs `R_u`),
+  the onset width, the far-supersonic validity ceiling. The remaining piece for
+  the V5 supersonic-branch traversal is now a *transonic V5 case design* (an
+  in-window supersonic-inlet rotor) + the back-pressure/continuation mode — a
+  case + driver matter, no longer a missing closure.
 
 ## Commands
 

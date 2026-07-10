@@ -18,8 +18,8 @@ import pytest
 
 from slcflow.closures.axial_compressor.loss import (
     blade_loading_coefficient, endwall_clearance_loss, equivalent_diffusion,
-    off_design_bucket, profile_loss_coefficient, stall_choke_ranges,
-    wake_momentum_thickness)
+    normal_shock_pt_ratio, off_design_bucket, profile_loss_coefficient,
+    shock_loss, stall_choke_ranges, wake_momentum_thickness)
 
 DEG = np.pi / 180.0
 
@@ -136,6 +136,50 @@ def test_endwall_validity_drops_at_high_loading():
     _, v_hi = endwall_clearance_loss(65 * DEG, 30 * DEG, 0.8, 2.5, 0.0)
     assert float(v_lo) == pytest.approx(1.0, abs=1e-3)
     assert float(v_hi) < 0.1
+
+
+# Standard normal-shock stagnation-pressure ratios (gas tables, gamma=1.4).
+@pytest.mark.parametrize("mach,pt_ratio", [(1.0, 1.0000), (1.5, 0.9298),
+                                           (2.0, 0.7209), (2.5, 0.4990)])
+def test_normal_shock_pt_ratio_matches_gas_tables(mach, pt_ratio):
+    # The Rayleigh supersonic-pitot / normal-shock relation (Aungier 6.7 uses a
+    # real-gas solve of 6-72..74; this is the perfect-gas closed form). Pinned
+    # against standard compressible-flow tables.
+    assert float(normal_shock_pt_ratio(mach, 1.4)) == pytest.approx(
+        pt_ratio, abs=5e-4)
+
+
+def test_shock_loss_is_inert_subsonic():
+    # M_shock = M1 sqrt(ratio); well below the M_shock=1 onset the loss is ~0,
+    # so subsonic compressor rows (all current V5 cases) are unaffected.
+    om, v = shock_loss(0.6, 1.3, 1.4)       # M_shock = 0.6*sqrt(1.3) = 0.684
+    assert float(om) < 1e-4
+    assert float(v) == pytest.approx(1.0, abs=1e-3)
+
+
+@pytest.mark.parametrize("m1,ratio", [(1.3, 1.25), (1.4, 1.20), (1.25, 1.35)])
+def test_shock_loss_matches_aungier_formula(m1, ratio):
+    # Aungier 6.7: M_shock = sqrt(M1 * M_ss), M_ss = M1*ratio (Eq 6-71); the
+    # normal-shock Pt loss referenced to inlet dynamic head (Eq 2-68). Recompute
+    # the documented closed form independently and require the code to match.
+    # Chosen deep-supersonic (M_shock > 1.45) where the C1 softplus onset floor
+    # is identity; the near-onset supercritical behaviour is a separate test.
+    g = 1.4
+    m_shock = np.sqrt(m1 * (m1 * ratio))
+    pr = float(normal_shock_pt_ratio(m_shock, g))
+    p_pt1 = (1.0 + 0.5 * (g - 1.0) * m1 * m1) ** (-g / (g - 1.0))
+    ref = (1.0 - pr) / (1.0 - p_pt1)
+    om, _ = shock_loss(m1, ratio, g)
+    assert float(om) == pytest.approx(ref, rel=1e-2)
+
+
+def test_shock_loss_supercritical_onset_and_growth():
+    # The geometric-mean Mach can exceed 1 while the inlet M1 is still subsonic
+    # (Aungier's supercritical regime), and the loss grows monotonically with M1.
+    oms = [float(shock_loss(m, 1.4, 1.4)[0])
+           for m in [0.85, 0.95, 1.05, 1.15]]
+    assert oms[0] < oms[1] < oms[2] < oms[3]          # monotone growth
+    assert oms[1] > 1e-3                              # supercritical: M1<1 loss>0
 
 
 @pytest.mark.parametrize("theta,b1", [(12.0, 52.0), (25.0, 45.0), (8.0, 60.0)])

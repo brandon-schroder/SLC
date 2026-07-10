@@ -65,8 +65,8 @@ from .lieblein import reference_deviation, reference_incidence
 
 __all__ = ["equivalent_diffusion", "wake_momentum_thickness",
            "profile_loss_coefficient", "blade_loading_coefficient",
-           "endwall_clearance_loss", "stall_choke_ranges",
-           "off_design_bucket", "LieblienLoss"]
+           "endwall_clearance_loss", "normal_shock_pt_ratio", "shock_loss",
+           "stall_choke_ranges", "off_design_bucket", "LieblienLoss"]
 
 # theta/c fit domain: the denominator 1 - 1.17 ln(D_eq) vanishes at
 # D_eq = e^(1/1.17) ~ 2.35 -- Lieblein's stated "limit V_max,s/V2 = 2.35"
@@ -114,6 +114,18 @@ _CDA_C = 0.020       # Howell annulus constant
 _CDK_C = 0.7         # Lakshminarayana tip-clearance constant
 _B1_CLIP = 80.0      # inlet-angle soft clip [deg] (AD-10 / C1, as profile)
 _CL_CEIL, _CL_W = 1.6, 0.15   # loading validity ceiling (compact support)
+
+# Aungier (2003) section 6.7 transonic shock loss: a normal shock at the
+# geometric-mean Mach M_shock = sqrt(M1 * M_ss) (Eq 6-71), with the suction-
+# surface Mach M_ss = M1 (W_max,s/W1) and the surface velocity ratio W_max,s/W1
+# taken as the equivalent-diffusion bracket (Aungier's own estimate of W_max,s
+# = D_eq * W2; used in lieu of the 6-69/70 Prandtl-Meyer surface-curvature
+# expansion, whose suction-surface radius of curvature is not in the section-4.1
+# contract). Normal-shock Pt loss referenced to inlet dynamic head (Eq 2-68),
+# added to the profile+endwall omega_bar (one B.2 conversion).
+_MSH_W = 0.08        # C1 onset width on (M_shock - 1) [VERIFY]
+_DEN_FLOOR, _DEN_FW = 0.05, 0.02   # inlet dynamic-head denominator floor (AD-10)
+_MSH_CEIL, _MSH_VW = 1.7, 0.15     # validity fade far supersonic [VERIFY]
 
 
 def equivalent_diffusion(w1, w2, beta1_rad, beta2_rad, sigma, *, xp=None):
@@ -212,6 +224,56 @@ def endwall_clearance_loss(beta1_rad, beta2_rad, sigma, aspect_ratio,
     return omega_ew, v
 
 
+def normal_shock_pt_ratio(mach, gamma, *, xp=None):
+    """Normal-shock stagnation-pressure ratio ``p02/p01`` at upstream Mach
+    ``mach >= 1`` (perfect gas -- the Rayleigh supersonic-pitot relation):
+
+        p02/p01 = [ (g+1)M^2 / ((g-1)M^2 + 2) ]^(g/(g-1))
+                * [ (g+1) / (2 g M^2 - (g-1)) ]^(1/(g-1))
+
+    Unity at M=1 and falling as ~(M-1)^3 for weak shocks (Cumpsty), so C1 at
+    onset. Aungier 6.7 uses a real-gas conservation solve (Eq 6-72..6-74); this
+    is the perfect-gas closed form, exact for :class:`PerfectGas`. Callers pass
+    ``mach >= 1`` (the denominator ``2 g M^2 - (g-1) >= g+1 > 0``)."""
+    xp = get_xp(xp)
+    g = gamma
+    m2 = mach * mach
+    t1 = ((g + 1.0) * m2 / ((g - 1.0) * m2 + 2.0)) ** (g / (g - 1.0))
+    t2 = ((g + 1.0) / (2.0 * g * m2 - (g - 1.0))) ** (1.0 / (g - 1.0))
+    return t1 * t2
+
+
+def shock_loss(m1, surface_velocity_ratio, gamma, *, xp=None):
+    """Aungier (2003) section 6.7 transonic shock-loss coefficient
+    ``omega_shock`` (inlet-relative reference; docs/references/AUN-C.md):
+
+        M_ss     = M1 (W_max,s / W1)                      (surface Mach)
+        M_shock  = sqrt(M1 * M_ss)                        (Aungier 6-71)
+        omega_shock = (1 - p02/p01|M_shock) / (1 - p1/p01|M1)   (Aungier 2-68)
+
+    ``surface_velocity_ratio`` = ``W_max,s/W1`` is the equivalent-diffusion
+    bracket (Aungier's own estimate of ``W_max,s = D_eq W2``), used in lieu of
+    the 6-69/70 Prandtl-Meyer surface-curvature expansion the section-4.1
+    contract lacks the geometry for (recorded ``[VERIFY]``). Because
+    ``M_ss = M1 * ratio``, ``M_shock = M1 sqrt(ratio) > M1`` -- the shock can
+    turn on while the inlet itself is subsonic (Aungier's supercritical regime).
+    C1 at the ``M_shock = 1`` onset via softplus; the loss is 0 (to reading
+    precision) well below onset, so subsonic rows are unaffected. Returns
+    ``(omega_shock, validity)`` referenced to the inlet dynamic head, so it ADDS
+    to the profile+endwall ``omega_bar`` under one B.2 conversion (section 4.4)."""
+    xp = get_xp(xp)
+    m_ss = m1 * surface_velocity_ratio
+    m_shock = xp.sqrt(m1 * m_ss)                        # geometric mean (6-71)
+    m_eff = 1.0 + softplus(m_shock - 1.0, _MSH_W, xp=xp)   # C1 onset, >= 1
+    pr = normal_shock_pt_ratio(m_eff, gamma, xp=xp)
+    g = gamma
+    p_pt1 = (1.0 + 0.5 * (g - 1.0) * m1 * m1) ** (-g / (g - 1.0))
+    denom = _DEN_FLOOR + softplus((1.0 - p_pt1) - _DEN_FLOOR, _DEN_FW, xp=xp)
+    omega = (1.0 - pr) / denom
+    v = 1.0 - blend(m_shock, _MSH_CEIL, _MSH_VW, xp=xp)
+    return omega, v
+
+
 def stall_choke_ranges(camber_deg, beta1_deg, *, xp=None):
     """Aungier ch.6 low-speed positive-stall (``R_s``) and negative-stall /
     choke (``R_c``) incidence ranges [deg] (docs/references/LIEB59.md;
@@ -277,9 +339,11 @@ class LieblienLoss:
     """LossModel (section 7.1): reference profile loss from the
     equivalent-diffusion chain (Aungier off-design incidence bucket, physical
     stall/choke ranges) PLUS Howell endwall (secondary + annulus) and
-    Lakshminarayana tip-clearance loss, summed as one inlet-referenced
-    ``omega_bar`` and converted to entropy per B.2 at the B.1-re-referenced
-    exit state.
+    Lakshminarayana tip-clearance loss PLUS the Aungier section-6.7 transonic
+    shock loss, summed as one inlet-referenced ``omega_bar`` and converted to
+    entropy per B.2 at the B.1-re-referenced exit state. The shock term is 0
+    (to reading precision) for subsonic rows, so it only engages transonic
+    cases -- all current subsonic V5 cases are unaffected.
 
     ``aspect_ratio`` (blade height/chord) is a row-scalar design input for the
     endwall/clearance drag (``s/h`` and ``t/h``; deriving it from the annulus
@@ -342,7 +406,16 @@ class LieblienLoss:
         clearance_ratio = g.tip_clearance() / (self.aspect_ratio * chord)
         omega_ew, v_e = endwall_clearance_loss(
             b1_ref, b2_ref, sigma, self.aspect_ratio, clearance_ratio, xp=xp)
-        omega_raw = omega_profile + omega_ew
+        # Aungier section 6.7 transonic shock loss (docs/references/AUN-C.md):
+        # normal shock at the geometric-mean Mach, using the ACTUAL inlet
+        # relative Mach and the equivalent-diffusion bracket W_max,s/W1 as the
+        # suction-surface velocity ratio. Zero (to reading precision) for
+        # subsonic rows, so all existing V5 cases are unaffected.
+        m1_rel = w1 / flow.a
+        surf_ratio = d_eq * w2_ref / w1_ref            # W_max,s/W1 (D_eq bracket)
+        omega_shock, v_sh = shock_loss(m1_rel, surf_ratio, flow.fluid.gamma,
+                                       xp=xp)
+        omega_raw = omega_profile + omega_ew + omega_shock
         # Section 7.3.2 conservative asymptote: level off smoothly well
         # inside the B.2 conversion's domain; validity reflects binding.
         omega_bar = smooth_min(omega_raw, _WBAR_CEIL, _WBAR_W, xp=xp)
@@ -360,6 +433,7 @@ class LieblienLoss:
         return LossBreakdown(
             components={"profile_omega_bar": omega_profile,
                         "endwall_omega_bar": omega_ew,
+                        "shock_omega_bar": omega_shock,
                         "omega_bar_total": omega_bar},
             delta_s=delta_s,
-            validity=float(xp.min(v_i * v_d * v_w * v_e)))
+            validity=float(xp.min(v_i * v_d * v_w * v_e * v_sh)))

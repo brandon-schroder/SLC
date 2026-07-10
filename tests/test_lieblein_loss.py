@@ -161,6 +161,38 @@ def test_delta_s_matches_b2_conversion_of_native_coefficient():
     np.testing.assert_allclose(out.delta_s, ds, rtol=1e-4)
 
 
+def test_shock_loss_engages_transonic_row_via_evaluate():
+    # Aungier 6.7 shock term through the full evaluate() wiring: ~0 for a
+    # subsonic relative inlet (all current V5 cases), > 0 for a transonic one,
+    # and the recorded omega_bar_total is the profile + endwall + shock sum.
+    row_s, sub = make_view_and_row(omega=400.0, r=0.45)       # M1 ~ 0.62
+    row_t, trans = make_view_and_row(omega=820.0, r=0.5)      # M1 ~ 1.24
+    out_s = LieblienLoss().evaluate(row_s, sub)
+    out_t = LieblienLoss().evaluate(row_t, trans)
+    assert float(out_s.components["shock_omega_bar"][0]) < 1e-3   # inert subsonic
+    assert float(out_t.components["shock_omega_bar"][0]) > 5e-3   # engaged transonic
+    parts = (out_t.components["profile_omega_bar"][0]
+             + out_t.components["endwall_omega_bar"][0]
+             + out_t.components["shock_omega_bar"][0])
+    # total is the summed coefficient (rtol reflects the smooth-min ceiling
+    # residue at omega ~ 0.13, far below the 0.5 ceiling -- not slack in the sum).
+    np.testing.assert_allclose(out_t.components["omega_bar_total"][0], parts,
+                               rtol=1e-3)
+
+
+def test_shock_loss_c1_across_onset():
+    # Section 7.3: the shock loss must be C1 across the M_shock = 1 onset -- the
+    # raw normal-shock loss kinks there without the softplus onset floor. Sweep
+    # M1 through the onset (M_shock = M1*sqrt(1.3) crosses 1 at M1 ~ 0.877).
+    from slcflow.closures.axial_compressor.loss import shock_loss
+
+    def om_of_m1(m1_arr):
+        return np.array([float(shock_loss(float(m), 1.3, 1.4)[0])
+                         for m in m1_arr])
+
+    _assert_c1_continuous(om_of_m1, 0.6, 1.5)
+
+
 def test_loss_c1_in_flow_input():
     # Section 7.3: C1 in the flow input (vm sweep crosses the bucket and
     # the D_eq saturation smoothly).

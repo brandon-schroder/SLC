@@ -69,3 +69,37 @@ Aungier, end to end. Reading precision ~±0.15° (1965 raster, fine grid).
 
 The **loss** side (`axial_compressor/loss.py`: equivalent-diffusion θ*/c, the
 D_eq form) is a separate Aungier/Lieblein-1959 pass, not covered by this note.
+
+## Transonic shock loss — Aungier §6.7 (added 2026-07)
+
+The compressor set's transonic **shock loss** (`shock_loss` /
+`normal_shock_pt_ratio` in `loss.py`) is Aungier's §6.7 model, verified vs the
+library (NotebookLM, Staging Area Theory):
+
+- **Shock Mach = geometric mean** of the inlet relative Mach and the expanded
+  suction-surface Mach: `M_shock = √(M'_I · M'_S)` (**Aungier Eq 6-71**).
+- **Normal-shock Pt loss** referenced to the **inlet** relative dynamic head:
+  `ω_shock = (1 − p02/p01|M_shock)/(1 − p1/p01|M1)` (**Aungier Eq 2-68**),
+  **added** to the profile + endwall `omega_bar` (one B.2 conversion).
+- The normal-shock `p02/p01` is the perfect-gas Rayleigh supersonic-pitot
+  relation (Aungier's §6.7 real-gas conservation solve Eq 6-72..74 reduces to
+  this closed form for `PerfectGas`); pinned against gas tables
+  (M=1.5→0.9298, 2.0→0.7209). Cumpsty: weak-shock loss ∝ (M−1)³, so it is
+  **C¹ at the M=1 onset** (kept C¹ across onset by a softplus floor, pinned).
+
+**Modelling choice (recorded `[VERIFY]`).** Aungier computes the suction-surface
+Mach `M'_S` from a Prandtl-Meyer expansion (Eq 6-69/70) needing the
+**suction-surface radius of curvature** `R_u` — geometry *not* in the §4.1
+contract. Instead the suction-surface velocity ratio `W_max,s/W1` is taken as
+the **equivalent-diffusion bracket** (Aungier's own estimate, since
+`D_eq = W_max,s/W2`), so `M'_S = M1·(W_max,s/W1)` uses only quantities already
+computed. Because `M_shock = M1·√(bracket) > M1`, the shock can engage while the
+inlet is still subsonic (Aungier's *supercritical* regime). Alternatives
+(Miller-Lewis-Hartmann uses the *arithmetic* mean; Koch-Smith an oblique shock
+to M=1 plus endwall charts) were noted and not chosen. The loss is 0 to reading
+precision below onset, so all subsonic V5 cases are unaffected; it engages
+transonic rows (measured: η falls with speed on a high-`Ω` rotor). Deferred
+`[VERIFY]`: the Prandtl-Meyer `M'_S` (needs `R_u`), the onset width `_MSH_W`,
+and the far-supersonic validity ceiling. A full in-window **transonic V5**
+verification case + supersonic-branch speedline traversal is the next step
+(theory manual §C.9 note) — it also needs the back-pressure/continuation mode.
