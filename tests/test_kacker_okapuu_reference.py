@@ -18,7 +18,7 @@ import pytest
 
 from slcflow.closures.axial_turbine.kacker_okapuu import (
     _aspect_ratio_factor, mach_profile_correction, profile_loss_am,
-    reynolds_correction, secondary_loss, shock_loss)
+    reynolds_correction, secondary_loss, shock_loss, trailing_edge_zeta)
 
 DEG = np.pi / 180.0
 
@@ -151,6 +151,36 @@ def test_profile_weight_is_ko82_signed_not_am_symmetric():
     # where a naive |r|r on the surrogate curves would go negative.
     y_extreme = float(profile_loss_am(s_c, -60.0, a2, tc)[0])   # r -> clip
     assert y_extreme > 0.0
+
+
+def test_mach_K1_is_the_exact_ko82_fig8_equation():
+    # KO82 Fig. 8 prints the equation ON the chart: K1 = 1 - 1.25(M2 - 0.2)
+    # for M2 > 0.2 (confirmed 2026-07 from the paper, kacker_mean_1980.pdf).
+    # The coded ramp IS this equation, not a surrogate. With M1=M2 -> K2=1 ->
+    # K_p = K1, so mach_profile_correction(M2,M2) == 1 - 1.25(M2-0.2).
+    # (abs 5e-3 absorbs the C1 smoothing near the M2->1 knee where K1->0.)
+    for m2 in (0.4, 0.6, 0.8):
+        assert float(mach_profile_correction(m2, m2)) == pytest.approx(
+            1.0 - 1.25 * (m2 - 0.2), abs=5e-3)
+
+
+# Digitized KO82 Fig. 14 (dphi^2_TET vs t_TE/o): (t/o, nozzle, impulse).
+# The axial-entry NOZZLE is the UPPER curve; IMPULSE the lower (the code had
+# them swapped + ~3x too high before 2026-07). tools/digitize_ko82_fig14.py.
+TE_FIG14 = [(0.10, 0.0143, 0.0073), (0.20, 0.0506, 0.0283),
+            (0.30, 0.100, 0.051), (0.40, 0.140, 0.0739)]
+
+
+@pytest.mark.parametrize("t_o,noz,imp", TE_FIG14)
+def test_trailing_edge_curves_match_ko82_fig14(t_o, noz, imp):
+    # Nozzle via alpha1=0 (r=0 -> phi2_ax); impulse via alpha1=alpha2 (r=1 ->
+    # phi2_imp). Reproduces the digitized Fig. 14 within reading precision, and
+    # nozzle > impulse (the corrected ordering).
+    got_noz = float(trailing_edge_zeta(0.0, 60.0, t_o)[0])
+    got_imp = float(trailing_edge_zeta(60.0, 60.0, t_o)[0])
+    assert got_noz == pytest.approx(noz, abs=0.012)
+    assert got_imp == pytest.approx(imp, abs=0.012)
+    assert got_noz > got_imp                      # Fig. 14 ordering
 
 
 def test_secondary_loss_constants_match_ko82():

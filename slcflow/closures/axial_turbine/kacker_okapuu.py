@@ -25,10 +25,12 @@ uses sum-of-tangents for load / difference for mean angle; our signed frame
 swaps them — same physics, see the secondary_loss note). The two nozzle/impulse
 reference curves ``yp1``/``yp2`` are now **calibrated to digitized points off
 Ainley-Mathieson R&M 2974 Fig. 4** (``tools/digitize_am_fig4.py``; the u^4
-level law reproduces the chart minima to <0.003 in Y_p). **Still [VERIFY]:**
-the TE ``phi2`` curves and the ``K_p`` Mach ``K1`` ramp remain surrogates —
-their source figures are in the paywalled K-O paper, not the library. The
-profile interpolation weight
+level law reproduces the chart minima to <0.003 in Y_p). The ``K_p`` Mach
+``K1`` ramp is **CONFIRMED** as the exact KO82 formula (``K1 = 1 - 1.25(M2-0.2)``
+for ``M2>0.2``, printed verbatim on KO82 Fig. 8 — the slope 1.25 was never a
+surrogate), and the TE ``phi2`` base curves are now **calibrated to KO82
+Fig. 14** (``tools/digitize_ko82_fig14.py``; 2026-07 fix -- the nozzle/impulse
+curves were swapped and ~3x too high). The profile interpolation weight
 uses KO82's signed ``|b1/b2|(b1/b2)`` (**resolved 2026-07** from the prior
 AM-1957 symmetric ``(b1/b2)^2``; identical for ``b1>=0`` so behavior-preserving
 for every in-domain case, differs only at negative incidence) — see
@@ -217,20 +219,27 @@ _TE_CEIL, _TE_W = 0.3, 0.02       # kinetic-energy coefficient ceiling
 
 def trailing_edge_zeta(alpha1_deg, alpha2_deg, te_o_ratio, *, xp=None):
     """Kacker-Okapuu trailing-edge kinetic-energy loss coefficient
-    ``dPhi^2_TE`` (interpolated between axial-entry and impulse blades on the
-    squared angle ratio, each a smooth function of TE-thickness/throat
-    ``t_TE/o``; [VERIFY coefficients]).
+    ``dPhi^2_TE`` (interpolated between the axial-entry-nozzle and impulse
+    reference curves on KO82's signed angle ratio, each a smooth function of
+    TE-thickness/throat ``t_TE/o``; base curves calibrated to KO82 Fig. 14).
 
     Returned as a kinetic-energy coefficient ``zeta`` (the caller maps it to
     an exit-reference ``Y`` before summing with the profile/secondary terms).
     Smoothly ceilinged; returns ``(zeta, validity)``."""
     xp = get_xp(xp)
     x = smooth_max(te_o_ratio, 0.0, 0.005, xp=xp)          # t_TE/o >= 0
-    phi2_ax = 0.4 * x + 2.0 * x * x
-    phi2_imp = 0.7 * x + 4.0 * x * x
+    # Base curves CALIBRATED to KO82 Fig. 14 (dphi^2_TET vs t_TE/o;
+    # tools/digitize_ko82_fig14.py). The axial-entry NOZZLE is the UPPER curve
+    # (higher TE loss) and IMPULSE the lower -- the old (0.4,2.0)/(0.7,4.0)
+    # constants had them swapped AND ~3x too high (fixed 2026-07).
+    phi2_ax = 0.148 * x + 0.530 * x * x        # axial-entry nozzle (Fig.14 upper)
+    phi2_imp = 0.078 * x + 0.277 * x * x       # impulse blading (Fig.14 lower)
     a2 = smooth_max(alpha2_deg, 5.0, 1.0, xp=xp)           # avoid /0
     r = soft_clip(alpha1_deg / a2, _R_LO, _R_HI, _R_W, xp=xp)
-    zeta = smooth_min(phi2_ax + r * r * (phi2_imp - phi2_ax), _TE_CEIL,
+    # KO82 Eq. 17 SIGNED weight |b1/a2|(b1/a2) (not symmetric r^2), matching
+    # profile_loss_am: nozzle (r=0) -> phi2_ax, impulse (r=1) -> phi2_imp.
+    weight = abs_smooth(r, _WEIGHT_EPS, xp=xp) * r
+    zeta = smooth_min(phi2_ax + weight * (phi2_imp - phi2_ax), _TE_CEIL,
                       _TE_W, xp=xp)
     v = 1.0 - blend(x, 0.15, 0.05, xp=xp)
     return zeta, v

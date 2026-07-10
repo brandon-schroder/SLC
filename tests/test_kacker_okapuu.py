@@ -148,10 +148,13 @@ def test_trailing_edge_zeta_grows_with_thickness_and_loading():
     thin = float(trailing_edge_zeta(20.0, 60.0, 0.01)[0])
     thick = float(trailing_edge_zeta(20.0, 60.0, 0.06)[0])
     assert thick > thin > 0.0
-    # Impulse-like (b1/b2 -> 1) loses more than axial-entry (b1 -> 0).
+    # KO82 Fig. 14: the axial-entry NOZZLE (b1 -> 0) is the UPPER curve, i.e.
+    # HIGHER TE loss than impulse blading (b1/b2 -> 1) at the same t_TE/o.
+    # (The old test asserted the opposite from intuition; the digitized chart
+    # -- tools/digitize_ko82_fig14.py -- shows nozzle > impulse.)
     axial = float(trailing_edge_zeta(0.0, 60.0, 0.03)[0])
     impulse = float(trailing_edge_zeta(60.0, 60.0, 0.03)[0])
-    assert impulse > axial
+    assert axial > impulse > 0.0
     _assert_c1_continuous(lambda x: trailing_edge_zeta(20.0, 60.0, x)[0],
                           0.0, 0.12)
 
