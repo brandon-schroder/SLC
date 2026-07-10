@@ -82,9 +82,11 @@ below cannot read scanned PDFs). Relevant notebooks:
   CONFIRMED**, see [`CENT-LOSS.md`](CENT-LOSS.md) and
   `tests/test_centrifugal_loss_reference.py`. Incidence `½(ΔWθ)²` = Galvas
   Eq 5.6; skin-friction leading `2·Cf` = Galvas `4·Cf·W²/2`; `Cf=0.005` =
-  Braembussche typical. No bug. Two `[DECIDE]`s: incidence `f_inc` (code uses
-  1.0; Conrad 0.5–0.7 / Aungier 0.8) and `W_avg²` (code square-of-mean vs
-  Aungier mean-of-squares).
+  Braembussche typical. No bug. Both `[DECIDE]`s **resolved to Aungier (2000)**
+  (resolution pass): incidence `f_inc` → tunable field, default `0.8` (was full
+  KE 1.0; a genuine 0.5–1.0 family, so tunable not fixed); skin-friction mean
+  velocity → mean-of-squares `½(W1²+W2²)` (was square-of-mean; friction ∝ local
+  `W²`). V7 stays in-band (PR 2.43, η 0.974).
 - **LIEB59 (Lieblein compressor profile loss) — constants CONFIRMED, ω̄ bug
   FIXED**, see [`LIEB59.md`](LIEB59.md) and
   `tests/test_lieblein_loss_reference.py`. `D_eq` (1.12, 0.61) and `θ*/c`

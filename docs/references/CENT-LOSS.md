@@ -16,22 +16,27 @@ Cross-checked against `slcflow/closures/centrifugal/loss.py`.
 
 Confirmed forms pinned in `tests/test_centrifugal_loss_reference.py`.
 
-## Findings — modeling choices (documented, not changed)
+## Findings — modeling choices (both RESOLVED to Aungier 2000, 2026-07)
 
-1. **Incidence factor `f_inc`.** The code uses the *full* NASA kinetic energy,
-   `½(ΔWθ)²` (i.e. `f_inc = 1`). Several sets apply a reducing factor: Conrad
-   et al. (1980) `k(ΔWθ²/2)` with `k = 0.5–0.7`; Aungier's total-pressure form
-   (Eq 5-27) carries a leading `0.8`. Wasserbauer-Glassman (1975) use `sin³`
-   for positive incidence (less loss there) and `sin²` for negative. So the
-   coded value is the conservative upper bound of a 0.5–1.0 family. `[DECIDE]`
-   whether to adopt an `f_inc`.
+1. **Incidence factor `f_inc` — RESOLVED.** The code applied the *full* NASA
+   kinetic energy `½(ΔWθ)²` (`f_inc = 1`). This is a genuine 0.5–1.0 family:
+   Conrad et al. (1980) `k(ΔWθ²/2)` with `k = 0.5–0.7`; Aungier's
+   total-pressure form (Eq 5-27) carries a leading `0.8`; Wasserbauer-Glassman
+   (1975) use `sin³` for positive incidence. **Resolved:** exposed as a tunable
+   `CentrifugalLoss.f_inc` field, default **0.8** (Aungier — coherent with the
+   mean-of-squares friction choice below), applied as a multiplier on the
+   confirmed Galvas Eq 5.6 KE form. Genuinely design-dependent, so tunable
+   rather than a single "correct" constant. Pinned in
+   `tests/test_centrifugal_loss_reference.py::test_f_inc_default_is_aungier_0p8`
+   + `test_centrifugal_loss.py::test_f_inc_scales_incidence_only`.
 
-2. **Mean-velocity definition in skin friction.** The code forms
-   `W_avg = ½(W1 + W2)` then squares → `[½(W1+W2)]²` (square of the mean).
-   **Aungier (2000)** specifies the *mean of the squares*,
-   `W̄² = ½(W1² + W2²)`. These differ (`[½(W1+W2)]² ≤ ½(W1²+W2²)`), the gap
-   growing with the `W1/W2` diffusion. `[DECIDE]` — a one-line change if
-   Aungier's convention is adopted.
+2. **Mean-velocity definition in skin friction — RESOLVED.** The code formed
+   `W_avg = ½(W1 + W2)` then squared → `[½(W1+W2)]²` (square of the mean).
+   **Resolved to Aungier (2000)'s mean of the squares** `W̄² = ½(W1² + W2²)`
+   (the physical passage average, since friction ∝ local `W²`; `≥` the
+   square-of-mean by convexity, gap growing with `W1/W2` diffusion). The
+   caller now passes the RMS velocity into the unchanged `skin_friction_loss`.
+   Pinned in `test_skin_friction_mean_of_squares_convention`.
 
 3. **`L/D_hyd` is geometry-derived**, not a universal constant. The code's
    `l_over_dhyd = 4.0` is a representative scalar design input; Aungier builds
@@ -40,8 +45,10 @@ Confirmed forms pinned in `tests/test_centrifugal_loss_reference.py`.
 
 ## Residual
 
-The two dominant components (incidence + skin friction) are form-verified.
-The **deferred components** the docstring already lists — blade-loading
-diffusion, tip-clearance, disk-friction/windage, recirculation, leakage — are
-a separate V7-calibration extension (Oh-Yoon-Chung 1997 is the standard set),
-not part of this pass. No bug found here (contrast LIEB59).
+The two dominant components (incidence + skin friction) are form-verified, and
+both convention `[DECIDE]`s are now resolved to Aungier (2000). The **deferred
+components** the docstring already lists — blade-loading diffusion,
+tip-clearance, disk-friction/windage, recirculation, leakage — are a separate
+V7-calibration extension (Oh-Yoon-Chung 1997 is the standard set), not part of
+this pass. No bug found here (contrast LIEB59); V7 stays in-band after the
+convention change (PR 2.43, η 0.974).

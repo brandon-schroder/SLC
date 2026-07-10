@@ -107,6 +107,20 @@ def test_friction_loss_grows_with_cf():
         > float(lo.components["friction_dh"][0])
 
 
+def test_f_inc_scales_incidence_only():
+    # Resolved 2026-07 (CENT-LOSS.md): CentrifugalLoss.f_inc (default 0.8,
+    # Aungier) is the fraction of the inducer incidence KE actually lost. It
+    # scales the incidence component LINEARLY and leaves friction untouched.
+    row, view = _view_and_row(beta1_blade_deg=-30.0)   # mismatched -> real inc
+    full = CentrifugalLoss(f_inc=1.0).evaluate(row, view)
+    aung = CentrifugalLoss(f_inc=0.8).evaluate(row, view)
+    assert CentrifugalLoss().f_inc == pytest.approx(0.8)          # default
+    assert float(aung.components["incidence_dh"][0]) == pytest.approx(
+        0.8 * float(full.components["incidence_dh"][0]), rel=1e-12)
+    assert float(aung.components["friction_dh"][0]) == pytest.approx(
+        float(full.components["friction_dh"][0]), rel=1e-12)      # unchanged
+
+
 def test_delta_s_matches_enthalpy_loss_conversion():
     # Section 4.4 / B.5: recorded component dh's convert to delta_s
     # individually at the exit static T, then sum.

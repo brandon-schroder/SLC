@@ -24,15 +24,17 @@ the incidence ``1/2 (dW_theta)^2`` is Galvas Eq 5.6 (W_x sin(dbeta) = dW_theta),
 the skin-friction leading ``2 Cf`` is Galvas ``4 Cf W^2/2``, and Cf=0.005 is
 Braembussche's typical wall value. Pinned in test_centrifugal_loss_reference.py.
 
-**[DECIDE] two modeling choices (documented, not changed):** (a) incidence
-uses the FULL NASA KE (f_inc=1); Conrad applies 0.5-0.7 and Aungier 0.8 -- the
-coded value is the conservative upper bound. (b) skin friction squares the mean
-velocity, ``[1/2(W1+W2)]^2``; Aungier specifies the mean of the squares,
-``1/2(W1^2+W2^2)``. **[VERIFY]** the deferred components (blade-loading
-diffusion, tip-clearance, disk-friction/windage, recirculation, leakage; Oh-
-Yoon-Chung 1997 set) at V7 calibration time. ``Cf``/``l_over_dhyd`` are
-row-scalar design inputs (geometry-derived hydraulic length is a later
-refinement).
+**Two conventions resolved 2026-07 (both to Aungier 2000; CENT-LOSS.md):**
+(a) incidence loss now applies ``f_inc = 0.8`` (Aungier) to the full NASA KE --
+a genuinely design-dependent 0.5-1.0 factor (Conrad 0.5-0.7 / Aungier 0.8 /
+Galvas full-KE 1.0), exposed as a tunable ``CentrifugalLoss.f_inc`` field.
+(b) skin friction uses Aungier's mean-of-squares passage velocity
+``1/2(W1^2+W2^2)`` (was the square-of-mean ``[1/2(W1+W2)]^2``) -- the physical
+passage average since friction ~ local W^2. **[VERIFY]** the deferred
+components (blade-loading diffusion, tip-clearance, disk-friction/windage,
+recirculation, leakage; Oh-Yoon-Chung 1997 set) at V7 calibration time.
+``Cf``/``l_over_dhyd`` are row-scalar design inputs (geometry-derived hydraulic
+length is a later refinement).
 """
 from __future__ import annotations
 
@@ -52,21 +54,26 @@ _T_FLOOR, _T_W = 20.0, 5.0                   # exit static-T floor (a2 real)
 
 
 def incidence_loss(w_theta_flow, w_theta_blade, *, xp=None):
-    """Inducer incidence loss ``dh = 1/2 (W_theta_flow - W_theta_blade)^2``
-    [J/kg] (section 4.3; Galvas/NASA Eq 5.6, CONFIRMED -- CENT-LOSS.md; a
-    Conrad/Aungier f_inc=0.5-0.8 reducing factor is a [DECIDE] refinement)."""
+    """Inducer incidence loss KINETIC ENERGY ``1/2 (W_theta_flow -
+    W_theta_blade)^2`` [J/kg] (section 4.3; Galvas/NASA Eq 5.6, CONFIRMED --
+    CENT-LOSS.md). This is the FULL tangential-KE form; the fraction actually
+    lost (``f_inc``, a 0.5-1.0 family) is applied by :class:`CentrifugalLoss`."""
     xp = get_xp(xp)
     d = w_theta_flow - w_theta_blade
     return 0.5 * d * d
 
 
-def skin_friction_loss(w_avg, cf, l_over_dhyd, *, xp=None):
-    """Passage skin-friction loss ``dh = 2 Cf (L/D_hyd) W_avg^2`` [J/kg]
-    (section 4.3; Galvas ``4 Cf W^2/2`` leading factor CONFIRMED -- CENT-LOSS.md.
-    Caller passes ``W_avg = 1/2(W1+W2)``; Aungier's mean-of-squares
-    ``1/2(W1^2+W2^2)`` is the [DECIDE] alternative)."""
+def skin_friction_loss(w_rep, cf, l_over_dhyd, *, xp=None):
+    """Passage skin-friction loss ``dh = 2 Cf (L/D_hyd) W_rep^2`` [J/kg]
+    (section 4.3; Galvas ``4 Cf W^2/2`` leading factor CONFIRMED -- CENT-LOSS.md).
+
+    ``W_rep`` is the representative passage velocity the caller squares in.
+    :class:`CentrifugalLoss` passes the RMS ``sqrt(1/2 (W1^2 + W2^2))`` so the
+    squared term is Aungier's mean-of-squares ``1/2 (W1^2 + W2^2)`` (resolved
+    2026-07 from the earlier square-of-mean ``[1/2(W1+W2)]^2``; the mean of the
+    squares is the physical passage average since friction ~ local W^2)."""
     xp = get_xp(xp)
-    return 2.0 * cf * l_over_dhyd * w_avg * w_avg
+    return 2.0 * cf * l_over_dhyd * w_rep * w_rep
 
 
 @dataclass(frozen=True)
@@ -76,10 +83,20 @@ class CentrifugalLoss:
     enthalpy-loss form at the B.1-re-referenced exit static state.
 
     Requires ``row.geometry`` (section 4.1 contract) and the view's lagged TE
-    fields. ``cf``/``l_over_dhyd`` are row-scalar design inputs."""
+    fields. ``cf``/``l_over_dhyd`` are row-scalar design inputs.
+
+    ``f_inc`` is the fraction of the inducer incidence kinetic energy actually
+    lost (resolved 2026-07; CENT-LOSS.md). It is genuinely design-dependent
+    with no single source value -- Conrad et al. (1980) fit 0.5-0.7, Aungier
+    (2000) uses 0.8, and the raw Galvas/NASA shock-loss form is the full KE
+    (1.0). Default 0.8 adopts Aungier (coherent with the mean-of-squares
+    skin-friction convention); tune per design. The skin-friction loss uses
+    Aungier's mean-of-squares passage velocity (see :func:`skin_friction_loss`).
+    """
 
     cf: float = 0.005
     l_over_dhyd: float = 4.0
+    f_inc: float = 0.8
 
     def evaluate(self, row: RowView, flow: RowFlowView) -> LossBreakdown:
         xp = get_xp(None)
@@ -92,7 +109,8 @@ class CentrifugalLoss:
         # tangential velocity (both in the section 2.4 relative convention).
         b1 = soft_clip(g.beta1_blade(y), -_ANG_CAP, _ANG_CAP, _ANG_W, xp=xp)
         w_theta_blade = flow.vm * xp.tan(b1)
-        dh_inc = incidence_loss(flow.w_theta, w_theta_blade, xp=xp)
+        dh_inc = self.f_inc * incidence_loss(flow.w_theta, w_theta_blade,
+                                             xp=xp)
 
         # Exit relative velocity via the shared Wiesner slip (same set):
         # W_theta2 = (sigma - 1) U2 - Vm2 tan(beta2b).
@@ -104,8 +122,10 @@ class CentrifugalLoss:
         w_theta_2 = (sigma - 1.0) * u2 - flow.vm_te * xp.tan(b2b)
         w1 = xp.sqrt(flow.vm * flow.vm + flow.w_theta * flow.w_theta)
         w2 = xp.sqrt(flow.vm_te * flow.vm_te + w_theta_2 * w_theta_2)
-        dh_sf = skin_friction_loss(0.5 * (w1 + w2), self.cf,
-                                   self.l_over_dhyd, xp=xp)
+        # Aungier mean-of-squares passage velocity: pass the RMS so the
+        # skin-friction term squares to 1/2 (W1^2 + W2^2).
+        w_rms = xp.sqrt(0.5 * (w1 * w1 + w2 * w2))
+        dh_sf = skin_friction_loss(w_rms, self.cf, self.l_over_dhyd, xp=xp)
 
         # Exit static temperature via B.1 rothalpy re-referencing (charging
         # temperature for the entropy conversion).
