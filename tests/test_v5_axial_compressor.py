@@ -17,7 +17,8 @@ import numpy as np
 import pytest
 
 from slcflow.machine import FidelityConfig, PerformanceResult
-from slcflow.verification.v5_axial_compressor import V5AxialRotor
+from slcflow.verification.v5_axial_compressor import (V5AxialRotor,
+                                                      V5TransonicRotor)
 
 DEG = 180.0 / np.pi
 
@@ -81,3 +82,40 @@ def test_tier1_is_pure_data_switch_not_a_code_path():
     case = V5AxialRotor()
     pr = case.evaluate(n_sl=1, fidelity=FidelityConfig.tier1())
     assert pr.converged
+
+
+# --------------------------------------------------------------------------
+# Transonic rotor: the Aungier 6.7 shock loss engages end-to-end, and the
+# measured two-branch limitation is pinned as a tripwire (theory manual C.9).
+# --------------------------------------------------------------------------
+def test_transonic_rotor_converges_and_is_supersonic_relative():
+    # The shock stack runs end-to-end: a high-omega rotor converges (T1 and
+    # T2), the relative inlet Mach is supersonic (the shock regime -- the shock
+    # component's engagement at M1 > 1 is pinned in test_lieblein_loss.py), and
+    # it compresses.
+    case = V5TransonicRotor()
+    for n_sl in (1, 9):
+        pr = case.evaluate(n_sl=n_sl)
+        assert pr.converged
+        lo, hi = case.pr_band
+        assert lo < pr.pressure_ratio < hi          # real transonic compression
+    pr1 = case.evaluate(n_sl=1)
+    assert case.meanline_inlet_rel_mach(pr1) > 1.0  # supersonic relative inlet
+
+
+def test_transonic_meanline_is_the_out_of_window_branch_TRIPWIRE():
+    # MEASURED 2026-07 (theory manual C.9): a mass-flow-specified meanline can
+    # only converge the LOW-Vm continuity root, where the high blade speed
+    # forces beta1 ~ 70 deg -- at/beyond the Lieblein NACA-65 calibration edge,
+    # so closure validity collapses to 0. The in-window supersonic branch
+    # (beta1 ~ 50 deg) needs BackPressureSpec + continuation (the "V5
+    # supersonic-branch traversal"). TRIPWIRE: flip these assertions when that
+    # driver work lands and the in-window branch converges.
+    pr = V5TransonicRotor().evaluate(n_sl=1)
+    assert pr.converged
+    assert pr.validity < 0.1                         # saturated (out of window)
+    # The converged root is the steep-inlet one.
+    vm = float(np.atleast_1d(pr.vm)[0])
+    r = float(np.atleast_1d(pr.r)[0])
+    beta1_flow = np.degrees(np.arctan2(V5TransonicRotor().omega * r, vm))
+    assert beta1_flow > 68.0                          # low-Vm / high-beta1 root

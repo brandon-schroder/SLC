@@ -526,6 +526,22 @@ These are not suggestions; violating them is a bug even if tests pass.
   the V5 supersonic-branch traversal is now a *transonic V5 case design* (an
   in-window supersonic-inlet rotor) + the back-pressure/continuation mode — a
   case + driver matter, no longer a missing closure.
+- **Transonic V5 case + two-branch tripwire (2026-07).** Added `V5TransonicRotor`
+  (high-Ω rotor, supersonic *relative* inlet Mach ≈1.1–1.3, converges T1/T2,
+  PR≈1.8) — the scaffolding for the transonic structural gate, exercising the
+  §6.7 shock loss end-to-end. **Measured + pinned as a tripwire** (the V7/V8
+  pattern): a mass-flow-specified meanline converges **only** the low-`Vm`
+  continuity root, where the high blade speed forces β1≈70° — at/beyond the
+  Lieblein NACA-65 calibration edge, so validity→0 (saturated). The **in-window**
+  root (β1≈50°, validity≈0.96) sits at the capacity-peak singularity and is
+  unreachable by the mass-flow driver; it needs `BackPressureSpec` (mdot as a
+  state unknown, M5-3 built) + continuation — the standing "V5 supersonic-branch
+  traversal" driver milestone. So a *clean converged in-window all-tiers*
+  transonic V5 gate is blocked on that continuation work, **not** on any missing
+  closure (the loss stack — profile+endwall+clearance+shock — is complete). Flip
+  the tripwire's `validity < 0.1` assertion when the supersonic branch converges.
+  The facade stubs `BackPressureSpec` ("continuation lands at M5"); the Newton +
+  continuation drivers support it, so the traversal is a low-level driver task.
 
 ## Commands
 

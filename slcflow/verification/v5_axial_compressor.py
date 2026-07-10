@@ -43,7 +43,7 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["V5AxialRotor", "V5MultistageCompressor"]
+__all__ = ["V5AxialRotor", "V5TransonicRotor", "V5MultistageCompressor"]
 
 _DEG = np.pi / 180.0
 
@@ -122,6 +122,95 @@ class V5AxialRotor:
             fidelity = FidelityConfig.tier1()
         return self.machine().evaluate(MassFlowSpec(self.mdot), fidelity,
                                        n_sl=n_sl)
+
+
+@dataclass(frozen=True)
+class V5TransonicRotor:
+    """Transonic axial-compressor rotor exercising the Aungier §6.7 shock loss
+    (section 9.5; the compressor-shock deferral closed 2026-07).
+
+    A high-blade-speed rotor whose **relative** inlet Mach is supersonic
+    (M1_rel ≈ 1.1–1.3, from ``omega``) while the absolute axial Mach stays
+    subsonic — the defining transonic-rotor condition. The Aungier §6.7 shock
+    term engages here (0 for the subsonic V5AxialRotor; > 0 once M_shock > 1,
+    pinned by ``test_lieblein_loss.py::
+    test_shock_loss_engages_transonic_row_via_evaluate``).
+
+    **A KNOWN-BLOCKED case (measured 2026-07; theory manual §C.9).** At
+    transonic speed the single-node continuity has two ``Vm`` roots per
+    ``mdot``. A mass-flow-specified meanline converges only the **low-Vm**
+    root, where the high blade speed forces the inlet flow angle to β1 ≈ 70°
+    — at/beyond the Lieblein NACA-65 calibration edge, so closure validity
+    collapses to 0 (saturated loss). The **in-window** root (β1 ≈ 50°,
+    validity ≈ 0.96) sits near the capacity peak, where the continuity
+    Jacobian is singular, so the mass-flow driver cannot converge it — it
+    needs ``BackPressureSpec`` (``mdot`` as a state unknown) + continuation,
+    the standing "V5 supersonic-branch traversal" milestone. This class is the
+    scaffolding for the full structural gate once that lands; until then the
+    case is exercised by a tripwire test that pins the branch limitation (flip
+    its validity assertion when the supersonic branch converges).
+    """
+
+    r0: float = 0.35
+    r1: float = 0.45
+    length: float = 1.0
+    omega: float = 900.0             # rad/s — high blade speed (supersonic W1)
+    mdot: float = 55.0               # kg/s — on the converged low-Vm branch
+    h0_in: float = 3.0e5             # J/kg
+    s_in: float = 0.0
+    beta1_blade_deg: float = -61.0   # relative metal angle, LE
+    beta2_blade_deg: float = -52.0   # relative metal angle, TE (modest turning)
+    solidity: float = 1.5
+    chord: float = 0.05
+    thickness: float = 0.06
+    blade_count: int = 33
+    gas: PerfectGas = field(default_factory=PerfectGas)
+
+    pr_band: tuple = (1.2, 3.0)
+
+    def _flowpath(self) -> FlowPath:
+        z = np.linspace(0.0, self.length, 8)
+        w0 = WallCurve.from_points(
+            np.column_stack([z, np.full_like(z, self.r0)]))
+        w1 = WallCurve.from_points(
+            np.column_stack([z, np.full_like(z, self.r1)]))
+        stations = [StationDef(StationType.DUCT, 0.0, 0.0),
+                    StationDef(StationType.EDGE_LE, 0.35, 0.35, row_id="r1"),
+                    StationDef(StationType.EDGE_TE, 0.55, 0.55, row_id="r1"),
+                    StationDef(StationType.DUCT, 1.0, 1.0)]
+        return FlowPath(w0, w1, stations)
+
+    def machine(self) -> Machine:
+        geom = ParamRowGeometry(
+            blade_count=self.blade_count,
+            beta1=self.beta1_blade_deg * _DEG,
+            beta2=self.beta2_blade_deg * _DEG,
+            chord_len=self.chord, solidity_val=self.solidity,
+            thickness=self.thickness)
+        row = RowSpec(row_id="r1", omega=self.omega,
+                      swirl=LIEBLEIN_NACA65.swirl, loss=LIEBLEIN_NACA65.loss,
+                      blade_count=self.blade_count, geometry=geom)
+        return Machine(self._flowpath(), self.gas,
+                       InletCondition(h0=self.h0_in, s=self.s_in, rvt=0.0),
+                       rows=[row])
+
+    def evaluate(self, n_sl: int = 1,
+                 fidelity: FidelityConfig = None) -> PerformanceResult:
+        if fidelity is None:
+            fidelity = FidelityConfig.tier1()
+        return self.machine().evaluate(MassFlowSpec(self.mdot), fidelity,
+                                       n_sl=n_sl)
+
+    def meanline_inlet_rel_mach(self, result: PerformanceResult) -> float:
+        """Meanline relative inlet Mach ``M1_rel = W1/a`` from a converged
+        result (zero absolute inlet swirl, so ``W1 = sqrt(Vm² + U²)``)."""
+        vm = float(np.atleast_1d(result.vm)[0])
+        r = float(np.atleast_1d(result.r)[0])
+        u = self.omega * r
+        w1 = np.hypot(vm, u)
+        h = self.h0_in - 0.5 * vm * vm            # axial inlet, no swirl
+        a = float(self.gas.a(np.array([h]), self.s_in)[0])
+        return float(w1 / a)
 
 
 @dataclass(frozen=True)
