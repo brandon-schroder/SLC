@@ -17,8 +17,9 @@ import numpy as np
 import pytest
 
 from slcflow.closures.axial_compressor.loss import (
-    equivalent_diffusion, off_design_bucket, profile_loss_coefficient,
-    stall_choke_ranges, wake_momentum_thickness)
+    blade_loading_coefficient, endwall_clearance_loss, equivalent_diffusion,
+    off_design_bucket, profile_loss_coefficient, stall_choke_ranges,
+    wake_momentum_thickness)
 
 DEG = np.pi / 180.0
 
@@ -86,6 +87,55 @@ def test_omega_bar_uses_W2_over_W1_squared(b2d, theta_c, sigma, w1, w2):
     # Guard against a silent regression to the inverted form.
     inverted = 2.0 * theta_c * sigma / np.cos(b2) * (w1 / w2) ** 2
     assert got < inverted           # (W2/W1)^2 < (W1/W2)^2 since W2 < W1
+
+
+@pytest.mark.parametrize("b1d,b2d,s", [(50.0, 40.0, 1.2), (55.0, 30.0, 1.0),
+                                       (45.0, 20.0, 1.5)])
+def test_blade_loading_coefficient_matches_dixon(b1d, b2d, s):
+    # Dixon 3.15 / 3.26a (Saravanamuttoo 5.32/5.33): tan(b_m) = (tan b1 +
+    # tan b2)/2 and C_L = (2/sigma) cos(b_m)(tan b1 - tan b2) (the -C_D tan b_m
+    # term dropped). Moderate angles -> the AD-10 soft-clip is ~identity.
+    b1, b2 = b1d * DEG, b2d * DEG
+    bm_ref = np.arctan(0.5 * (np.tan(b1) + np.tan(b2)))
+    cl_ref = 2.0 / s * np.cos(bm_ref) * (np.tan(b1) - np.tan(b2))
+    cl, bm = blade_loading_coefficient(b1, b2, s)
+    assert float(cl) == pytest.approx(cl_ref, rel=1e-3)
+    assert float(bm) == pytest.approx(bm_ref, rel=1e-3)
+
+
+@pytest.mark.parametrize("b1d,b2d,s,ar,th", [(50.0, 40.0, 1.2, 2.5, 0.0),
+                                             (55.0, 35.0, 1.0, 2.0, 0.02),
+                                             (48.0, 30.0, 1.3, 3.0, 0.03)])
+def test_endwall_clearance_loss_matches_howell(b1d, b2d, s, ar, th):
+    # Howell p.451 (Saravanamuttoo 5.35/5.36) + Lakshminarayana (via Cumpsty):
+    #   C_Ds = 0.018 C_L^2 ; C_Da = 0.020/(sigma*AR) ; C_Dk = 0.7 C_L^2 (t/h)
+    # converted to omega_bar via the inverse of Cumpsty 4.9
+    #   omega = sigma (cos^2 b1 / cos^3 b_m)(C_Ds + C_Da + C_Dk).
+    b1, b2 = b1d * DEG, b2d * DEG
+    bm = np.arctan(0.5 * (np.tan(b1) + np.tan(b2)))
+    cl = 2.0 / s * np.cos(bm) * (np.tan(b1) - np.tan(b2))
+    cds, cda, cdk = 0.018 * cl * cl, 0.020 / (s * ar), 0.7 * cl * cl * th
+    ref = s * np.cos(b1) ** 2 / np.cos(bm) ** 3 * (cds + cda + cdk)
+    om, _ = endwall_clearance_loss(b1, b2, s, ar, th)
+    assert float(om) == pytest.approx(ref, rel=2e-3)
+
+
+def test_endwall_clearance_term_is_inert_without_clearance():
+    # The tip-clearance drag C_Dk = 0.7 C_L^2 (t/h) vanishes at zero clearance,
+    # so a zero-clearance row sees only secondary + annulus endwall loss (the
+    # existing V5 cases, which set no clearance, are unaffected by the term).
+    a = float(endwall_clearance_loss(50 * DEG, 40 * DEG, 1.2, 2.5, 0.0)[0])
+    b = float(endwall_clearance_loss(50 * DEG, 40 * DEG, 1.2, 2.5, 0.02)[0])
+    assert b > a > 0.0                       # clearance adds loss, monotone
+
+
+def test_endwall_validity_drops_at_high_loading():
+    # Howell's drag data is moderate-loading; the compact-support validity
+    # ceiling on C_L saturates (-> 0) at very high loading.
+    _, v_lo = endwall_clearance_loss(50 * DEG, 40 * DEG, 1.2, 2.5, 0.0)
+    _, v_hi = endwall_clearance_loss(65 * DEG, 30 * DEG, 0.8, 2.5, 0.0)
+    assert float(v_lo) == pytest.approx(1.0, abs=1e-3)
+    assert float(v_hi) < 0.1
 
 
 @pytest.mark.parametrize("theta,b1", [(12.0, 52.0), (25.0, 45.0), (8.0, 60.0)])

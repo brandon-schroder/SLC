@@ -156,7 +156,13 @@ class V5MultistageCompressor:
     gas: PerfectGas = field(default_factory=PerfectGas)
 
     pr_band: tuple = (1.05, 3.0)
-    eta_band: tuple = (0.70, 0.999)
+    # Endwall loss (Howell secondary + annulus, 2026-07) roughly halves this
+    # lightly-loaded matched-stage testbed's net pressure rise (PR 1.18 -> 1.09
+    # over 2 stages), so efficiency is loss-dominated and low (~0.64). That is
+    # honest physics for a low-PR mixing demonstrator, not an efficiency
+    # benchmark -- the band stays structural (widened lower bound for the newly
+    # modelled endwall loss), the mixing measurement is what this case exists for.
+    eta_band: tuple = (0.55, 0.999)
 
     def _rows_and_stations(self):
         n_rows = 2 * self.n_stages

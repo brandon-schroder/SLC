@@ -11,11 +11,11 @@ a meaningful measurement, not saturated-loss garbage).
 
 **What this measures (the honest, in-window result).** At the G-C-calibrated
 ``c_mix = 5e-4`` spanwise mixing is a MODEST damping of the exit entropy
-spread -- measured ~18% on two stages (s_base 0.267 -> s_mix 0.218 J/(kg.K)),
-~14% at three and four stages -- while the absolute spread itself grows
-(2/3/4 stages: 0.27/2.73/5.23 J/(kg.K)). It does NOT catch up with the
-stratification production, i.e. it is not a homogenizer. That is what this
-file pins.
+spread -- measured ~24% on two stages (s_base 0.495 -> s_mix 0.377 J/(kg.K))
+with the Howell endwall + tip-clearance loss now in the set (it was ~18%
+before, s_base 0.267; the endwall loss adds its own spanwise-varying entropy).
+It does NOT catch up with the stratification production, i.e. it is not a
+homogenizer. That is what this file pins (by ratio, not absolute value).
 
 The claim has been wrong three times before, each a traced artifact (kept as a
 warning): (1) M8-3 called mixing a *convergence prerequisite* -- a driver
@@ -92,7 +92,8 @@ def test_mixing_modestly_reduces_stratification_at_gc_calibration(
         without_mixing, with_mixing):
     # At the honest c_mix (5e-4) AND in-window loss (the 2026-07 retune), the
     # mixed exit spread is only slightly below the un-mixed one -- measured
-    # ~18% on two stages (s_base 0.267 vs s_mix 0.218 J/(kg.K)). Both converge
+    # ~24% on two stages (s_base 0.495 vs s_mix 0.377 J/(kg.K), with the Howell
+    # endwall loss now in the set; ~18% before). Both converge
     # in-window; the direction (mixing REDUCES the spread) is a guaranteed
     # property of the diffusion operator; the SMALLNESS is the finding this
     # pins (refuting the old "dramatic homogenizer" claim).

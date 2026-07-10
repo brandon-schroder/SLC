@@ -113,6 +113,20 @@ below cannot read scanned PDFs). Relevant notebooks:
   1.15–2.25) and the 2.35 divergence limit (`tools/digitize_lieblein_loss.py`,
   `test_wake_momentum_thickness_matches_lieblein_fig6`). Deferred `[VERIFY]`:
   the Mach adjustment of `R_s`/`R_c`.
+- **HOWELL (axial-compressor endwall + tip-clearance loss) — ADDED, verified**,
+  see [`HOWELL.md`](HOWELL.md) and `tests/test_lieblein_loss_reference.py`. The
+  profile-only axial-compressor set now carries the deferred endwall/clearance
+  physics (the `__init__` "recorded deferral"). Howell's additive drag model was
+  chosen over Aungier's (Aungier folds endwall into the profile correlation via
+  K1/K2 + charts Fig 6-11/6-12 — not clean-additive; §7.1 permits either).
+  Verified verbatim vs Dixon/Howell/Saravanamuttoo/Cumpsty: `tan β_m` (Dixon
+  3.15), `C_L` (Dixon 3.26a), `C_Ds = 0.018 C_L²` + `C_Da = 0.020 s/h` (Howell
+  p.451), `C_Dk = 0.7 C_L² t/h` (Lakshminarayana via Cumpsty), and the drag→loss
+  conversion `ζ = σ(cos²β1/cos³β_m)C_D` (Cumpsty 4.9, derived from first
+  principles to disambiguate the OCR). All inlet-referenced → one B.2 conversion.
+  Measured: V5 rotor η ~0.96 → ~0.92 (realistic), PR ~unchanged. Deferred
+  `[VERIFY]`/`[DECIDE]`: off-design `C_L` (actual triangle), secondary/clearance
+  overlap, the `C_L` validity ceiling, compressor shock loss (transonic V5).
 - **GC86 (Gallimore-Cumpsty mixing) — form CONFIRMED, `c_mix` RESOLVED**,
   see [`GC86.md`](GC86.md). The turbulent-diffusion form is right, but the old
   `c_mix=0.01` did NOT match G-C: they recommend `ε/(V_z·L_s) ≈ 1.8e-3` on the

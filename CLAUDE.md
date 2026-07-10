@@ -474,6 +474,35 @@ These are not suggestions; violating them is a bug even if tests pass.
   factors, per-node Reynolds), not calibration gaps. Point-by-point
   published-figure / NASA-data *case* reproduction (V4–V8 speedlines) stays
   `[VERIFY]` — a validation-dataset matter, separate from this coefficient pass.
+- **Axial-compressor endwall + tip-clearance loss (2026-07).** The
+  axial-compressor set modelled **profile loss only** (`profile_omega_bar`) —
+  roughly half a real stage's loss — so it read efficiency systematically high,
+  the physical blocker (beyond the absent validation dataset) for a
+  point-by-point V5 speedline. Added the deferred endwall/clearance physics the
+  set's `__init__` named "at V5 calibration time": **Howell's additive
+  drag-coefficient model** (secondary `C_Ds = 0.018 C_L²` + annulus
+  `C_Da = 0.020 s/h`) plus **Lakshminarayana tip clearance** (`C_Dk = 0.7 C_L²
+  t/h`), converted to inlet-referenced `omega_bar` (Cumpsty 4.9, derived from
+  first principles to disambiguate the OCR) and summed with the Lieblein
+  profile `omega_bar` under one B.2 conversion (§4.4). **Howell over Aungier**:
+  Aungier folds endwall into the profile correlation via K1/K2 + charts
+  (Eq 6-46, Fig 6-11/6-12) — not clean-additive; §7.1 permits either, Howell is
+  the closed-form library-verifiable one (`docs/references/HOWELL.md`, verified
+  verbatim vs Dixon/Howell/Saravanamuttoo/Cumpsty). Evaluated at the reference
+  (design) triangle and added flat to the bucketed profile loss; tip clearance
+  from the geometry contract (0 by default → clearance term inert, existing
+  zero-clearance cases see only secondary+annulus). **Measured:** V5 rotor η
+  ~0.96 → ~0.92 (realistic subsonic level), PR ~unchanged (loss affects η, not
+  Euler work); multistage V5 → η ~0.64 (honest for a low-PR mixing testbed —
+  band widened, and the C.5m mixing damping re-measured ~18%→~24%, still modest,
+  finding intact). Pure functions `blade_loading_coefficient` /
+  `endwall_clearance_loss` with source-cited reference tests. Deferred
+  `[VERIFY]`/`[DECIDE]`: off-design `C_L` (actual vs reference triangle),
+  secondary/clearance overlap (Howell's 0.018 already includes a typical
+  clearance), the `C_L` validity ceiling, and a compressor **shock** loss
+  (transonic V5). Point-by-point V5 still needs a subsonic-stage validation
+  dataset (absent from the library) — the efficiency-physics blocker is now
+  lifted, the dataset one is not.
 
 ## Commands
 

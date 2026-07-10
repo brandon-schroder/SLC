@@ -34,6 +34,17 @@ refinements ([VERIFY]): Mach-number adjustment of ``R_s``/``R_c``, and the
 not the loss bucket). The theta/c fit's validity ends near D_eq ~ 2.35
 (denominator zero); saturation reflects that.
 
+**Endwall + clearance loss (2026-07, docs/references/HOWELL.md).** The profile
+loss above is only ~half of a real stage's loss; the Howell endwall model
+(secondary drag ``C_Ds = 0.018 C_L^2`` + annulus drag ``C_Da = 0.020 s/h``)
+and the Lakshminarayana tip-clearance drag (``C_Dk = 0.7 C_L^2 t/h``) are
+added as inlet-referenced ``omega_bar`` (Cumpsty 4.9 drag->loss conversion),
+so a single B.2 conversion covers profile + endwall + clearance. Aungier's own
+endwall method (K1/K2 factors folding into the profile correlation, Eq 6-46 +
+charts Fig 6-11/6-12) was *not* clean-additive, so Howell's additive
+drag-coefficient form was used instead (§7.1 permits Koch-Smith **or** Aungier
+-- Howell is the closed-form, library-verifiable choice).
+
 The native coefficient is the B.2 relative-total-pressure loss
 ``omega_bar`` referenced to the INLET relative dynamic head; conversion to
 entropy happens HERE (section 4.4: converted at row exit, B.1
@@ -53,7 +64,8 @@ from ..smoothmath import (blend, blend_between, smooth_min, soft_clip,
 from .lieblein import reference_deviation, reference_incidence
 
 __all__ = ["equivalent_diffusion", "wake_momentum_thickness",
-           "profile_loss_coefficient", "stall_choke_ranges",
+           "profile_loss_coefficient", "blade_loading_coefficient",
+           "endwall_clearance_loss", "stall_choke_ranges",
            "off_design_bucket", "LieblienLoss"]
 
 # theta/c fit domain: the denominator 1 - 1.17 ln(D_eq) vanishes at
@@ -84,6 +96,24 @@ _R_FLOOR, _R_FW = 2.0, 0.5           # stall-range positivity floor [deg]
 _B1_FLOOR, _B1_FW = 5.0, 1.0         # beta1 floor for (30/b1)^0.48 [deg]
 _DI_W = 1.0                          # incidence blend width for the asym. xi
 _XI_POS, _XI_NEG, _XI_W = 1.0, -2.0, 0.3   # deep-stall breakpoints + blend
+
+# Howell/Dixon endwall (secondary + annulus) drag + Lakshminarayana tip
+# clearance (docs/references/HOWELL.md). Additive drag coefficients converted
+# to the inlet-referenced loss omega_bar (Cumpsty 4.9), summed with the
+# Lieblein profile omega_bar under one B.2 conversion (section 4.4):
+#   tan(b_m) = (tan b1 + tan b2)/2                       (Dixon 3.15)
+#   C_L      = (2/sigma) cos(b_m)(tan b1 - tan b2)       (Dixon 3.26a; -C_D
+#              tan b_m dropped as negligible)
+#   C_Ds     = 0.018 C_L^2            (secondary / trailing vortex, Howell p.451)
+#   C_Da     = 0.020 (s/h) = 0.020/(sigma*AR)   (annulus friction, Howell p.451)
+#   C_Dk     = 0.7 C_L^2 (t/h)        (tip clearance, Lakshminarayana via Cumpsty)
+#   omega_ew = sigma (cos^2 b1 / cos^3 b_m)(C_Ds + C_Da + C_Dk)   (zeta from
+#              C_D = zeta (s/l)(cos^3 b_m/cos^2 b1), inverted)
+_CDS_C = 0.018       # Howell secondary constant
+_CDA_C = 0.020       # Howell annulus constant
+_CDK_C = 0.7         # Lakshminarayana tip-clearance constant
+_B1_CLIP = 80.0      # inlet-angle soft clip [deg] (AD-10 / C1, as profile)
+_CL_CEIL, _CL_W = 1.6, 0.15   # loading validity ceiling (compact support)
 
 
 def equivalent_diffusion(w1, w2, beta1_rad, beta2_rad, sigma, *, xp=None):
@@ -124,6 +154,62 @@ def profile_loss_coefficient(theta_c, sigma, beta2_rad, w1, w2, *, xp=None):
     overestimate; fixed 2026-07.)"""
     xp = get_xp(xp)
     return 2.0 * theta_c * sigma / xp.cos(beta2_rad) * (w2 / w1) ** 2
+
+
+def blade_loading_coefficient(beta1_rad, beta2_rad, sigma, *, xp=None):
+    """Howell tangential lift/loading coefficient ``C_L`` and the mean vector
+    angle ``beta_m`` (Dixon 3.15 / 3.26a, Saravanamuttoo 5.32/5.33):
+
+        tan(beta_m) = (tan beta1 + tan beta2)/2
+        C_L = (2/sigma) cos(beta_m)(tan beta1 - tan beta2)
+
+    The published ``- C_D tan(beta_m)`` term is dropped (negligibly small in
+    the normal range -- the standard "theoretical" C_L). Cascade-frame
+    relative angles [rad]; ``sigma`` = solidity = chord/pitch = l/s. Returns
+    ``(C_L, beta_m)``. ``beta_m = arctan(...)`` is in (-pi/2, pi/2) so
+    ``cos(beta_m) > 0`` always (the downstream ``cos^3 beta_m`` never
+    vanishes)."""
+    xp = get_xp(xp)
+    b1 = xp.deg2rad(soft_clip(xp.rad2deg(beta1_rad), -_B1_CLIP, _B1_CLIP,
+                              2.0, xp=xp))
+    b2 = xp.deg2rad(soft_clip(xp.rad2deg(beta2_rad), -_B1_CLIP, _B1_CLIP,
+                              2.0, xp=xp))
+    beta_m = xp.arctan(0.5 * (xp.tan(b1) + xp.tan(b2)))
+    c_l = 2.0 / sigma * xp.cos(beta_m) * (xp.tan(b1) - xp.tan(b2))
+    return c_l, beta_m
+
+
+def endwall_clearance_loss(beta1_rad, beta2_rad, sigma, aspect_ratio,
+                           clearance_ratio, *, xp=None):
+    """Howell secondary + annulus drag + Lakshminarayana tip-clearance drag,
+    summed and converted to the inlet-referenced loss coefficient
+    ``omega_bar`` (docs/references/HOWELL.md):
+
+        C_Ds = 0.018 C_L^2            (secondary / trailing vortex)
+        C_Da = 0.020 (s/h) = 0.020/(sigma*AR)   (annulus endwall friction)
+        C_Dk = 0.7 C_L^2 (t/h)       (tip clearance; 0 when clearance = 0)
+        omega_ew = sigma (cos^2 beta1 / cos^3 beta_m)(C_Ds + C_Da + C_Dk)
+
+    where ``s/h = 1/(sigma*AR)`` (AR = blade height/chord) and ``t/h =
+    clearance_ratio``. The conversion is the inverse of Cumpsty 4.9
+    ``C_D = zeta (s/l)(cos^3 beta_m/cos^2 beta1)`` -- all inlet-referenced, so
+    ``omega_ew`` ADDS directly to the Lieblein profile ``omega_bar`` under one
+    B.2 conversion (section 4.4). Returns ``(omega_ew, validity)`` with a
+    compact-support ceiling on the loading ``C_L`` (Howell's data is moderate-
+    loading). Evaluated at the reference (design) triangle in
+    :class:`LieblienLoss`; off-design growth of the secondary loss (``C_L`` at
+    the actual triangle) is a recorded refinement."""
+    xp = get_xp(xp)
+    c_l, beta_m = blade_loading_coefficient(beta1_rad, beta2_rad, sigma, xp=xp)
+    b1 = xp.deg2rad(soft_clip(xp.rad2deg(beta1_rad), -_B1_CLIP, _B1_CLIP,
+                              2.0, xp=xp))
+    cds = _CDS_C * c_l * c_l
+    cda = _CDA_C / (sigma * aspect_ratio)
+    cdk = _CDK_C * c_l * c_l * clearance_ratio
+    c_d = cds + cda + cdk
+    omega_ew = sigma * xp.cos(b1) ** 2 / xp.cos(beta_m) ** 3 * c_d
+    v = 1.0 - blend(c_l, _CL_CEIL, _CL_W, xp=xp)
+    return omega_ew, v
 
 
 def stall_choke_ranges(camber_deg, beta1_deg, *, xp=None):
@@ -189,14 +275,24 @@ def off_design_bucket(i, i_ref, r_s, r_c, *, xp=None):
 @dataclass(frozen=True)
 class LieblienLoss:
     """LossModel (section 7.1): reference profile loss from the
-    equivalent-diffusion chain, Aungier off-design incidence bucket (physical
-    stall/choke ranges), converted to entropy per B.2 at the B.1-re-referenced
+    equivalent-diffusion chain (Aungier off-design incidence bucket, physical
+    stall/choke ranges) PLUS Howell endwall (secondary + annulus) and
+    Lakshminarayana tip-clearance loss, summed as one inlet-referenced
+    ``omega_bar`` and converted to entropy per B.2 at the B.1-re-referenced
     exit state.
+
+    ``aspect_ratio`` (blade height/chord) is a row-scalar design input for the
+    endwall/clearance drag (``s/h`` and ``t/h``; deriving it from the annulus
+    span is a future refinement, as for the turbine set). Tip clearance comes
+    from the geometry contract (``tip_clearance()``); it is 0 by default, so
+    the clearance term is inert unless a clearance is set -- existing
+    zero-clearance cases see only the secondary + annulus endwall loss.
 
     Requires ``row.geometry`` (section 4.1 contract) and the view's lagged
     TE fields."""
 
     k_sh: float = 1.0
+    aspect_ratio: float = 2.5
 
     def evaluate(self, row: RowView, flow: RowFlowView) -> LossBreakdown:
         xp = get_xp(None)
@@ -236,7 +332,17 @@ class LieblienLoss:
         # ranges from the reference inlet flow angle, replacing the old fixed
         # 10-deg width (section 4.3; docs/references/LIEB59.md).
         r_s, r_c = stall_choke_ranges(camber, b1_blade + i_ref, xp=xp)
-        omega_raw = omega_min * off_design_bucket(i, i_ref, r_s, r_c, xp=xp)
+        omega_profile = omega_min * off_design_bucket(i, i_ref, r_s, r_c, xp=xp)
+        # Howell endwall (secondary + annulus) + Lakshminarayana tip-clearance
+        # loss (section 4.4; docs/references/HOWELL.md). Evaluated at the
+        # reference (design) loading and ADDED to the bucketed profile loss --
+        # all inlet-referenced omega_bar, so one B.2 conversion covers the sum.
+        # t/h from the geometry clearance (0 by default -> clearance term inert).
+        chord = g.chord(y)
+        clearance_ratio = g.tip_clearance() / (self.aspect_ratio * chord)
+        omega_ew, v_e = endwall_clearance_loss(
+            b1_ref, b2_ref, sigma, self.aspect_ratio, clearance_ratio, xp=xp)
+        omega_raw = omega_profile + omega_ew
         # Section 7.3.2 conservative asymptote: level off smoothly well
         # inside the B.2 conversion's domain; validity reflects binding.
         omega_bar = smooth_min(omega_raw, _WBAR_CEIL, _WBAR_W, xp=xp)
@@ -250,6 +356,10 @@ class LieblienLoss:
         u2 = row.omega * flow.r_te
         delta_s, _ = delta_s_compressor_omega_bar(
             fluid, omega_bar, T0r_1, p0r_1, p1, u1, u2, xp=xp)
-        return LossBreakdown(components={"profile_omega_bar": omega_bar},
-                             delta_s=delta_s,
-                             validity=float(xp.min(v_i * v_d * v_w)))
+        # Components recorded individually for auditability (B.5.3).
+        return LossBreakdown(
+            components={"profile_omega_bar": omega_profile,
+                        "endwall_omega_bar": omega_ew,
+                        "omega_bar_total": omega_bar},
+            delta_s=delta_s,
+            validity=float(xp.min(v_i * v_d * v_w * v_e)))

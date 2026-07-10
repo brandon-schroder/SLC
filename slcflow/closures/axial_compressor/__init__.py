@@ -1,7 +1,10 @@
 """Axial-compressor correlation set (Theory Manual section 7.1): Lieblein
-incidence/deviation + diffusion-factor profile loss, bundled as a named
-CorrelationSet with provenance. Koch-Smith / Aungier endwall & shock loss
-components extend the set at V5 calibration time (recorded deferral)."""
+incidence/deviation + diffusion-factor profile loss + Howell endwall
+(secondary + annulus) and Lakshminarayana tip-clearance loss, bundled as a
+named CorrelationSet with provenance. The endwall/clearance components (added
+2026-07, docs/references/HOWELL.md) are the deferral this docstring previously
+named; a compressor SHOCK loss component (for transonic V5 cases) remains
+deferred."""
 from ..interfaces import CorrelationSet
 from .lieblein import (LieblienSwirl, deviation_slope, reference_deviation,
                        reference_incidence)

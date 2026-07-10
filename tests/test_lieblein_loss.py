@@ -142,10 +142,12 @@ def test_off_design_bucket_minimum_near_reference():
 
 def test_delta_s_matches_b2_conversion_of_native_coefficient():
     # Section 4.4 bookkeeping: the recorded native omega_bar and delta_s
-    # must be linked by exactly the B.2 conversion at the view's state.
+    # must be linked by exactly the B.2 conversion at the view's state. The
+    # native coefficient is the SUMMED profile + endwall omega_bar_total (one
+    # B.2 conversion covers the sum -- all inlet-referenced; HOWELL.md).
     row, view = make_view_and_row()
     out = LieblienLoss().evaluate(row, view)
-    wbar = out.components["profile_omega_bar"]
+    wbar = out.components["omega_bar_total"]
     w1 = float(view.vm[0]) / np.cos(np.arctan2(-view.w_theta[0],
                                                view.vm[0]))
     p1 = GAS.p(view.h, view.s)
