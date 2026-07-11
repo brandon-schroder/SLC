@@ -20,15 +20,21 @@ independent isentropic area-Mach reference below.
 import numpy as np
 import pytest
 
+from slcflow.closures.axial_compressor import LIEBLEIN_NACA65
 from slcflow.drivers import (ArclengthConfig, MeridionalBranchResult,
-                             solve_classical, solve_supersonic_branch)
+                             NewtonConfig, RowSpec, solve_classical,
+                             solve_supersonic_branch)
+from slcflow.drivers.classical import _evaluate_rows, _resolve_rows
 from slcflow.diagnostics.record import SolveStatus
 from slcflow.errors import ConfigError
 from slcflow.fluid.perfectgas import PerfectGas
 from slcflow.geometry import FlowPath, StationDef, StationType, WallCurve
+from slcflow.geometry.bladerow import ParamRowGeometry
 from slcflow.grid import GridTopology
 from slcflow.transport import TransportFields
 from slcflow.types import FidelityConfig, MassFlowSpec
+
+_DEG = np.pi / 180.0
 
 _R0 = 0.30                         # constant hub radius
 _H0, _S0 = 3.0e5, 0.0              # inlet stagnation state
@@ -216,3 +222,95 @@ def test_max_steps_exhaustion_is_typed_not_raised():
                                   config=ArclengthConfig(max_steps=2))
     assert res.status is SolveStatus.MAX_ITER
     assert not res.converged
+
+
+# --------------------------------------------------------------------------
+# Closure-lagged blade-row path (section 6.6 / C.9): a Lieblein row UPSTREAM of
+# the throat, so its inflow stays subsonic (closures valid) while the bare
+# throat crosses to supersonic. Because target_mdot != seed_mdot the
+# flow-dependent Lieblein closure differs between the seed and the landed
+# supersonic state, so the outer loop must re-lag it.
+# --------------------------------------------------------------------------
+def _nozzle_with_row():
+    gas = PerfectGas()
+    z = np.linspace(0.0, 1.0, 41)
+
+    def shroud(zz):
+        zz = np.asarray(zz, float)
+        return np.where(zz < 0.40, 0.50,
+               np.where(zz < 0.60, 0.50 - (0.50 - 0.365) * ((zz - 0.40) / 0.20),
+                        0.365 + (0.46 - 0.365) * ((zz - 0.60) / 0.40)))
+
+    w0 = WallCurve.from_points(np.column_stack([z, np.full_like(z, _R0)]))
+    w1 = WallCurve.from_points(np.column_stack([z, shroud(z)]))
+    stations = [StationDef(StationType.DUCT, 0.0, 0.0),
+                StationDef(StationType.EDGE_LE, 0.20, 0.20, row_id="r1"),
+                StationDef(StationType.EDGE_TE, 0.33, 0.33, row_id="r1"),
+                StationDef(StationType.DUCT, 0.60, 0.60),      # throat
+                StationDef(StationType.DUCT, 1.0, 1.0)]
+    topo = GridTopology(FlowPath(w0, w1, stations), n_sl=1)
+    inlet = TransportFields(h0=np.array([_H0]), s=np.array([_S0]),
+                            rvt=np.array([0.0]))
+    geom = ParamRowGeometry(blade_count=30, beta1=-45 * _DEG, beta2=-38 * _DEG,
+                            chord_len=0.05, solidity_val=1.2, thickness=0.06)
+    row = RowSpec(row_id="r1", omega=250.0, swirl=LIEBLEIN_NACA65.swirl,
+                  loss=LIEBLEIN_NACA65.loss, blade_count=30, geometry=geom)
+    return gas, topo, inlet, (row,)
+
+
+# A benign upstream row tolerates a larger closure_relax than the stiff M4-4
+# swirl-continuity default; used here for test speed (the conservative default
+# converges too, in more passes).
+_LAG_CFG = ArclengthConfig(newton=NewtonConfig(closure_relax=0.5, max_outer=60))
+
+
+def test_closure_lagged_crosses_fold_onto_supersonic_branch():
+    gas, topo, inlet, rows = _nozzle_with_row()
+    seed = solve_classical(topo, gas, FidelityConfig.tier1(),
+                           MassFlowSpec(34.0), inlet, rows=rows)
+    assert seed.converged and seed.fields.mach_m[0, 3] < 1.0   # subsonic throat
+    res = solve_supersonic_branch(topo, gas, FidelityConfig.tier1(), inlet,
+                                  subsonic_seed=seed, target_mdot=30.0,
+                                  rows=rows, config=_LAG_CFG)
+    assert res.converged
+    assert res.fold_crossed
+    mm = res.result.fields.mach_m[0]
+    assert mm[3] > 1.0                                # throat supersonic
+    assert mm[1] < 1.0                                # row LE subsonic (valid)
+    assert res.result.frozen.closures.validity > 0.5  # Lieblein in-window
+
+
+def test_closure_lag_makes_the_closure_self_consistent():
+    # The point of the extension: at the landed supersonic field the LAGGED
+    # closure equals a fresh evaluation of the closure at that field (the loop
+    # converged the flow-dependent Lieblein output). Freezing the seed's
+    # closures instead (the prescribed-transport path) leaves a several-percent
+    # inconsistency, since target_mdot != seed_mdot moves the row inflow.
+    gas, topo, inlet, rows = _nozzle_with_row()
+    seed = solve_classical(topo, gas, FidelityConfig.tier1(),
+                           MassFlowSpec(34.0), inlet, rows=rows)
+    resolved = _resolve_rows(topo, rows)
+
+    lagged = solve_supersonic_branch(topo, gas, FidelityConfig.tier1(), inlet,
+                                     subsonic_seed=seed, target_mdot=30.0,
+                                     rows=rows, config=_LAG_CFG)
+    assert lagged.converged
+    fr = lagged.result.frozen
+    _, rvt_fresh, ds_fresh, _ = _evaluate_rows(resolved, topo, gas,
+                                               fr.transported, lagged.result.fields)
+    rvt_lag = fr.closures.row_exit_rvt["r1"][0]
+    fresh = float(rvt_fresh["r1"][0])
+    # Self-consistent: the lag re-solved the flow-dependent closure.
+    assert abs(fresh - rvt_lag) <= 1e-3 * abs(rvt_lag)
+
+    # Contrast: the no-rows path freezes the seed's closures -> at the landed
+    # field a fresh evaluation disagrees (the inconsistency the lag removes).
+    frozen_only = solve_supersonic_branch(topo, gas, FidelityConfig.tier1(),
+                                          inlet, subsonic_seed=seed,
+                                          target_mdot=30.0)
+    assert frozen_only.converged
+    seed_rvt = seed.frozen.closures.row_exit_rvt["r1"][0]
+    _, rvt_at_land, _, _ = _evaluate_rows(
+        resolved, topo, gas, frozen_only.result.frozen.transported,
+        frozen_only.result.fields)
+    assert abs(float(rvt_at_land["r1"][0]) - seed_rvt) > 1e-2 * abs(seed_rvt)

@@ -21,19 +21,34 @@ relation gives in closed form) — **not** a V5 blocker (the transonic V5 gate i
 met on the ordinary branch; the in-window condition is loading, not the
 meridional branch — see C.9 and ``V5TransonicRotor``).
 
-Scope (first version): **prescribed transport** (duct / explicit
-:class:`TransportStep` steps). The frozen inputs — transported fields, closures,
-lag — are held constant along the branch (a duct has none to re-lag), so the
-continuation is purely over the continuity/position state and ``mdot``.
-Closure-lagged rows (an outer quasi-Newton loop wrapping the arclength inner,
-like :func:`solve_newton`) are a recorded extension; a blade-row supersonic
-branch is not needed by any current case.
+Two paths, selected by whether ``rows`` (closure-fed blade rows) are supplied:
+
+* **Prescribed transport** (duct / explicit :class:`TransportStep` steps, no
+  rows). The frozen inputs — transported fields, closures, lag — are constant
+  along the branch (a duct has none to re-lag), so the continuation is purely
+  over the continuity/position state and ``mdot``: one arclength crossing plus
+  the landing Newton.
+* **Closure-lagged blade rows.** The row swirl/loss closures depend on the flow
+  field and are lagged (AD-4); the supersonic-branch field differs from the
+  subsonic seed's (a different ``mdot``, and — where the row's own flow goes
+  supersonic — a different inflow), so the closures must be re-evaluated at the
+  landed supersonic state. This path wraps the arclength inner in the SAME
+  outer quasi-Newton closure-lag loop as :func:`solve_newton` (section 6.3):
+  bootstrap onto the supersonic branch ONCE by arclength, then on each outer
+  pass re-lag the closures from the supersonic field, re-sweep transport, and
+  re-land at ``target_mdot`` by fixed-``mdot`` Newton (the branch is already
+  selected, so the fold need not be re-crossed) until the closure-update norm
+  converges (section 6.2.5). Robust for a single dominant fold (the binding
+  station's ``M_m=1``); a fully supersonic ROW inflow that folds several
+  stations at once (measured on a transonic rotor, C.9) is the harder
+  multi-fold regime this simple-fold arclength does not claim.
 
 Layering (ARCH-2): a ``drivers`` orchestration over the pure
 :class:`ResidualAssembler` pieces (``split``, ``mass_cumulative``,
-``continuity_position_rows``). Data-dependent branching and iteration are the
-driver's job (AD-6 binds assembly, not orchestration); failures return typed
-statuses (ARCH-6), never exceptions.
+``continuity_position_rows``) and the shared classical row-evaluation helpers.
+Data-dependent branching and iteration are the driver's job (AD-6 binds
+assembly, not orchestration); failures return typed statuses (ARCH-6), never
+exceptions.
 """
 from __future__ import annotations
 
@@ -42,14 +57,14 @@ from dataclasses import dataclass, field, replace
 import numpy as np  # driver layer: orchestration, not residual path  # ad6: allow
 
 from ..assembly.assembler import ResidualAssembler
-from ..diagnostics.record import (ConvergenceRecord, IterationRecord,
-                                  SolveStatus)
+from ..assembly.inputs import FrozenInputs
+from ..diagnostics.record import ConvergenceRecord, SolveStatus
 from ..errors import ConfigError
 from ..grid.core import MetricsConfig
-from ..transport.streamwise import TransportFields, TransportStep
+from ..transport.streamwise import TransportFields
 from ..types import FidelityConfig, MassFlowSpec
 from .classical import ClassicalResult
-from .newton import NewtonConfig, newton_solve
+from .newton import NewtonConfig, newton_solve, solve_newton
 
 __all__ = ["ArclengthConfig", "BranchPoint", "MeridionalBranchResult",
            "solve_supersonic_branch"]
@@ -78,9 +93,15 @@ class ArclengthConfig:
         mean q-o length) so the arclength balances velocity and mass-flow
         components (measured necessary — an unscaled arclength creeps in
         ``mdot`` because ``Vm`` dominates the norm near the fold).
-    newton : settings for the final fixed-``mdot`` Newton that lands the
-        traversal exactly on ``target_mdot`` once the supersonic branch is
-        selected (the fold is behind it, so the root is regular).
+    newton : settings for BOTH the fixed-``mdot`` landing Newton (prescribed-
+        transport path) and the outer closure-lag loop (blade-row path, which
+        hands off to :func:`solve_newton`). The default raises ``max_outer`` to
+        120: the closure lag is a Picard iteration converging at rate
+        ``(1 - closure_relax)``, so the conservative ``closure_relax = 0.25``
+        (kept — it must stay safe for a stiff swirl-continuity loop, M4-4) needs
+        ~60 outer passes to reach ``tol_closure = 1e-9`` from a typical few-%
+        seed mismatch. Weakly-coupled cases (e.g. a row upstream of the folding
+        throat) tolerate a larger ``closure_relax`` and converge in far fewer.
     """
 
     ds0: float = 0.1
@@ -96,7 +117,8 @@ class ArclengthConfig:
     vm_scale: float = None
     mdot_scale: float = None
     q_scale: float = None
-    newton: NewtonConfig = field(default_factory=NewtonConfig)
+    newton: NewtonConfig = field(
+        default_factory=lambda: NewtonConfig(max_outer=120))
 
     def __post_init__(self):
         if self.max_steps < 1:
@@ -200,61 +222,32 @@ def _jacobian(asm, x_state, mdot, r0, config, mdot_col):
 
 
 # ---------------------------------------------------------------------------
-# Traversal
+# Arclength core (fixed frozen inputs) + fixed-mdot landing
 # ---------------------------------------------------------------------------
-def solve_supersonic_branch(topology, fluid, fidelity: FidelityConfig,
-                            inlet: TransportFields, *,
-                            subsonic_seed: ClassicalResult,
-                            target_mdot: float,
-                            steps=None, blockage=None,
-                            metrics_config: MetricsConfig = None,
-                            config: ArclengthConfig = ArclengthConfig()
-                            ) -> MeridionalBranchResult:
-    """Traverse from a subsonic-branch seed onto the meridional-supersonic
-    branch and land at ``target_mdot`` (section 6.6 / C.9).
-
-    ``subsonic_seed`` is a converged mass-flow :class:`ClassicalResult` on the
-    SAME topology, at ``mdot`` below the binding station capacity (its frozen
-    inputs — transported fields, closures, lag — are reused unchanged: this
-    driver is prescribed-transport only, see the module docstring).
-    ``target_mdot`` is the mass flow to land on, on the far (supersonic) side of
-    the fold — it must be below the capacity peak the traversal discovers.
-
-    Pseudo-arclength climbs the subsonic branch (rising ``mdot``) to the sonic
-    turning point, crosses it, then descends the supersonic branch (falling
-    ``mdot``); once ``mdot`` passes ``target_mdot`` a fixed-``mdot`` Newton
-    lands the exact on-target supersonic solution (the branch is selected, so
-    that root is regular). Returns typed statuses (ARCH-6)."""
-    if subsonic_seed is None or subsonic_seed.frozen is None:
-        raise ConfigError(
-            "solve_supersonic_branch requires a converged subsonic_seed "
-            "ClassicalResult with frozen inputs")
-    if not target_mdot > 0.0:
-        raise ConfigError(f"target_mdot must be > 0, got {target_mdot}")
-    frozen = subsonic_seed.frozen
-    if frozen.topology.n_sl != topology.n_sl \
-            or frozen.topology.n_qo != topology.n_qo:
-        raise ConfigError("subsonic_seed must be on the same topology")
-    asm = ResidualAssembler(frozen)
-    n_state = subsonic_seed.x.size
-
-    # Arclength variable scales (balance Vm and mdot; measured necessary).
-    seed_mdot = (frozen.spec.mdot if isinstance(frozen.spec, MassFlowSpec)
-                 else float(target_mdot))
-    g = fluid.gamma
+def _arclength_scales(frozen: FrozenInputs, seed_mdot, target_mdot,
+                      config: ArclengthConfig):
+    """Per-variable arclength scales ``D`` (balance Vm and mdot; measured
+    necessary) and the ``mdot`` normaliser conditioning the augmented solve."""
+    g = frozen.fluid.gamma
     vm_scale = config.vm_scale or float(np.sqrt(
         2.0 * np.mean(frozen.transported.h0) * (g - 1.0) / (g + 1.0)))
-    mdot_scale = config.mdot_scale or max(seed_mdot, float(target_mdot))
+    mdot_scale = config.mdot_scale or max(float(seed_mdot), float(target_mdot))
     q_scale = config.q_scale or float(np.max(
         [qo.length for qo in frozen.topology.flowpath.qo_curves]))
-    n_int = max(topology.n_sl - 2, 0)
-    D = np.concatenate([np.full(topology.n_qo, vm_scale),
-                        np.full(n_int * topology.n_qo, q_scale),
+    n_int = max(frozen.n_sl - 2, 0)
+    D = np.concatenate([np.full(frozen.n_qo, vm_scale),
+                        np.full(n_int * frozen.n_qo, q_scale),
                         np.array([mdot_scale])])
-    # Row scale so the augmented residual is O(1) (continuity ~ mdot, position
-    # ~ mdot/2pi), well-conditioning the augmented solve.
-    row_scale = mdot_scale
+    return D, mdot_scale
 
+
+def _arclength_to_supersonic(asm: ResidualAssembler, x_subsonic, seed_mdot,
+                             target_mdot, config: ArclengthConfig):
+    """Pseudo-arclength from the subsonic seed across the ``M_m=1`` fold to a
+    state on the SUPERSONIC branch at ``mdot <= target_mdot`` (fixed closures /
+    frozen). Returns ``(x_arc, status, fold_crossed, fold_mdot, path)`` — the
+    pre-landing arclength endpoint (``x_arc`` is ``None`` on failure)."""
+    D, row_scale = _arclength_scales(asm.frozen, seed_mdot, target_mdot, config)
     mdot_col = _mdot_column(asm)
 
     def augmented(y, yk, t, ds):
@@ -264,22 +257,16 @@ def solve_supersonic_branch(topology, fluid, fidelity: FidelityConfig,
         arc = float(t @ ((y - yk) / D)) - ds
         return np.append(rows / row_scale, arc), fields
 
-    # Seed point and initial tangent (toward increasing mdot).
-    y = np.append(np.array(subsonic_seed.x, dtype=float), seed_mdot)
-    r0, fields0 = _safe_G(asm, y[:-1], y[-1])
+    y = np.append(np.array(x_subsonic, dtype=float), float(seed_mdot))
+    r0, _ = _safe_G(asm, y[:-1], y[-1])
     if r0 is None:
-        return MeridionalBranchResult(
-            SolveStatus.NUMERICAL_FAILURE, subsonic_seed, False, float("nan"),
-            reason="subsonic_seed is infeasible at its own state")
+        return None, SolveStatus.NUMERICAL_FAILURE, False, float("nan"), ()
     jac0 = _jacobian(asm, y[:-1], y[-1], r0, config, mdot_col)
     if jac0 is None:
-        return MeridionalBranchResult(
-            SolveStatus.NUMERICAL_FAILURE, subsonic_seed, False, float("nan"),
-            reason="could not form the seed Jacobian")
-    jac0_s = jac0 * D[None, :] / row_scale
-    _, _, vt = np.linalg.svd(jac0_s)
+        return None, SolveStatus.NUMERICAL_FAILURE, False, float("nan"), ()
+    _, _, vt = np.linalg.svd(jac0 * D[None, :] / row_scale)
     t = vt[-1]
-    if t[-1] < 0.0:
+    if t[-1] < 0.0:                                  # orient toward rising mdot
         t = -t
     t /= np.linalg.norm(t)
 
@@ -313,14 +300,11 @@ def solve_supersonic_branch(topology, fluid, fidelity: FidelityConfig,
         if accepted is None:
             ds *= config.ds_shrink
             if ds < config.ds_min:
-                return MeridionalBranchResult(
-                    SolveStatus.NUMERICAL_FAILURE, subsonic_seed, fold_crossed,
-                    fold_mdot, tuple(path),
-                    reason=f"corrector failed at ds_min ({_step} steps)")
+                return (None, SolveStatus.NUMERICAL_FAILURE, fold_crossed,
+                        fold_mdot, tuple(path))
             continue
 
         y, fields = accepted
-        # New tangent (continuation direction), oriented to keep moving.
         rows, _ = _safe_G(asm, y[:-1], y[-1])
         jac = _jacobian(asm, y[:-1], y[-1], rows, config, mdot_col)
         jf = np.vstack([jac * D[None, :] / row_scale, t[None, :]])
@@ -330,46 +314,138 @@ def solve_supersonic_branch(topology, fluid, fidelity: FidelityConfig,
             tn = -tn
         t = tn
 
-        mm_max = float(np.max(fields.mach_m))
-        path.append(BranchPoint(mdot=float(y[-1]), mach_m_max=mm_max,
+        path.append(BranchPoint(mdot=float(y[-1]),
+                                mach_m_max=float(np.max(fields.mach_m)),
                                 dmdot_ds=float(t[-1]), ds=ds))
-        # Fold detection: mdot turns over (rises then falls).
         if not fold_crossed and y[-1] < prev_mdot:
             fold_crossed = True
             fold_mdot = float(prev_mdot)
         prev_mdot = y[-1]
         ds = min(ds * config.ds_grow, config.ds_max)
 
-        # Land on target once we are on the descending supersonic branch.
         if fold_crossed and y[-1] <= target_mdot:
-            return _land_on_target(topology, fluid, fidelity, frozen, asm,
-                                   y[:-1], target_mdot, fold_crossed, fold_mdot,
-                                   path, config)
+            return (y[:-1].copy(), SolveStatus.CONVERGED, fold_crossed,
+                    fold_mdot, tuple(path))
 
-    return MeridionalBranchResult(
-        SolveStatus.MAX_ITER, subsonic_seed, fold_crossed, fold_mdot,
-        tuple(path),
-        reason=f"reached max_steps ({config.max_steps}) without landing on "
-               f"target_mdot={target_mdot} (fold_crossed={fold_crossed})")
+    return (None, SolveStatus.MAX_ITER, fold_crossed, fold_mdot, tuple(path))
 
 
-def _land_on_target(topology, fluid, fidelity, frozen, asm, x_seed,
-                    target_mdot, fold_crossed, fold_mdot, path, config):
-    """Fixed-``mdot`` Newton at ``target_mdot`` from the supersonic seed: the
-    branch is selected, so this is a regular mass-flow root (the fold is behind
-    us). Reuses the tested inner Newton core over the mass-flow residual."""
+def _land(frozen: FrozenInputs, x_seed, target_mdot, newton_config):
+    """Fixed-``mdot`` Newton at ``target_mdot`` from a supersonic seed: the
+    branch is selected (the fold is behind), so this is a regular mass-flow
+    root. Reuses the tested inner Newton core. Returns
+    ``(asm_t, frozen_t, x, status, records)``."""
     frozen_t = replace(frozen, spec=MassFlowSpec(float(target_mdot)))
     asm_t = ResidualAssembler(frozen_t)
     x, status, recs = newton_solve(asm_t, np.array(x_seed, dtype=float),
-                                   config.newton)
-    record = ConvergenceRecord(status=status, iterations=tuple(recs),
-                               reason=("" if status is SolveStatus.CONVERGED
-                                       else "fixed-mdot landing Newton did not "
-                                            "converge on the supersonic root"))
-    result = ClassicalResult(status=status, x=x,
-                             fields=asm_t.split(x) if status in
-                             (SolveStatus.CONVERGED, SolveStatus.MAX_ITER)
-                             else None,
+                                   newton_config)
+    return asm_t, frozen_t, x, status, recs
+
+
+def _result(status, x, asm_t, frozen_t, fold_crossed, fold_mdot, path, reason):
+    record = ConvergenceRecord(status=status, iterations=(), reason=reason)
+    fields = (asm_t.split(x) if status in
+              (SolveStatus.CONVERGED, SolveStatus.MAX_ITER) else None)
+    result = ClassicalResult(status=status, x=x, fields=fields,
                              frozen=frozen_t, record=record)
     return MeridionalBranchResult(status, result, fold_crossed, fold_mdot,
-                                  tuple(path), reason=record.reason)
+                                  tuple(path), reason=reason)
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+def solve_supersonic_branch(topology, fluid, fidelity: FidelityConfig,
+                            inlet: TransportFields, *,
+                            subsonic_seed: ClassicalResult,
+                            target_mdot: float,
+                            steps=None, rows=(), blockage=None,
+                            metrics_config: MetricsConfig = None,
+                            config: ArclengthConfig = ArclengthConfig()
+                            ) -> MeridionalBranchResult:
+    """Traverse from a subsonic-branch seed onto the meridional-supersonic
+    branch and land at ``target_mdot`` (section 6.6 / C.9).
+
+    ``subsonic_seed`` is a converged mass-flow :class:`ClassicalResult` on the
+    SAME topology, at ``mdot`` below the binding station capacity. ``rows``
+    (closure-fed :class:`RowSpec`) selects the **closure-lagged** path (the
+    outer quasi-Newton loop re-lagging closures at the supersonic field); an
+    empty ``rows`` (with prescribed ``steps`` / a duct) is the fixed-frozen
+    path. ``target_mdot`` is the mass flow to land on, on the far (supersonic)
+    side of the fold — below the capacity peak the traversal discovers.
+
+    Pseudo-arclength climbs the subsonic branch (rising ``mdot``) to the sonic
+    turning point, crosses it, then descends the supersonic branch; a
+    fixed-``mdot`` Newton lands the exact on-target supersonic solution (the
+    branch is selected, so that root is regular). Returns typed statuses
+    (ARCH-6)."""
+    if subsonic_seed is None or subsonic_seed.frozen is None:
+        raise ConfigError(
+            "solve_supersonic_branch requires a converged subsonic_seed "
+            "ClassicalResult with frozen inputs")
+    if not target_mdot > 0.0:
+        raise ConfigError(f"target_mdot must be > 0, got {target_mdot}")
+    frozen0 = subsonic_seed.frozen
+    if frozen0.topology.n_sl != topology.n_sl \
+            or frozen0.topology.n_qo != topology.n_qo:
+        raise ConfigError("subsonic_seed must be on the same topology")
+    seed_mdot = (frozen0.spec.mdot if isinstance(frozen0.spec, MassFlowSpec)
+                 else float(target_mdot))
+
+    if rows:
+        return _solve_with_closure_lag(topology, fluid, fidelity, inlet,
+                                       subsonic_seed, target_mdot, seed_mdot,
+                                       rows, metrics_config, config)
+
+    # Prescribed-transport (fixed-frozen) path: one crossing + landing.
+    asm = ResidualAssembler(frozen0)
+    x_arc, status, fold_crossed, fold_mdot, path = _arclength_to_supersonic(
+        asm, subsonic_seed.x, seed_mdot, target_mdot, config)
+    if x_arc is None:
+        reason = ("corrector failed" if status is SolveStatus.NUMERICAL_FAILURE
+                  else f"reached max_steps ({config.max_steps}) without "
+                       f"landing on target_mdot={target_mdot}")
+        return MeridionalBranchResult(status, subsonic_seed, fold_crossed,
+                                      fold_mdot, path, reason=reason)
+    asm_t, frozen_t, x, lstatus, _recs = _land(frozen0, x_arc, target_mdot,
+                                               config.newton)
+    reason = ("" if lstatus is SolveStatus.CONVERGED else
+              "fixed-mdot landing Newton did not converge on the supersonic root")
+    return _result(lstatus, x, asm_t, frozen_t, fold_crossed, fold_mdot, path,
+                   reason)
+
+
+def _solve_with_closure_lag(topology, fluid, fidelity, inlet, subsonic_seed,
+                            target_mdot, seed_mdot, rows, metrics_config,
+                            config: ArclengthConfig):
+    """Closure-lagged blade-row path: bootstrap onto the supersonic branch by
+    arclength ONCE (with the seed's frozen closures), then hand the supersonic
+    seed to :func:`solve_newton` at ``target_mdot``, which runs the SAME outer
+    quasi-Newton closure-lag loop it uses everywhere (section 6.3) — re-lagging
+    the flow-dependent closures at the supersonic field and re-solving until the
+    closure-update norm converges (section 6.2.5). The fold is behind the
+    bootstrap seed, so the Newton inner stays on the supersonic branch (its
+    positive-``Vm`` feasibility guard admits the supersonic root); the lag
+    cadence is ``config.newton``. Reusing the tested/tuned Newton machinery is
+    why this path adds almost no numerical surface of its own."""
+    frozen0 = subsonic_seed.frozen
+    asm = ResidualAssembler(frozen0)
+    x_arc, status, fold_crossed, fold_mdot, path = _arclength_to_supersonic(
+        asm, subsonic_seed.x, seed_mdot, target_mdot, config)
+    if x_arc is None:
+        return MeridionalBranchResult(
+            status, subsonic_seed, fold_crossed, fold_mdot, path,
+            reason=f"arclength bootstrap {status.value} before any landing")
+
+    # Warm start for solve_newton: the supersonic STATE (x_arc) with the seed's
+    # lagged fields/closures (subsonic-consistent) — the first outer pass
+    # re-lags them at the supersonic field.
+    warm = ClassicalResult(status=SolveStatus.CONVERGED, x=x_arc,
+                           fields=asm.split(x_arc), frozen=frozen0,
+                           record=ConvergenceRecord(SolveStatus.CONVERGED, ()))
+    kw = {} if metrics_config is None else {"metrics_config": metrics_config}
+    res = solve_newton(topology, fluid, fidelity, MassFlowSpec(target_mdot),
+                       inlet, warm_start=warm, rows=rows, config=config.newton,
+                       **kw)
+    return MeridionalBranchResult(res.status, res, fold_crossed, fold_mdot,
+                                  path, reason=res.record.reason)

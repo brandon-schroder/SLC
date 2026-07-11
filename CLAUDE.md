@@ -573,12 +573,33 @@ These are not suggestions; violating them is a bug even if tests pass.
   (the fold); the driver crosses it (turning point = analytic capacity to <0.2%)
   and lands the supersonic throat Mach = isentropic area–Mach supersonic root to
   <0.3% (e.g. M_m=1.397), inlet/exit staying subsonic (rank-1 fold); same mdot,
-  two roots (sub vs supersonic). Scope: **prescribed transport** (duct/explicit
-  steps); closure-lagged blade-row supersonic branches (an outer quasi-Newton
-  loop wrapping the arclength inner) are a recorded extension, unneeded by any
-  current case. This closes the "V5 supersonic-branch traversal" driver item as
-  a standalone method — decoupled from V5, whose gate is met on the ordinary
-  branch (previous bullet).
+  two roots (sub vs supersonic). This closes the "V5 supersonic-branch traversal"
+  driver item as a standalone method — decoupled from V5, whose gate is met on
+  the ordinary branch (previous bullet).
+- **Closure-lagged blade-row supersonic-branch extension (2026-07).** The
+  `rows` path of `solve_supersonic_branch`: for closure-fed rows the swirl/loss
+  closures are flow-dependent and lagged (AD-4), and the supersonic-branch field
+  differs from the subsonic seed's, so the closures must re-lag at the landed
+  supersonic state. Structure: **bootstrap onto the supersonic branch by
+  arclength ONCE**, then **hand the supersonic seed to `solve_newton`** at
+  `target_mdot` — which runs the SAME outer quasi-Newton closure-lag loop it uses
+  everywhere (§6.3); the fold is behind the seed, so the Newton inner's
+  positive-Vm guard keeps it supersonic while the outer loop re-lags. Reusing
+  `solve_newton` (not a bespoke loop) is deliberate — the extension adds almost
+  no numerical surface. Verified (`tests/test_supersonic.py`) on a **Lieblein row
+  UPSTREAM of the throat** (inflow subsonic → closures in-window) with
+  `target_mdot != seed_mdot` so the flow-dependent closure genuinely re-lags:
+  throat crosses to M_m≈1.5, row inflow stays subsonic + Lieblein-valid, and the
+  lagged closure is **self-consistent at the landed field** (fresh eval agrees to
+  <0.1%) vs. a several-% inconsistency if the seed's closures are frozen. The lag
+  is Picard at rate (1−closure_relax): the conservative default relax (kept safe
+  for stiff M4-4 swirl-continuity loops) needs ~60 outer passes (ArclengthConfig
+  bumps the default `newton.max_outer` to 120 so benign cases converge out of the
+  box); weakly-coupled cases tolerate a larger relax. **Known limit** (honest): a
+  fully supersonic ROW inflow that folds several stations at once (measured on a
+  transonic rotor, §C.9) is the harder **multi-fold** regime this single-fold
+  arclength does not claim — a deflated/multi-parameter continuation would be the
+  next step, unneeded by any current case.
 
 ## Commands
 
