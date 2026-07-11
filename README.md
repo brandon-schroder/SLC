@@ -11,7 +11,15 @@ All milestones on the ARCH-8 verification ladder (**M0–M8**) are closed:
 geometry/grid, the pure residual assembler, the classical / Newton /
 continuation drivers, the axial-compressor, axial-turbine, and centrifugal
 correlation sets, all three fidelity tiers, and the §3.6 spanwise-mixing model.
-Suite: 347 tests, both lint gates green.
+
+Post-ladder work (see `CLAUDE.md` for the full log) includes an independent
+audit + turbine-sign fix, a reference-library correlation-calibration pass, the
+axial-compressor endwall/clearance/shock loss stack, and a
+**meridional-supersonic-branch driver** — pseudo-arclength continuation
+(`drivers/supersonic.py`) that crosses the per-station `M_m = 1` continuity fold
+onto the supersonic-meridional branch, with both a prescribed-transport (duct)
+path and a closure-lagged blade-row path. Suite: 534 tests, both lint gates
+green.
 
 The verification ladder is largely **structural** (convergence + trends +
 plausibility bands), with pervasive `[VERIFY]` on the correlation
