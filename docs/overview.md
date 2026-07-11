@@ -354,31 +354,45 @@ many *structural* ones. Be precise about which is which.
   **V8** (mixed-flow): each *converges*, does physically correct work with
   loss, and lands PR/efficiency in **generous plausibility bands**. They do
   **not** reproduce any specific published/NASA/Eckardt case point-by-point.
+  (Caveat: with the realistic centrifugal loss, V7 converges only at the
+  meanline and V8 only through Tier 2 — the spanwise-bend tiers wedge; see the
+  known-limitations note below.)
 
 **Explicitly unvalidated (`[VERIFY]`), by design:**
 - **Every correlation coefficient** in every `CorrelationSet` is `[VERIFY]` —
   they are representative fits, not calibrated against the reference library.
-  Efficiencies consequently read high (e.g. V7/V8 ≈ 0.98) because deferred loss
-  components (blade-loading/clearance/disk-friction) are missing.
+  Efficiencies read closer to realistic now that the dominant loss components
+  are modeled (axial endwall/clearance/shock; centrifugal **blade-loading** added
+  2026-07 — V7/V8 η ≈ 0.98 → ~0.90), but centrifugal **tip-clearance** and
+  **disk-friction** are still deferred (a per-streamtube closure lacks their
+  geometry/`ṁ` inputs).
 - **Speedline/choke-traversal validation** against data is `[VERIFY]`.
 - The mixing constant `c_mix` and the mixing entropy-*production* term (the
   operator redistributes `s`; the irreversibility source beyond redistribution
   is a refinement) are `[VERIFY]`.
 
 **Known limitations (measured, honest):**
-- **Tier-3 radial/mixed is slow (stabilized 2026-07; the fragility is
-  resolved).** The original "narrow, angle-specific pocket" story was
-  diagnosed as a driver artifact — the master ODE's `Vm = 0` singularity
-  reached from stale boundary values (chiefly the unrelaxed closure
-  switch-on), a fatal boundary check on a repairable state, and continuity
-  roots accepted on spurious negative-`Vm` branches — **not** the §6.4
-  odd-even repositioning mode (Appendix C.7/C.8, revised). Post-
-  stabilization V7 (edge-only *and* subdivided) and V8 all converge at
-  Tier 3, pinned by the flipped tripwires. What remains is speed: the §6.4
-  relaxation throttle holds ω_sl ≈ 0.07 on these bends (V8 Tier 3 ≈ 400
-  iterations); Newton finishing and a §6.4 recalibration on
-  blade-row-coupled bends (C.3 was duct-calibrated, possibly
-  artifact-contaminated) are the follow-ups. The M8-3 "mixing is a
+- **Tier-3 radial/mixed convergence is the top open item — and the realistic
+  centrifugal loss now exposes it hard (2026-07).** The 2026-07 stabilization
+  (moving the AD-10 check to the solved state, positive-branch root validation,
+  the freeze/`choke_patience` fallback) resolved the earlier "narrow,
+  angle-specific pocket" story — a driver artifact (the master ODE's `Vm = 0`
+  singularity reached from stale boundary values, a fatal boundary check on a
+  repairable state, spurious negative-`Vm` roots), **not** the §6.4 odd-even
+  repositioning mode. It holds for **lower-loss** cases. **But adding the
+  dominant centrifugal blade-loading loss (~7 kJ/kg, the correct physics that
+  makes η realistic) drives the fragile bends into a *freeze-fallback wedge*** —
+  a self-consistent lag state whose exit q-o has no positive-branch continuity
+  root at any `ṁ` (lowering `ṁ` makes it *worse*). **V7's 90° bend wedges at
+  BOTH Tier 2 and Tier 3, so V7 is now meanline-only** with realistic loss;
+  **V8's mixed bend wedges at Tier 3** (V8 keeps Tier 1+2). These spanwise-bend
+  tiers are pinned as `xfail(strict=True)` **wedge tripwires** that auto-flip
+  when cracked. Reasonable robustness patches (reposition-freeze, capacity-peak
+  freeze) were re-measured non-curative and reverted; cracking the wedge needs
+  **closure-in-Newton or a compact-support streamline fit** (major — the #1 open
+  item), plus the standing speed problem (the §6.4 throttle holds ω_sl ≈ 0.07 on
+  these bends; V8 Tier 3 ≈ 400 iterations at lower loss). See Appendix C.7/C.8
+  and memory `centrifugal-blade-loading-wip`. The M8-3 "mixing is a
   convergence prerequisite" claim fell with the same artifact; the surviving
   §3.6 claim — spanwise stratification without mixing — was then re-measured
   by the 2026-07 reference-calibration pass down from "~25×" to a **modest
@@ -407,8 +421,8 @@ plausibility bands are wide by intent. The right adversarial question is
 | **V3** | Tier consistency (Tier2≡Tier3, Tier1 mass-avg) | **Quantitative** (bit-for-bit) |
 | **V5** | Axial compressor (single + **multistage**) | Structural (in-window loss after 2026-07 retune); multistage shows mixing is a **modest damping** (~18%), not a homogenizer |
 | **V6** | Axial turbine (K-O set) | Structural |
-| **V7** | Centrifugal impeller (first radial end-to-end) | Structural; Tier-3 needs INBLADE subdivision |
-| **V8** | Mixed-flow (partial-φ bend) | Structural at all tiers (Tier 3 since the 2026-07 stabilization) |
+| **V7** | Centrifugal impeller (first radial end-to-end) | Structural, **meanline-only** with realistic loss: the dominant blade-loading loss (2026-07, η≈0.90) wedges the 90° bend at **both** Tier 2 and Tier 3 (`xfail` wedge tripwires) — see §10 |
+| **V8** | Mixed-flow (partial-φ bend) | Structural at Tier 1+2 with realistic loss; **Tier 3 wedges** with the 2026-07 blade-loading loss (`xfail` tripwire) — see §10 |
 | **V9** | Operability: surge flag + BC-switching | Structural (behaviour demonstrated) |
 
 The multistage-V5 result (M8-3) is worth highlighting: **without mixing, the
