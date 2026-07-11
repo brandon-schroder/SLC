@@ -569,7 +569,7 @@ These are not suggestions; violating them is a bug even if tests pass.
   continuity/position rows for mdot-as-variable; `residual_from` now calls it —
   behavior-preserving). **Verified** against an independent isentropic area–Mach
   reference on a purpose-designed meanline converging–diverging **nozzle**
-  (`tests/test_supersonic.py`, 9 tests): classical chokes above throat capacity
+  (`tests/test_supersonic.py`): classical chokes above throat capacity
   (the fold); the driver crosses it (turning point = analytic capacity to <0.2%)
   and lands the supersonic throat Mach = isentropic area–Mach supersonic root to
   <0.3% (e.g. M_m=1.397), inlet/exit staying subsonic (rank-1 fold); same mdot,
