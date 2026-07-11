@@ -348,6 +348,27 @@ class ResidualAssembler:
         row is appended: the throttling-station back-pressure condition."""
         return self.residual_from(self.split(x), x)
 
+    def continuity_position_rows(self, fields: AssembledFields, mdot) -> np.ndarray:
+        """The section 6.1 continuity + streamtube-position rows for an
+        explicit ``mdot`` (ARCH-5.1 reusable piece).
+
+        Single-sources the physics rows so callers that treat ``mdot`` as a
+        *variable* rather than a spec constant — the meridional-branch
+        pseudo-arclength driver (section 6.6 / C.9), which augments these with
+        an arclength constraint instead of the mass-flow or back-pressure
+        closing row — share exactly the assembler's continuity arithmetic
+        instead of re-deriving it. ``residual_from`` is this plus the mode's
+        closing row."""
+        fz = self.frozen
+        cums = [self.mass_cumulative(j, fields.vm[:, j], fields)
+                for j in range(fz.n_qo)]
+        r_cont = np.array([_TWO_PI * c[-1] - mdot for c in cums])
+        psi_int = fz.topology.psi[1:-1]
+        r_pos = np.stack(
+            [c[1:-1] - psi_int * (mdot / _TWO_PI) for c in cums],
+            axis=1) if fz.n_sl > 2 else np.zeros((0, fz.n_qo))
+        return np.concatenate([r_cont, np.ravel(r_pos)])
+
     def residual_from(self, fields: AssembledFields, x):
         """The section 6.1 residual rows evaluated on an already-assembled
         ``fields`` (ARCH-5.1 reusable piece): lets a driver share ONE
@@ -361,17 +382,10 @@ class ResidualAssembler:
             _, _, mdot = unpack(x, fz.n_sl, fz.n_qo, backpressure=True)
         else:
             mdot = fz.spec.mdot
-        cums = [self.mass_cumulative(j, fields.vm[:, j], fields)
-                for j in range(fz.n_qo)]
-        r_cont = np.array([_TWO_PI * c[-1] - mdot for c in cums])
-        psi_int = fz.topology.psi[1:-1]
-        r_pos = np.stack(
-            [c[1:-1] - psi_int * (mdot / _TWO_PI) for c in cums],
-            axis=1) if fz.n_sl > 2 else np.zeros((0, fz.n_qo))
-        rows = [r_cont, np.ravel(r_pos)]
+        rows = self.continuity_position_rows(fields, mdot)
         if self.backpressure:
-            rows.append(self._backpressure_residual(fields))
-        return np.concatenate(rows)
+            return np.concatenate([rows, self._backpressure_residual(fields)])
+        return rows
 
     def _backpressure_residual(self, fields: AssembledFields):
         """Section 6.6 back-pressure condition: the static pressure at the

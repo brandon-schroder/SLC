@@ -551,12 +551,34 @@ These are not suggestions; violating them is a bug even if tests pass.
   narrowing the annulus to fix it fights the high blade speed the transonic
   condition needs → an all-tier in-window transonic case is a deferred
   case-design refinement). The genuine **meridional-supersonic-branch traversal
-  driver** (BackPressureSpec + pseudo-arclength through the per-station capacity
-  fold) remains a real but *separate*, correctly-scoped capability — needed only
-  for design points deliberately on the supersonic-meridional branch, not a V5
-  blocker. Measured branch map recorded in theory manual §C.9 (back-pressure
-  continuation pins at the LE M_m=1 peak; supersonic-seeded Newton stalls with
-  downstream stations pinned at their own M_m=1 peaks) for a future implementer.
+  driver** is a real but *separate* capability (now built — next bullet), needed
+  only for design points deliberately on the supersonic-meridional branch, not a
+  V5 blocker.
+- **Meridional-supersonic-branch driver (2026-07).** Built as a general,
+  reusable capability: `drivers/supersonic.py` `solve_supersonic_branch` —
+  **pseudo-arclength (Keller) continuation** in `(state, mdot)` that crosses the
+  per-station `M_m=1` continuity fold (where the classical mass-flow driver
+  chokes and natural-parameter/back-pressure continuation pins — see §C.9 branch
+  map) onto the meridional-supersonic branch, then a fixed-`mdot` Newton lands
+  the exact on-target supersonic root (branch selected → regular root). The
+  augmented Jacobian's `mdot` column is analytic (mdot enters continuity
+  linearly); state columns are FD with the Newton positive-branch guard;
+  **variable scaling is mandatory** (measured: an unscaled arclength creeps in
+  mdot because Vm dominates the norm near the fold). Added a DRY seam
+  `ResidualAssembler.continuity_position_rows(fields, mdot)` (single-sources the
+  continuity/position rows for mdot-as-variable; `residual_from` now calls it —
+  behavior-preserving). **Verified** against an independent isentropic area–Mach
+  reference on a purpose-designed meanline converging–diverging **nozzle**
+  (`tests/test_supersonic.py`, 9 tests): classical chokes above throat capacity
+  (the fold); the driver crosses it (turning point = analytic capacity to <0.2%)
+  and lands the supersonic throat Mach = isentropic area–Mach supersonic root to
+  <0.3% (e.g. M_m=1.397), inlet/exit staying subsonic (rank-1 fold); same mdot,
+  two roots (sub vs supersonic). Scope: **prescribed transport** (duct/explicit
+  steps); closure-lagged blade-row supersonic branches (an outer quasi-Newton
+  loop wrapping the arclength inner) are a recorded extension, unneeded by any
+  current case. This closes the "V5 supersonic-branch traversal" driver item as
+  a standalone method — decoupled from V5, whose gate is met on the ordinary
+  branch (previous bullet).
 
 ## Commands
 
