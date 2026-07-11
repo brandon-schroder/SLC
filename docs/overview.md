@@ -8,8 +8,12 @@
 > *unvalidated*, it tries to be scrupulously honest — see
 > [§10 What is and isn't established](#10-what-is-and-isnt-established).
 >
-> Written after milestone M8 closed (the last on the ARCH-8 ladder). Suite at
-> that point: **347 tests**, both lint gates green.
+> Written after milestone M8 closed (the last on the ARCH-8 ladder) and kept
+> current through the post-ladder work — the independent audit, the
+> reference-library calibration pass, the axial-compressor endwall/clearance/
+> shock loss stack, and the post-ladder **meridional-supersonic-branch driver**
+> ([§7.5](#75-the-meridional-supersonic-branch-driver-driverssupersonicpy-66--c9)).
+> Suite: **534 tests**, both lint gates green.
 
 ---
 
@@ -82,8 +86,8 @@ knowledge.
 ```
 machine/            Facade: Machine.evaluate(spec, fidelity, n_sl) -> PerformanceResult
    │
-drivers/            Solution algorithms: classical (Picard), newton, continuation
-   │
+drivers/            Solution algorithms: classical (Picard), newton, continuation,
+   │                  supersonic (pseudo-arclength meridional-branch continuation)
 assembly/           The pure residual: ResidualAssembler, FrozenInputs, pack/unpack
    │
 transport/          Streamwise march of h0/s/rVt; work/loss schedules; §3.6 mixing
@@ -232,6 +236,49 @@ records mass-averaged PR and stall flags with the criterion that fired
 (`BackPressureSpec`) adds `ṁ` to the state and one back-pressure residual row;
 a hysteretic choke↔normal BC switch is wired into the traversal.
 
+### 7.5 The meridional-supersonic-branch driver (`drivers/supersonic.py`, §6.6 / C.9)
+
+Each station's continuity is **folded at the sonic meridional condition
+`M_m = 1`**: below the station capacity there are two `Vm(q=0)` roots — a
+subsonic-meridional and a supersonic-meridional one — that coalesce at the
+capacity peak, where the continuity Jacobian is singular. The classical driver
+takes the subsonic root by construction, and *natural-parameter* continuation
+(stepping `ṁ`, or `p_exit` in back-pressure mode) cannot cross the peak — it
+chokes or pins at `M_m = 1`. Reaching the supersonic branch needs
+**pseudo-arclength (Keller) continuation**: parametrise the solution curve in
+`(state, ṁ)` by arclength so the *augmented* Jacobian stays non-singular **at**
+the fold, and walk from the subsonic branch, through the sonic turning point,
+onto the supersonic branch. `solve_supersonic_branch` then lands the exact
+on-target supersonic root with a fixed-`ṁ` Newton (the branch is selected, so
+that root is regular). The `ṁ` Jacobian column is analytic (`ṁ` enters
+continuity linearly); the state columns are finite-difference with the Newton
+positive-`Vm` guard; **variable scaling is mandatory** (an unscaled arclength
+creeps in `ṁ` because `Vm` dominates the norm near the fold).
+
+Two paths, selected by whether closure-fed `rows` are supplied:
+
+- **Prescribed transport (duct)** — closures constant along the branch: one
+  arclength crossing plus the landing Newton. Verified against the isentropic
+  area–Mach relation on a purpose-designed converging–diverging **nozzle**: the
+  classical driver chokes above the throat capacity, while this driver crosses
+  it and lands the supersonic throat Mach to `<0.3%` of the analytic root
+  (`M_m ≈ 1.40` at the sample), inlet/exit staying subsonic (a rank-1 fold).
+- **Closure-lagged blade rows** — the flow-dependent swirl/loss closures must
+  re-lag at the supersonic field. The driver bootstraps onto the branch by
+  arclength *once*, then hands the supersonic seed to `solve_newton`, whose
+  existing outer quasi-Newton closure-lag loop (§6.3) re-lags to
+  self-consistency (the fold is behind the seed, so the positive-`Vm` guard
+  keeps Newton on the supersonic branch). Verified on a Lieblein row upstream of
+  the throat.
+
+**Honest scope.** This handles a *single* dominant fold (the binding station's
+`M_m = 1`). A fully supersonic **row inflow** that folds several stations at
+once (measured on a transonic rotor, C.9) is the harder **multi-fold** regime
+this does not claim. And it is **not** a V5 blocker — the transonic-V5 gate is
+met on the *ordinary* branch (the in-window condition is blade loading `D_eq`,
+not the meridional branch; see [§10](#10-what-is-and-isnt-established)); this
+driver is a general, independently-verified capability.
+
 ## 8. Package-by-package tour
 
 - **`fluid/`** — `PerfectGas` working-fluid backend (`h`, `s`, `ρ`, `T`, `a`,
@@ -249,7 +296,8 @@ a hysteretic choke↔normal BC switch is wired into the traversal.
   and the §3.6 spanwise mixing operator (`mixing.py`).
 - **`assembly/`** — the pure residual: `ResidualAssembler`, `FrozenInputs`,
   `pack`/`unpack`.
-- **`drivers/`** — `classical`, `newton`, `continuation`.
+- **`drivers/`** — `classical`, `newton`, `continuation`, `supersonic`
+  (pseudo-arclength meridional-branch continuation, [§7.5](#75-the-meridional-supersonic-branch-driver-driverssupersonicpy-66--c9)).
 - **`closures/`** — see [§9](#9-closures-machine-type-knowledge).
 - **`machine/`** — the `Machine` facade that composes a flowpath + fluid +
   inlet + rows and reduces a solve to a `PerformanceResult`.
@@ -383,8 +431,13 @@ All one kernel; the tier is `n_sl` + three float flags (AD-1), verified by V3.
 ## 13. Status and open items
 
 **Milestones M0…M8 are all closed** — the entire ARCH-8 verification ladder.
-CI-green at 347 tests. Post-ladder open items (no numbered milestone drives
-them; recorded in `CLAUDE.md` and the memory files):
+CI-green at 534 tests. Post-ladder *deliveries* (recorded in `CLAUDE.md`)
+include the independent audit + turbine-sign fix, the reference-library
+calibration pass, the endwall/clearance/shock loss stack, the colored-FD
+Jacobian, and the **meridional-supersonic-branch driver**
+([§7.5](#75-the-meridional-supersonic-branch-driver-driverssupersonicpy-66--c9)).
+Post-ladder open items (no numbered milestone drives them; recorded in
+`CLAUDE.md` and the memory files):
 
 1. **Robust radial/mixed repositioning stabilization** — the top item; the V8
    Tier-3 blocker.
@@ -393,8 +446,8 @@ them; recorded in `CLAUDE.md` and the memory files):
 3. The A.8 in-blade meridional force (`f_b,q = f_b,θ·tanλ`; zero for radial
    stacking, needs lean geometry + a master-ODE streamwise-gradient term).
 4. Mixing `c_mix` calibration + the `Δs_mix` entropy-production term.
-5. Numerical: colored-FD Jacobian (over the dense baseline), reproducer-bundle
-   serialization.
+5. Numerical: reproducer-bundle serialization; closure-in-Newton; a multi-fold
+   continuation for a fully supersonic row inflow ([§7.5](#75-the-meridional-supersonic-branch-driver-driverssupersonicpy-66--c9)).
 
 ## 14. Running and extending
 
