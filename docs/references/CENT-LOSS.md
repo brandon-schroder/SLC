@@ -43,12 +43,38 @@ Confirmed forms pinned in `tests/test_centrifugal_loss_reference.py`.
    `d_H` from throat/tip areas and `L_H` from the mean-camberline path length.
    Fine as a design input; a geometry-derived value is the recorded refinement.
 
-## Residual
+## Blade-loading (diffusion) loss — added 2026-07
 
-The two dominant components (incidence + skin friction) are form-verified, and
-both convention `[DECIDE]`s are now resolved to Aungier (2000). The **deferred
-components** the docstring already lists — blade-loading diffusion,
-tip-clearance, disk-friction/windage, recirculation, leakage — are a separate
-V7-calibration extension (Oh-Yoon-Chung 1997 is the standard set), not part of
-this pass. No bug found here (contrast LIEB59); V7 stays in-band after the
-convention change (PR 2.43, η 0.974).
+`Δh_bl = 0.05 D_f² U2²` (Coppage/Jansen; **Aungier 2000 Eq 5.15**;
+Oh-Yoon-Chung 1997 optimum set), with the radial diffusion factor
+
+```
+D_f = 1 − W2/W1 + 0.75 (Δh_euler/U2²)(W1/W2) / [ (Z/π)(1 − r1/r2) + 2 (r1/r2) ]
+```
+
+Leading constant `0.05` and the `D_f` structure CONFIRMED via NotebookLM (Staging
+Area Theory). **Ratio caveat:** the source render is ambiguous on the loading-term
+fraction; it is `W1/W2` (>1 under diffusion), resolved by (i) the Oh-Yoon-Chung /
+Galvas consensus and (ii) the physical requirement that the loss GROW with
+diffusion (W2≪W1) — pinned by `test_blade_loading_grows_with_diffusion`. A smooth
+`D_f` ceiling (2.5) bounds the transient blow-up (the axial ω̄-ceiling analogue).
+`blade_loading_loss` + reference tests in `test_centrifugal_loss_reference.py`.
+
+**Measured:** at V7 design `D_f ≈ 1.12`, `Δh_bl ≈ 6.9 kJ/kg` — the DOMINANT
+internal loss (vs friction ~1.2, incidence ~0.2). Drops V7/V8 η 0.98 → a realistic
+**~0.90**. **Landing note (memory `centrifugal-blade-loading-wip`):** the loss is
+so dominant it drives the fragile radial/mixed **spanwise** solves into the
+documented freeze-fallback wedge — V7's 90° bend at BOTH Tier 2 and Tier 3, V8's
+mixed-flow bend at Tier 3. Landed with those tiers as `xfail` tripwires
+(Tier-1 meanline + V8 Tier-2 carry the realistic-loss validation); cracking the
+wedge (closure-in-Newton / compact-support streamline fit) is the standing #1
+open item, separate from this loss.
+
+## Residual (tip-clearance / disk-friction)
+
+Still deferred and **[VERIFY]** — a per-streamtube closure lacks their inputs:
+**tip-clearance** (Jansen 1967 needs exit blade width `b2` + hub/tip radii, absent
+from the §4.1 contract) and **disk-friction/windage** (machine-level parasitic
+`~ρ2 U2³ r2²/ṁ`, no `ṁ` in a per-streamtube model); recirculation/leakage likewise.
+Incidence + skin friction remain form-verified with both convention `[DECIDE]`s
+resolved to Aungier (2000). No bug found here (contrast LIEB59).

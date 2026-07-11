@@ -2,7 +2,7 @@
 4.4, 7.1, 7.3; Appendix B enthalpy-loss conversion).
 
 Provenance: a representative subset of the Aungier / Galvas / Oh centrifugal
-meanline loss set -- the two components that dominate a well-designed
+meanline loss set -- the three internal components that dominate a well-designed
 impeller across its range:
 
   * **incidence loss** (inducer): the tangential kinetic energy lost when the
@@ -10,7 +10,11 @@ impeller across its range:
     ``dh_inc = 1/2 (W_theta1 - W_theta1,blade)^2``;
   * **skin-friction / passage loss**: the pipe-friction analogy over the mean
     relative velocity, ``dh_sf = 2 Cf (L/D_hyd) W_avg^2`` with
-    ``W_avg = 1/2 (W1 + W2)``.
+    ``W_avg = 1/2 (W1 + W2)``;
+  * **blade-loading (diffusion) loss** (Coppage/Aungier 5.15):
+    ``dh_bl = 0.05 D_f^2 U2^2`` with the radial diffusion factor ``D_f`` --
+    the secondary-flow loss driven by the blade-to-blade pressure gradient,
+    added 2026-07 (was deferred). See :func:`blade_loading_loss`.
 
 Each internal loss is an *enthalpy* rise, converted to entropy INDIVIDUALLY
 (B.5) at the exit static temperature via ``delta_s_enthalpy_loss``. Exit-state
@@ -30,9 +34,15 @@ a genuinely design-dependent 0.5-1.0 factor (Conrad 0.5-0.7 / Aungier 0.8 /
 Galvas full-KE 1.0), exposed as a tunable ``CentrifugalLoss.f_inc`` field.
 (b) skin friction uses Aungier's mean-of-squares passage velocity
 ``1/2(W1^2+W2^2)`` (was the square-of-mean ``[1/2(W1+W2)]^2``) -- the physical
-passage average since friction ~ local W^2. **[VERIFY]** the deferred
-components (blade-loading diffusion, tip-clearance, disk-friction/windage,
-recirculation, leakage; Oh-Yoon-Chung 1997 set) at V7 calibration time.
+passage average since friction ~ local W^2.
+
+**Blade-loading added 2026-07** (Coppage/Aungier 5.15; Oh-Yoon-Chung 1997), the
+dominant remaining internal component. Still deferred and **[VERIFY]** -- a
+per-streamtube closure does not cleanly see the inputs they need: **tip-
+clearance** (Jansen 1967 needs the exit blade width ``b2`` and hub/tip radii,
+absent from the section 4.1 contract) and **disk-friction/windage** (a
+machine-level parasitic ``~ rho2 U2^3 r2^2 / mdot`` needs ``mdot``, which a
+per-streamtube loss model is not given); recirculation/leakage likewise.
 ``Cf``/``l_over_dhyd`` are row-scalar design inputs (geometry-derived hydraulic
 length is a later refinement).
 """
@@ -43,14 +53,20 @@ from dataclasses import dataclass
 from ..._namespace import get_xp
 from ..conversions import delta_s_enthalpy_loss
 from ..interfaces import LossBreakdown, RowFlowView, RowView
-from ..smoothmath import soft_clip, softplus
+from ..smoothmath import smooth_min, soft_clip, softplus
 from .wiesner import wiesner_slip
 
-__all__ = ["incidence_loss", "skin_friction_loss", "CentrifugalLoss"]
+__all__ = ["incidence_loss", "skin_friction_loss", "blade_loading_loss",
+           "CentrifugalLoss"]
 
-_DEG = 3.141592653589793 / 180.0
+_PI = 3.141592653589793
+_DEG = _PI / 180.0
 _ANG_CAP, _ANG_W = 85.0 * _DEG, 2.0 * _DEG   # metal-angle soft-clip (tan bound)
 _T_FLOOR, _T_W = 20.0, 5.0                   # exit static-T floor (a2 real)
+_BL_C = 0.05                                 # Coppage blade-loading constant
+_BL_LOAD = 0.75                              # Coppage loading-term constant
+_V_FLOOR, _V_W = 1.0, 1.0                    # C1 velocity floor (m/s) for ratios
+_BL_DF_CEIL, _BL_DF_W = 2.5, 0.2             # D_f ceiling (stalled/out-of-range)
 
 
 def incidence_loss(w_theta_flow, w_theta_blade, *, xp=None):
@@ -61,6 +77,46 @@ def incidence_loss(w_theta_flow, w_theta_blade, *, xp=None):
     xp = get_xp(xp)
     d = w_theta_flow - w_theta_blade
     return 0.5 * d * d
+
+
+def blade_loading_loss(w1, w2, u2, dh_euler, blade_count, r_ratio, *, xp=None):
+    """Coppage/Jansen blade-loading (diffusion) loss ``dh = 0.05 D_f^2 U2^2``
+    [J/kg] (Aungier 2000 Eq 5.15; Oh-Yoon-Chung 1997 optimum set;
+    docs/references/CENT-LOSS.md). The loss of the secondary flows driven by
+    the blade-to-blade pressure gradient, scaled by an equivalent radial
+    *diffusion factor*
+
+        D_f = 1 - W2/W1 + 0.75 (dh_euler/U2^2) (W1/W2)
+                          / [ (Z/pi)(1 - r1/r2) + 2 (r1/r2) ]
+
+    with ``r_ratio = r1/r2`` and ``dh_euler`` the Euler work
+    ``U2 Vtheta2 - U1 Vtheta1`` [J/kg]. The loading term uses ``W1/W2`` (> 1
+    under diffusion) so the loss GROWS with diffusion (W2 << W1) -- the
+    physically-required direction, and the Oh-Yoon-Chung / Galvas consensus
+    (the MathML source render is ambiguous on this fraction; pinned by
+    ``test_blade_loading_grows_with_diffusion``). ``W1`` is the local
+    streamtube inlet relative velocity (the Coppage shroud value ``W1s`` at the
+    meanline; a spanwise run supplies the per-streamtube value).
+
+    C1 in every flow input (section 7.3): ``W2`` and ``U2`` enter a division and
+    are softplus-floored; the geometric bracket is a positive constant
+    (``Z >= 1``, ``r1 < r2``). ``D_f`` may dip slightly negative at very low
+    loading -- harmless, since only ``D_f^2`` enters."""
+    xp = get_xp(xp)
+    w1f = _V_FLOOR + softplus(w1 - _V_FLOOR, _V_W, xp=xp)
+    w2f = _V_FLOOR + softplus(w2 - _V_FLOOR, _V_W, xp=xp)
+    u2f = _V_FLOOR + softplus(u2 - _V_FLOOR, _V_W, xp=xp)
+    dq = dh_euler / (u2f * u2f)                       # dimensionless Euler work
+    geom = (blade_count / _PI) * (1.0 - r_ratio) + 2.0 * r_ratio
+    d_f = 1.0 - w2 / w1f + _BL_LOAD * dq * (w1 / w2f) / geom
+    # Smoothly cap D_f at a stalled/out-of-correlation ceiling (Coppage is a
+    # design-range fit; real impeller D_f ~ 0.4-2). This leaves the design
+    # point untouched (V7 D_f ~ 1.1) and bounds the transient blow-up when a
+    # lagged W2 goes small mid-solve -- the same role the axial omega-bar
+    # ceiling plays (section 7.3.2). Only the upper side is capped; low/negative
+    # D_f is harmless since only D_f^2 enters.
+    d_f = smooth_min(d_f, _BL_DF_CEIL, _BL_DF_W, xp=xp)
+    return _BL_C * d_f * d_f * u2 * u2
 
 
 def skin_friction_loss(w_rep, cf, l_over_dhyd, *, xp=None):
@@ -129,6 +185,14 @@ class CentrifugalLoss:
         w_rms = xp.sqrt(0.5 * (w1 * w1 + w2 * w2))
         dh_sf = skin_friction_loss(w_rms, self.cf, self.l_over_dhyd, xp=xp)
 
+        # Blade-loading (diffusion) loss (Coppage/Aungier 5.15): the Euler work
+        # is U2 Vtheta2 - U1 Vtheta1 with Vtheta2 = U2 + Wtheta2 (relative
+        # convention, section 2.4) and Vtheta1 the LE absolute swirl.
+        vtheta_2 = u2 + w_theta_2
+        dh_euler = u2 * vtheta_2 - u1 * flow.vtheta
+        dh_bl = blade_loading_loss(w1, w2, u2, dh_euler, g.blade_count,
+                                   flow.r / flow.r_te, xp=xp)
+
         # Exit static temperature via B.1 rothalpy re-referencing (charging
         # temperature for the entropy conversion).
         T0r_1 = flow.T + 0.5 * w1 * w1 / fluid.cp
@@ -138,6 +202,8 @@ class CentrifugalLoss:
 
         ds_inc = delta_s_enthalpy_loss(fluid, dh_inc, T2, xp=xp)
         ds_sf = delta_s_enthalpy_loss(fluid, dh_sf, T2, xp=xp)
+        ds_bl = delta_s_enthalpy_loss(fluid, dh_bl, T2, xp=xp)
         return LossBreakdown(
-            components={"incidence_dh": dh_inc, "friction_dh": dh_sf},
-            delta_s=ds_inc + ds_sf, validity=float(xp.min(v_s)))
+            components={"incidence_dh": dh_inc, "friction_dh": dh_sf,
+                        "blade_loading_dh": dh_bl},
+            delta_s=ds_inc + ds_sf + ds_bl, validity=float(xp.min(v_s)))

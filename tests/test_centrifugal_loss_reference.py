@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from slcflow.closures.centrifugal.loss import (
-    CentrifugalLoss, incidence_loss, skin_friction_loss)
+    CentrifugalLoss, blade_loading_loss, incidence_loss, skin_friction_loss)
 
 
 @pytest.mark.parametrize("wf,wb", [(120.0, 90.0), (60.0, 95.0), (0.0, 40.0)])
@@ -59,3 +59,41 @@ def test_skin_friction_mean_of_squares_convention(w1, w2):
         assert got == pytest.approx(sq_of_mean, rel=1e-12)
     else:
         assert got > sq_of_mean          # convexity: mean-of-squares is larger
+
+
+# --------------------------------------------------------------------------
+# Blade-loading (diffusion) loss -- Coppage/Aungier Eq 5.15 (added 2026-07)
+# --------------------------------------------------------------------------
+def test_blade_loading_matches_coppage_aungier_5p15():
+    # dh = 0.05 D_f^2 U2^2 with the radial diffusion factor
+    #   D_f = 1 - W2/W1 + 0.75 (dh_euler/U2^2)(W1/W2) / [(Z/pi)(1-r1/r2)+2 r1/r2].
+    # Values chosen so the D_f ceiling (2.5) and the 1 m/s velocity floors are
+    # inactive, so the code must equal the plain formula.
+    w1, w2, u2, dh_euler, z, rr = 240.0, 110.0, 340.0, 78000.0, 17, 0.55
+    geom = (z / np.pi) * (1.0 - rr) + 2.0 * rr
+    d_f = 1.0 - w2 / w1 + 0.75 * (dh_euler / u2 ** 2) * (w1 / w2) / geom
+    assert d_f < 2.5                                   # ceiling inactive
+    expected = 0.05 * d_f ** 2 * u2 ** 2
+    assert float(blade_loading_loss(w1, w2, u2, dh_euler, z, rr)) == \
+        pytest.approx(expected, rel=2e-3)
+
+
+def test_blade_loading_grows_with_diffusion():
+    # The loading-term ratio is W1/W2 (NOT W2/W1): the diffusion loss must GROW
+    # as the flow diffuses more (W2 falls at fixed inlet). This physical
+    # constraint pins the ratio direction the source's MathML render was
+    # ambiguous on (CENT-LOSS.md); with W2/W1 the loss would DECREASE.
+    w1, u2, dh_euler, z, rr = 240.0, 340.0, 78000.0, 17, 0.55
+    losses = [float(blade_loading_loss(w1, w2, u2, dh_euler, z, rr))
+              for w2 in (200.0, 150.0, 110.0, 80.0)]      # increasing diffusion
+    assert all(a < b for a, b in zip(losses, losses[1:]))
+
+
+def test_blade_loading_ceiling_bounds_tiny_w2():
+    # The smooth D_f ceiling (2.5) keeps a transient tiny W2 from blowing the
+    # loss up (the axial omega-bar-ceiling analogue, section 7.3.2): finite and
+    # bounded by ~0.05 * 2.5^2 * U2^2.
+    u2 = 340.0
+    big = float(blade_loading_loss(240.0, 1e-3, u2, 78000.0, 17, 0.55))
+    assert np.isfinite(big)
+    assert big <= 0.05 * 2.6 ** 2 * u2 ** 2

@@ -128,6 +128,7 @@ def test_delta_s_matches_enthalpy_loss_conversion():
     out = CentrifugalLoss().evaluate(row, view)
     dh_inc = out.components["incidence_dh"]
     dh_sf = out.components["friction_dh"]
+    dh_bl = out.components["blade_loading_dh"]
 
     sgn = row.geometry.orientation
     b2b = sgn * float(row.geometry.beta2_blade(0.5))
@@ -140,7 +141,8 @@ def test_delta_s_matches_enthalpy_loss_conversion():
     T0r2 = T0r1 + 0.5 * (u2 * u2 - u1 * u1) / GAS.cp
     T2 = T0r2 - 0.5 * w2 * w2 / GAS.cp
     ds = (cv.delta_s_enthalpy_loss(GAS, dh_inc, T2)
-          + cv.delta_s_enthalpy_loss(GAS, dh_sf, T2))
+          + cv.delta_s_enthalpy_loss(GAS, dh_sf, T2)
+          + cv.delta_s_enthalpy_loss(GAS, dh_bl, T2))
     np.testing.assert_allclose(out.delta_s, ds, rtol=1e-6)
 
 

@@ -600,6 +600,33 @@ These are not suggestions; violating them is a bug even if tests pass.
   transonic rotor, §C.9) is the harder **multi-fold** regime this single-fold
   arclength does not claim — a deflated/multi-parameter continuation would be the
   next step, unneeded by any current case.
+- **Centrifugal blade-loading (diffusion) loss (2026-07).** Added the dominant
+  deferred centrifugal internal loss (`closures/centrifugal/loss.py`
+  `blade_loading_loss`): Coppage/Jansen, **Aungier 2000 Eq 5.15**,
+  `Δh_bl = 0.05 D_f² U2²` with the radial diffusion factor `D_f = 1 − W2/W1 +
+  0.75(Δh_euler/U2²)(W1/W2)/[(Z/π)(1−r1/r2)+2(r1/r2)]`. Constant + structure
+  verified via NotebookLM; the loading-term ratio `W1/W2` (the source's MathML
+  render is ambiguous) resolved by Oh-Yoon-Chung/Galvas consensus **and** the
+  physical grows-with-diffusion constraint (pinned by a reference test). Smooth
+  `D_f` ceiling (2.5) bounds transients (the axial ω̄-ceiling analogue). Measured:
+  V7 design `D_f≈1.12`, `Δh_bl≈6.9 kJ/kg` — the dominant internal loss — drops
+  V7/V8 η 0.98→realistic **~0.90**. **Landing = option (b), documented wedge:**
+  the loss is so dominant it drives the fragile radial/mixed **spanwise** solves
+  into the documented freeze-fallback wedge (V7's 90° bend at BOTH Tier 2 and
+  Tier 3, V8's mixed bend at Tier 3; lowering mdot makes it worse, the wedge
+  signature; V7 Tier-2 retune to mdot 10 still only slow-max-iters). Attempted
+  the Tier-3 stabilization first (per "stabilize then land"): reposition-freeze +
+  capacity-peak-freeze robustness patches got the bends further but did NOT crack
+  the wedge (capacity-peak was already measured+reverted post-M8) — and changed
+  no test outcome, so **reverted** (clean driver, zero regression risk). Landed
+  the correct physics with the spanwise-bend tiers as `xfail(strict=True)`
+  tripwires (Tier-1 meanline + V8 Tier-2 carry the realistic-loss validation);
+  reference tests pin the form + the ratio direction + the ceiling. Cracking the
+  wedge (closure-in-Newton / compact-support streamline fit) is the standing #1
+  open item, **separate from this loss**. Tip-clearance (needs exit width `b2` +
+  hub/tip in the §4.1 contract) and disk-friction (machine-level parasitic, no
+  `ṁ` in a per-streamtube closure) remain deferred. Memory:
+  `centrifugal-blade-loading-wip`, `docs/references/CENT-LOSS.md`.
 
 ## Commands
 
