@@ -627,6 +627,40 @@ These are not suggestions; violating them is a bug even if tests pass.
   hub/tip in the §4.1 contract) and disk-friction (machine-level parasitic, no
   `ṁ` in a per-streamtube closure) remain deferred. Memory:
   `centrifugal-blade-loading-wip`, `docs/references/CENT-LOSS.md`.
+- **Wedge re-characterization + V7 operating-point crack (2026-07).** The
+  "start on the wedge: closure-in-Newton" task was **diagnosed and the premise
+  OVERTURNED** (characterize-first, `probe_cin_*` scratchpad probes on V7 Tier 2
+  — the fastest repro): closure-in-Newton AND loss-continuation/pseudo-arclength
+  are both the **wrong tools**. What had been called one "freeze-fallback wedge"
+  is TWO distinct diseases. **(1) V7 Tier 2 = an operating-point
+  stratification-capacity fold, CRACKED.** The realistic blade-loading loss
+  stratifies the exit (rVθ, Δs) profile and drives an INTERIOR streamtube's `Vm`
+  toward the master-ODE `Vm=0` singularity, so BELOW a mass-flow floor the
+  *coupled* flow folds — even though each station's A.7 capacity individually
+  stays ≫ ṁ (the old "no positive-branch root at any ṁ" reading checked the
+  wrong, per-station thing). It is NOT closure coupling (FIXED prescribed
+  stratified transport folds identically — built the coupled residual X=(x_flow,
+  c) with consistency rows and measured it) and NOT the classical repositioning
+  algorithm (a global Newton folds too); the fold terminates AT the singularity,
+  so continuation has no far side. **Raising ṁ lifts every `Vm` off the
+  singularity** — V7 T2 converges with realistic loss at ṁ∈[16,20]. Fix = a
+  case-design **re-centre ṁ 12→17** (mid-window; validity 1, PR 1.97, η 0.80),
+  same category as the V5 validity-0 and transonic-V5 retunes. V7 `test_tier2_
+  converges_with_realistic_loss` is now a PASSING structural test (was an xfail
+  tripwire). **(2) V7 Tier 3 = a SEPARATE curvature-repositioning collapse
+  (OPEN)** — fails at every ṁ (incl. the T2-feasible window), dies outer it 3-5,
+  §6.4 `wilkinson_c` inert; the standing robust-radial-repositioning item, now
+  isolated. Stays xfail (`test_tier3_hits_the_repositioning_collapse`).
+  **(3) V8 Tier 3 = a narrow pocket (OPEN, distinct from V7 T3)** — choke_limited
+  at ṁ=12, converges only at ṁ≈15 (593 iters, agrees T2 ~3%), choke ≤14 /
+  slow-max-iter ≥16; too narrow/slow to pin robustly, so V8 stays ṁ=12 with T3
+  xfail; blockers are the Tier-3 radial slowness (`ω_sl≈0.066`, Newton finishing
+  / §6.4 recalibration) + operating point. C.7/C.8, overview §10/§11, and memory
+  `wedge-closure-in-newton` revised; `centrifugal-blade-loading-wip` "V7
+  meanline-only" claim superseded. No new solver code (the wedge crack was an
+  operating-point retune, not machinery); the coupled-residual probes stayed in
+  scratchpad. The robust Tier-3 radial/mixed stabilization is unchanged as #1
+  open, now correctly scoped (V7 T3 hard collapse, V8 T3 narrow/slow).
 
 ## Commands
 

@@ -12,31 +12,48 @@ total-pressure *rise* (PR > 1). This is the first radial end-to-end -- it
 exercises the parametric phi -> 90 geometry path (M1) with a blade row.
 
 **Status (M7 entry point).** As with V5/V6, this binds the *structural* half
-of V7: the case converges end-to-end at all three tiers, does real centrifugal
+of V7: the case converges (Tier 1 meanline + Tier 2 REE), does real centrifugal
 work with real loss, reaches phi ~ 90 deg at the exit, and lands PR and
 efficiency in physically sane bands. The quantitative half -- reproducing a
 specific Eckardt impeller (O/A/B) exit profile or stage map point-by-point --
 is **[VERIFY]**, blocked on the reference-library correlation calibration
-(every Wiesner/loss coefficient is [VERIFY]) and the deferred loss components.
-The reference geometry is a representative backswept impeller, not a digitised
-Eckardt rotor; efficiency reads high (~0.98) because only incidence + skin
-friction are modelled (blade-loading/clearance/disk-friction deferred).
+(every Wiesner/loss coefficient is [VERIFY]) and the deferred loss components
+(tip-clearance, disk-friction). The reference geometry is a representative
+backswept impeller, not a digitised Eckardt rotor; with the dominant
+blade-loading loss now modelled (2026-07) efficiency reads a realistic ~0.80 at
+the design point.
 
-**Measured finding (M7-4), REVISED 2026-07.** Unlike the axial V5/V6 (where
-a straight annulus makes Tier 3 == Tier 2 bit-for-bit, V3), this is the
-first curved-path case carrying a blade row AND streamline repositioning.
-M7-4 originally recorded that Tier-3 full SLC on the 90-degree bend
-*requires* the in-blade subdivision (``n_inblade = 6``; edge-only "diverges
-the section 6.4 odd-even mode at any relaxation", a narrow pocket). The
-2026-07 diagnosis refuted that story: the edge-only failure was the
-classical driver accepting a spurious negative-Vm continuity branch (and,
-family-wide, boundary-checking the stale-guess split before the solves
-could repair it, and applying the first closure evaluation unrelaxed) -- a
-driver-robustness artifact, not a repositioning envelope. Post-
-stabilization the edge-only Tier-3 case converges to the same answer
-(Appendix C.7, revised); ``n_inblade`` stays at 6 as the sensible
-RESOLUTION choice for in-blade quantities (sections 2.5, 4.5), not as a
-convergence crutch.
+**Operating point (re-centred 2026-07).** ``mdot`` was 12 kg/s when V7 modelled
+only incidence + skin-friction loss (eta ~0.98). Adding the DOMINANT
+blade-loading loss (~7 kJ/kg) shifts the feasible mass-flow window UP: the
+realistic stratified exit loss drives an interior streamtube's meridional Vm
+toward the master-ODE Vm = 0 singularity, so below a floor (~15 kg/s) the
+COUPLED spanwise flow folds (no positive-Vm solution -- the "wedge"), and above
+a ceiling (~22 kg/s) it genuinely chokes. mdot = 17 sits mid-window: Tier 2
+converges with validity 1, PR ~1.97, eta ~0.80. This is the same category of
+case-design re-centring as the V5 validity-0 annulus retune and the transonic-V5
+beta2 retune -- a loss-physics operating-point shift, not a solver change. See
+the module docstring's Tier-3 note, ``test_v7_centrifugal``, and Appendix C.7.
+
+**Tier-3 status (blade-loading loss, 2026-07).** Unlike the axial V5/V6 (where
+a straight annulus makes Tier 3 == Tier 2 bit-for-bit, V3), this is the first
+curved-path case carrying a blade row AND streamline repositioning. With the
+dominant blade-loading loss, **Tier 3 does not converge** -- the Tier-3
+curvature + lean repositioning feedback on the 90-degree bend collapses EARLY
+(outer iteration 3-5) at EVERY mass flow, including the Tier-2-feasible window
+(16-20 kg/s), and the section 6.4 ``wilkinson_c`` throttle does not move it. It
+is a **distinct failure from the Tier-2 operating-point wedge** (which raising
+mdot cracks; see above): the diagnosis (2026-07, ``probe_cin_*``) isolated the
+two -- Tier 2 is a stratification-capacity operating-point fold, Tier 3 is the
+curvature-repositioning collapse that remains the standing "robust radial/mixed
+repositioning" open item. Recorded attacks are a compact-support /
+end-condition-aware streamline fit or closure-in-Newton on the repositioning
+(both major, not patches; closure-in-Newton was measured NOT to help the Tier-2
+fold and is unproven on the Tier-3 mode). ``n_inblade`` stays at 6 as the
+in-blade RESOLUTION choice (sections 2.5, 4.5). (History: M7-4 originally
+claimed edge-only Tier-3 "requires" ``n_inblade``; the 2026-07 stabilization
+refuted that as a driver-robustness artifact for the PRE-blade-loading case --
+that revision stands, but the realistic-loss Tier-3 is a separate matter.)
 
 Provenance: M7 sub-step 4, written with the centrifugal set; stability
 finding revised at the 2026-07 Tier-3 stabilization.
@@ -75,7 +92,11 @@ class V7Centrifugal:
     r_inner: float = 0.08          # inner-bend wall radius
     r_outer: float = 0.18          # outer-bend wall radius
     omega: float = 1450.0          # rad/s -> U2 = 362 m/s (Eckardt-class)
-    mdot: float = 12.0             # kg/s
+    # Re-centred 12 -> 17 kg/s (2026-07) into the realistic-loss feasible window
+    # [~15, ~22]: below the floor the blade-loading-stratified flow folds (an
+    # interior Vm -> 0; the "wedge"), above the ceiling it chokes. See the class
+    # docstring "Operating point" note and Appendix C.7.
+    mdot: float = 17.0             # kg/s
     h0_in: float = 3.0e5           # J/kg
     s_in: float = 0.0
     beta1_blade_deg: float = -60.0  # inducer relative metal angle (sgn = -1)

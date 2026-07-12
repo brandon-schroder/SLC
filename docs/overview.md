@@ -354,16 +354,18 @@ many *structural* ones. Be precise about which is which.
   **V8** (mixed-flow): each *converges*, does physically correct work with
   loss, and lands PR/efficiency in **generous plausibility bands**. They do
   **not** reproduce any specific published/NASA/Eckardt case point-by-point.
-  (Caveat: with the realistic centrifugal loss, V7 converges only at the
-  meanline and V8 only through Tier 2 — the spanwise-bend tiers wedge; see the
-  known-limitations note below.)
+  (Caveat: with the realistic centrifugal loss the Tier-3 radial/mixed bends
+  are fragile — V7 Tier 3 does not converge and V8 Tier 3 only in a narrow
+  pocket; V7 Tier 2 converges at a re-centred operating point and V8 Tier 2 at
+  its own. See the known-limitations note below.)
 
 **Explicitly unvalidated (`[VERIFY]`), by design:**
 - **Every correlation coefficient** in every `CorrelationSet` is `[VERIFY]` —
   they are representative fits, not calibrated against the reference library.
   Efficiencies read closer to realistic now that the dominant loss components
   are modeled (axial endwall/clearance/shock; centrifugal **blade-loading** added
-  2026-07 — V7/V8 η ≈ 0.98 → ~0.90), but centrifugal **tip-clearance** and
+  2026-07 — centrifugal η ≈ 0.98 → ~0.80 at the loaded design point), but
+  centrifugal **tip-clearance** and
   **disk-friction** are still deferred (a per-streamtube closure lacks their
   geometry/`ṁ` inputs).
 - **Speedline/choke-traversal validation** against data is `[VERIFY]`.
@@ -372,27 +374,39 @@ many *structural* ones. Be precise about which is which.
   is a refinement) are `[VERIFY]`.
 
 **Known limitations (measured, honest):**
-- **Tier-3 radial/mixed convergence is the top open item — and the realistic
-  centrifugal loss now exposes it hard (2026-07).** The 2026-07 stabilization
-  (moving the AD-10 check to the solved state, positive-branch root validation,
-  the freeze/`choke_patience` fallback) resolved the earlier "narrow,
-  angle-specific pocket" story — a driver artifact (the master ODE's `Vm = 0`
-  singularity reached from stale boundary values, a fatal boundary check on a
-  repairable state, spurious negative-`Vm` roots), **not** the §6.4 odd-even
-  repositioning mode. It holds for **lower-loss** cases. **But adding the
-  dominant centrifugal blade-loading loss (~7 kJ/kg, the correct physics that
-  makes η realistic) drives the fragile bends into a *freeze-fallback wedge*** —
-  a self-consistent lag state whose exit q-o has no positive-branch continuity
-  root at any `ṁ` (lowering `ṁ` makes it *worse*). **V7's 90° bend wedges at
-  BOTH Tier 2 and Tier 3, so V7 is now meanline-only** with realistic loss;
-  **V8's mixed bend wedges at Tier 3** (V8 keeps Tier 1+2). These spanwise-bend
-  tiers are pinned as `xfail(strict=True)` **wedge tripwires** that auto-flip
-  when cracked. Reasonable robustness patches (reposition-freeze, capacity-peak
-  freeze) were re-measured non-curative and reverted; cracking the wedge needs
-  **closure-in-Newton or a compact-support streamline fit** (major — the #1 open
-  item), plus the standing speed problem (the §6.4 throttle holds ω_sl ≈ 0.07 on
-  these bends; V8 Tier 3 ≈ 400 iterations at lower loss). See Appendix C.7/C.8
-  and memory `centrifugal-blade-loading-wip`. The M8-3 "mixing is a
+- **Tier-3 radial/mixed convergence is the top open item; the 2026-07 diagnosis
+  split the "wedge" into two distinct diseases.** Adding the dominant
+  centrifugal blade-loading loss (~7 kJ/kg, the correct physics that makes η
+  realistic) initially broke both V7 and V8 spanwise bends; characterization
+  (`probe_cin_*`, memory `wedge-closure-in-newton`) then separated them:
+  - **V7 Tier 2 = an operating-point stratification-capacity fold (CRACKED).**
+    The stratified realistic loss drives an *interior* streamtube's `Vm` toward
+    the master-ODE `Vm = 0` singularity, so below a mass-flow floor the
+    **coupled** flow folds — even though each station's capacity individually
+    stays `≫ ṁ` (the fold is coupled, not per-station: the old "no positive
+    root at any `ṁ`" reading checked the wrong thing). It is **not** closure
+    coupling (fixed prescribed stratified transport folds identically) and
+    **not** the classical repositioning algorithm (a global Newton folds too);
+    **closure-in-Newton was measured not to help**, and the fold terminates *at*
+    the singularity so continuation has no far side. **Raising `ṁ` lifts every
+    `Vm` off the singularity:** re-centring V7 to `ṁ = 17` (window ≈ [16, 20])
+    makes Tier 2 a **passing** test with realistic loss (PR 1.97, η 0.80). Same
+    category as the V5/transonic-V5 retunes.
+  - **V7 Tier 3 = a separate curvature-repositioning collapse (OPEN).** Raising
+    `ṁ` does *not* fix it — fails at *every* `ṁ`, dying early (outer it 3–5),
+    §6.4 `wilkinson_c` inert. The standing robust-radial-repositioning item, now
+    isolated. Stays an `xfail` tripwire.
+  - **V8 Tier 3 = a narrow pocket (OPEN, distinct from V7 T3).** choke_limited
+    at the case `ṁ = 12`, converges only in a knife-edge pocket at `ṁ ≈ 15`
+    (593 iters, agrees Tier 2 to ~3%), too narrow/slow to pin robustly. The
+    blockers are the Tier-3 radial **slowness** (`ω_sl ≈ 0.066` → Newton
+    finishing / §6.4 recalibration) plus operating point. V8 keeps Tier 1+2 at
+    `ṁ = 12`; Tier 3 an `xfail` tripwire.
+
+  Both `xfail(strict=True)` tripwires auto-flip if a fix makes them XPASS.
+  Reasonable robustness patches (reposition-freeze, capacity-peak freeze) were
+  re-measured non-curative and reverted. See Appendix C.7/C.8 and memory
+  `wedge-closure-in-newton`, `centrifugal-blade-loading-wip`. The M8-3 "mixing is a
   convergence prerequisite" claim fell with the same artifact; the surviving
   §3.6 claim — spanwise stratification without mixing — was then re-measured
   by the 2026-07 reference-calibration pass down from "~25×" to a **modest
@@ -421,8 +435,8 @@ plausibility bands are wide by intent. The right adversarial question is
 | **V3** | Tier consistency (Tier2≡Tier3, Tier1 mass-avg) | **Quantitative** (bit-for-bit) |
 | **V5** | Axial compressor (single + **multistage**) | Structural (in-window loss after 2026-07 retune); multistage shows mixing is a **modest damping** (~18%), not a homogenizer |
 | **V6** | Axial turbine (K-O set) | Structural |
-| **V7** | Centrifugal impeller (first radial end-to-end) | Structural, **meanline-only** with realistic loss: the dominant blade-loading loss (2026-07, η≈0.90) wedges the 90° bend at **both** Tier 2 and Tier 3 (`xfail` wedge tripwires) — see §10 |
-| **V8** | Mixed-flow (partial-φ bend) | Structural at Tier 1+2 with realistic loss; **Tier 3 wedges** with the 2026-07 blade-loading loss (`xfail` tripwire) — see §10 |
+| **V7** | Centrifugal impeller (first radial end-to-end) | Structural at Tier 1+2 with realistic loss (re-centred `ṁ`=17, η≈0.80); **Tier 3** is a separate curvature-repositioning collapse at every `ṁ` (`xfail` tripwire) — see §10 |
+| **V8** | Mixed-flow (partial-φ bend) | Structural at Tier 1+2 with realistic loss; **Tier 3** a narrow pocket (converges only at `ṁ`≈15, choke_limited at 12) — `xfail` tripwire — see §10 |
 | **V9** | Operability: surge flag + BC-switching | Structural (behaviour demonstrated) |
 
 The multistage-V5 result (M8-3) is worth highlighting: **without mixing, the
@@ -453,8 +467,12 @@ Jacobian, and the **meridional-supersonic-branch driver**
 Post-ladder open items (no numbered milestone drives them; recorded in
 `CLAUDE.md` and the memory files):
 
-1. **Robust radial/mixed repositioning stabilization** — the top item; the V8
-   Tier-3 blocker.
+1. **Robust radial/mixed Tier-3 stabilization** — the top item, now split by the
+   2026-07 diagnosis: V7 Tier 3 is a hard curvature-repositioning collapse at
+   every `ṁ`; V8 Tier 3 is a narrow, slow pocket (`ω_sl ≈ 0.066`). Attacks: a
+   compact-support / end-condition-aware streamline fit, closure-in-repositioning,
+   or Newton finishing. Closure-in-Newton was measured **not** to help the V7
+   Tier-2 operating-point fold (which a `ṁ` re-centre cracked instead).
 2. `[VERIFY]` correlation calibration against the reference library (all sets);
    the deferred centrifugal loss components.
 3. The A.8 in-blade meridional force (`f_b,q = f_b,θ·tanλ`; zero for radial

@@ -76,21 +76,36 @@ def test_tier2_ree_converges():
     assert r.pressure_ratio > 1.0
 
 
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # wedge transient
-@pytest.mark.xfail(strict=True, reason=(
-    "Blade-loading (diffusion) loss added 2026-07 -- the DOMINANT centrifugal "
-    "internal loss -- pushes V8 mixed-flow Tier 3 into the documented "
-    "freeze-fallback wedge (exit q-o has no positive-branch root at any mdot; "
-    "lowering mdot makes it worse). Tier 1/2 converge with realistic eta ~0.90. "
-    "Pre-loss Tier 3 converged (the 2026-07 stabilization, 396 iters) but "
-    "realistic loss overwhelms it; the wedge's recorded attacks are "
-    "closure-in-Newton or a compact-support streamline fit (major, not patches). "
-    "REMOVE this xfail when the wedge is cracked -- strict=True flags the XPASS."))
+# V8 Tier 3, with the dominant blade-loading loss, is a NARROW-POCKET case --
+# distinct from V7 Tier 3's hard collapse (which fails at every mdot; C.7).
+# The 2026-07 mdot sweep (memory wedge-closure-in-newton) measured: at the case
+# mdot=12 Tier 3 is choke_limited (the realistic loss cuts exit density so the
+# exit q-o capacity drops below mdot -- the operating-point/stratification
+# fold); it CONVERGES only in a knife-edge pocket at mdot~15 (593 iters at the
+# Tier-3 radial throttle omega_sl~0.066, agreeing with Tier 2 to ~3%), and is
+# choke_limited at <=14 / slow-max-iter at >=16. That pocket is too narrow and
+# slow to pin as a robust passing test (re-centring onto it would make a
+# 593-iter test flanked by non-converging neighbours -- brittle). So V8 stays
+# at mdot=12 with Tier 3 an xfail tripwire; the blockers are the Tier-3 radial
+# slowness (Newton finishing / section 6.4 recalibration -- both recorded) plus
+# the operating-point sensitivity, NOT closure-in-Newton (measured not to help
+# the analogous fold, C.7). Tier 1/2 converge at mdot=12 with realistic loss.
+# REMOVE this xfail when a robust Tier-3 radial solve lands (strict flags XPASS).
+_TIER3_REASON = (
+    "V8 Tier 3 with the dominant blade-loading loss is choke_limited at the "
+    "case mdot=12 (realistic loss cuts exit-q-o capacity below mdot); it "
+    "converges only in a knife-edge pocket at mdot~15 (593 iters, agrees Tier 2 "
+    "to ~3%), too narrow/slow to pin robustly. Distinct from V7's hard Tier-3 "
+    "collapse. Blockers: Tier-3 radial slowness (Newton finishing / section 6.4 "
+    "recalibration) + operating point. Remove when a robust radial solve lands.")
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # repositioning transient
+@pytest.mark.xfail(strict=True, reason=_TIER3_REASON)
 def test_tier3_hits_the_documented_wedge_with_realistic_loss():
     # Tripwire: the assertion is the PRE-loss expectation (Tier 3 converges and
-    # agrees with Tier 2). It now xfails because the realistic blade-loading
-    # loss drives the mixed-flow bend into the wedge (memory:
-    # centrifugal-blade-loading-wip; Appendix C.8 note).
+    # agrees with Tier 2). It xfails at the case mdot=12 (choke_limited); see
+    # _TIER3_REASON and Appendix C.8.
     case = V8MixedFlow()
     r = case.machine().evaluate(MassFlowSpec(case.mdot),
                                 FidelityConfig.tier3(), n_sl=case.n_sl_rep,

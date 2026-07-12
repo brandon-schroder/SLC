@@ -75,43 +75,57 @@ def test_inblade_stations_ramp_the_work(meanline):
 
 
 # --------------------------------------------------------------------------
-# One kernel, meanline vs spanwise (AD-1). The Tier-1 meanline converges with
-# realistic loss (the fixture tests above). V7's 90-degree bend, however,
-# cannot absorb the DOMINANT blade-loading loss (~7 kJ/kg, added 2026-07) at
-# EITHER spanwise tier -- both land in the documented freeze-fallback wedge
-# (a self-consistent lag state whose exit q-o has no positive-branch root at
-# any mdot; lowering mdot makes it worse, the wedge signature; and Tier-2
-# retune to mdot 10 still only max-iters slowly). The wedge's recorded attacks
-# are closure-in-Newton or a compact-support streamline fit (major, not
-# patches). The two xfails are tripwires -- REMOVE them when the wedge is
-# cracked (strict=True flags the XPASS). See memory
-# centrifugal-blade-loading-wip; Appendix C.7 note.
+# One kernel, meanline vs spanwise (AD-1). The 2026-07 diagnosis (probe_cin_*,
+# memory wedge-closure-in-newton) SEPARATED what had been called one "wedge"
+# into two distinct diseases:
+#
+#   Tier 2 = an OPERATING-POINT stratification-capacity fold. The dominant
+#   blade-loading loss (~7 kJ/kg) stratifies the exit profile and drives an
+#   interior streamtube's Vm toward the master-ODE Vm=0 singularity, so the
+#   COUPLED flow folds BELOW a mass-flow floor (~15 kg/s). It is NOT closure
+#   coupling (fixed prescribed stratified transport folds identically) and NOT
+#   the classical repositioning algorithm (global Newton folds too). Raising
+#   mdot lifts every Vm off the singularity: at the re-centred mdot = 17 (the
+#   case default) Tier 2 converges with realistic loss (below) -- so this is a
+#   PASSING test now, the operating-point crack landed.
+#
+#   Tier 3 = a SEPARATE curvature-repositioning collapse on the 90-deg bend:
+#   it fails at EVERY mdot (including the Tier-2-feasible window), dies early
+#   (outer it 3-5), and the section 6.4 wilkinson_c throttle is inert -- the
+#   standing "robust radial/mixed repositioning" open item, now isolated from
+#   the operating-point confound. It stays an xfail tripwire; REMOVE it when a
+#   robust Tier-3 repositioning lands (strict=True flags the XPASS). See memory
+#   wedge-closure-in-newton; Appendix C.7.
 # --------------------------------------------------------------------------
-_WEDGE_REASON = (
-    "Blade-loading loss (2026-07, dominant centrifugal internal loss) pushes "
-    "V7's 90-deg bend into the documented freeze-fallback wedge at this "
-    "spanwise tier; Tier-1 meanline converges with realistic eta ~0.90. Remove "
-    "this xfail when the wedge is cracked (closure-in-Newton / compact-support "
-    "streamline fit).")
-
-
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # wedge transient
-@pytest.mark.xfail(strict=True, reason=_WEDGE_REASON)
-def test_tier2_hits_the_wedge_with_realistic_loss():
-    # Tripwire: the PRE-loss expectation was Tier-2 REE convergence.
+def test_tier2_converges_with_realistic_loss():
+    # Operating-point crack (2026-07): at the re-centred mdot the Tier-2 REE
+    # solve converges with the full realistic loss, validity 1, sane PR/eta.
     case = V7Centrifugal()
     r = case.machine().evaluate(MassFlowSpec(case.mdot),
-                                FidelityConfig.tier2(), n_sl=case.n_sl_rep,
-                                config=ClassicalConfig(max_outer=400))
+                                FidelityConfig.tier2(), n_sl=case.n_sl_rep)
     assert r.converged
-    assert r.pressure_ratio > 1.0
+    lo, hi = case.pr_band
+    assert lo < r.pressure_ratio < hi
+    elo, ehi = case.eta_band
+    assert elo < r.efficiency < ehi
+    assert r.validity > 0.0
 
 
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # wedge transient
-@pytest.mark.xfail(strict=True, reason=_WEDGE_REASON)
-def test_tier3_hits_the_wedge_with_realistic_loss():
-    # Tripwire: the PRE-loss expectation was Tier-3 convergence (the 2026-07
-    # stabilization) -- realistic loss overwhelms it.
+_TIER3_REASON = (
+    "Tier-3 curvature+lean streamline repositioning on the 90-deg bend "
+    "collapses early (outer it 3-5) at EVERY mdot with the dominant "
+    "blade-loading loss -- a SEPARATE failure from the Tier-2 operating-point "
+    "wedge (which the mdot re-centre cracks; see test_tier2_converges...). This "
+    "is the standing robust-radial/mixed-repositioning open item. Remove this "
+    "xfail when a compact-support streamline fit / closure-in-repositioning "
+    "lands (memory wedge-closure-in-newton, Appendix C.7).")
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # repositioning transient
+@pytest.mark.xfail(strict=True, reason=_TIER3_REASON)
+def test_tier3_hits_the_repositioning_collapse():
+    # Tripwire: Tier 3 fails at the re-centred (Tier-2-feasible) mdot too, so
+    # this is the repositioning mode, NOT the operating-point fold.
     case = V7Centrifugal()
     r = case.machine().evaluate(MassFlowSpec(case.mdot),
                                 FidelityConfig.tier3(), n_sl=case.n_sl_rep,
