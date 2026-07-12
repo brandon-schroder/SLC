@@ -9,6 +9,34 @@ to reproduce.
 Assembled 2026-07-12. Each entry is grounded in a web-verified primary reference;
 **public-domain** ones have a direct URL you can drop straight into NotebookLM.
 
+## Consolidated source list (DOIs / report IDs)
+
+DOIs verified via Crossref (2026-07-12). **NASA/NACA/AGARD/DFVLR items are
+reports that predate DOIs** — they are identified by report number + NTRS/DTIC
+accession, not a DOI. ✅ = public-domain direct URL; 🔒 = paywalled (ASME/AGARD).
+
+| # | Document | DOI / report ID | Access |
+|---|----------|-----------------|--------|
+| 1 | Herrig, Emery, Erwin & Felix, *Systematic 2-D Cascade Tests of NACA 65-Series Compressor Blades at Low Speeds*, NACA TR-1368 (1957) | no DOI — NTRS **19930092353** | ✅ |
+| 2 | Moore & Reid, *Performance of Single-Stage Axial-Flow Transonic Compressor… PR 2.05* (Stage 37), NASA **TP-1659** (1980) | no DOI — NTRS **19800012840** | ✅ |
+| 3 | *CFD Validation for Propulsion System Components*, **AGARD-AR-355** (1998) — Rotor 37 blade coords + LDA | no DOI — NATO STO / DTIC | 🔒 |
+| 4 | Arts & Lambert de Rouvroit, *Aero-Thermal Performance of a 2-D Highly Loaded Transonic Turbine NGV* (VKI **LS-89**), J. Turbomach. (1992) | **10.1115/1.2927978** (conf 1990: 10.1115/90-gt-358); primary data VKI **TN-174** (1990) | 🔒 |
+| 5 | *Design and Cold-Air Investigation of a Turbine…* (single-stage), NASA **TN D-6967** (1972) | no DOI — NTRS **19720024422** | ✅ |
+| 6 | Eckardt, *Detailed Flow Investigations Within a High-Speed Centrifugal Compressor Impeller* (rotor **O**, radial), J. Fluids Eng. 98 (1976) | **10.1115/1.3448334** | 🔒 |
+| 7 | Eckardt, *Flow Field Analysis of Radial and Backswept Centrifugal Compressor Impellers, Part I* (rotors **A/B**), ASME 1980 (New Orleans, pp. 77–86) | no DOI — ASME 1980 conf volume | 🔒 |
+| 8 | Krain, *Swirling Impeller Flow*, J. Turbomach. 110 (1988) | **10.1115/1.3262157** | 🔒 |
+| 9 | Krain & Hoffmann, *Verification of an Impeller Design by Laser Measurements…*, ASME 89-GT-159 (1989) | **10.1115/89-gt-159** | 🔒 |
+| 10 | Moore & Reid, *…Stage 35, PR 1.82* (second axial point), NASA TP (1982) | no DOI — NTRS **19820014395** | ✅ |
+| 11 | NASA centrifugal CR (McKain & Holbrook CC3-class; confirm on NTRS) | no DOI — NTRS **19940012913** (verify) | ✅ |
+
+**Correlation-source primaries** (already consulted via NotebookLM; DOIs here for
+archival/citable copies — see `README.md` for which `[VERIFY]` each discharges):
+Oh, Yoon & Chung 1997 **10.1243/0957650971537231**; Kacker & Okapuu 1982
+**10.1115/1.3227240**; Wiesner 1967 **10.1115/1.3616734**; Dunham & Came 1970
+**10.1115/1.3445349**; Gallimore & Cumpsty 1986 Part I **10.1115/1.3262019** /
+Part II **10.1115/1.3262009**. (Lieblein 1959 + Coppage WADC-TR-55-257 + Galvas
+NASA TN D-7487 + the Aungier books have no journal DOI / are already in the Drive.)
+
 ## How to use this with NotebookLM
 
 The `notebooklm` skill can *query* notebooks and *register* a notebook URL in its
