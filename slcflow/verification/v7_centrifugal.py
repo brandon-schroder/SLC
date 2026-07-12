@@ -30,7 +30,10 @@ realistic stratified exit loss drives an interior streamtube's meridional Vm
 toward the master-ODE Vm = 0 singularity, so below a floor (~15 kg/s) the
 COUPLED spanwise flow folds (no positive-Vm solution -- the "wedge"), and above
 a ceiling (~22 kg/s) it genuinely chokes. mdot = 17 sits mid-window: Tier 2
-converges with validity 1, PR ~1.97, eta ~0.80. This is the same category of
+converges with validity 1, PR ~2.03, eta ~0.83 (with the corrected Coppage/
+Oh-1997 blade-loading diffusion factor, 2026-07-12; was ~1.97/~0.80 under the
+earlier inverted loading term that over-estimated the loss ~2.3x). This is the
+same category of
 case-design re-centring as the V5 validity-0 annulus retune and the transonic-V5
 beta2 retune -- a loss-physics operating-point shift, not a solver change. See
 the module docstring's Tier-3 note, ``test_v7_centrifugal``, and Appendix C.7.

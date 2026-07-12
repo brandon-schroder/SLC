@@ -64,28 +64,46 @@ def test_skin_friction_mean_of_squares_convention(w1, w2):
 # --------------------------------------------------------------------------
 # Blade-loading (diffusion) loss -- Coppage/Aungier Eq 5.15 (added 2026-07)
 # --------------------------------------------------------------------------
-def test_blade_loading_matches_coppage_aungier_5p15():
-    # dh = 0.05 D_f^2 U2^2 with the radial diffusion factor
-    #   D_f = 1 - W2/W1 + 0.75 (dh_euler/U2^2)(W1/W2) / [(Z/pi)(1-r1/r2)+2 r1/r2].
-    # Values chosen so the D_f ceiling (2.5) and the 1 m/s velocity floors are
-    # inactive, so the code must equal the plain formula.
+def test_blade_loading_matches_coppage_oh1997():
+    # dh = 0.05 D_f^2 U2^2 with the radial diffusion factor VERBATIM from
+    # Oh-Yoon-Chung (1997) Table 6 / the equation above Table 5:
+    #   D_f = 1 - W2/W1 + 0.75 (dh_Euler/U2^2) / { (W1/W2)[(Z/pi)(1-r1/r2)
+    #                                                       + 2 r1/r2] }
+    # i.e. the loading term carries W2/W1 (W1/W2 in the DENOMINATOR). Values
+    # chosen so the D_f ceiling (2.5) and the 1 m/s velocity floors are inactive,
+    # so the code must equal the plain formula.
     w1, w2, u2, dh_euler, z, rr = 240.0, 110.0, 340.0, 78000.0, 17, 0.55
     geom = (z / np.pi) * (1.0 - rr) + 2.0 * rr
-    d_f = 1.0 - w2 / w1 + 0.75 * (dh_euler / u2 ** 2) * (w1 / w2) / geom
+    d_f = 1.0 - w2 / w1 + 0.75 * (dh_euler / u2 ** 2) * (w2 / w1) / geom
     assert d_f < 2.5                                   # ceiling inactive
     expected = 0.05 * d_f ** 2 * u2 ** 2
     assert float(blade_loading_loss(w1, w2, u2, dh_euler, z, rr)) == \
         pytest.approx(expected, rel=2e-3)
 
 
-def test_blade_loading_grows_with_diffusion():
-    # The loading-term ratio is W1/W2 (NOT W2/W1): the diffusion loss must GROW
-    # as the flow diffuses more (W2 falls at fixed inlet). This physical
-    # constraint pins the ratio direction the source's MathML render was
-    # ambiguous on (CENT-LOSS.md); with W2/W1 the loss would DECREASE.
-    w1, u2, dh_euler, z, rr = 240.0, 340.0, 78000.0, 17, 0.55
-    losses = [float(blade_loading_loss(w1, w2, u2, dh_euler, z, rr))
-              for w2 in (200.0, 150.0, 110.0, 80.0)]      # increasing diffusion
+def test_blade_loading_uses_w2_over_w1_not_w1_over_w2():
+    # Regression guard for the 2026-07 ratio-inversion fix (CENT-LOSS.md):
+    # the Oh-1997 loading term is W2/W1 (<1 under diffusion), NOT the inverted
+    # W1/W2 (>1) the closure used before. At a diffusing point (W2 < W1) the
+    # correct form gives a STRICTLY SMALLER loss than the inverted one.
+    w1, w2, u2, dh_euler, z, rr = 240.0, 110.0, 340.0, 78000.0, 17, 0.55
+    geom = (z / np.pi) * (1.0 - rr) + 2.0 * rr
+    dq = dh_euler / u2 ** 2
+    df_correct = 1.0 - w2 / w1 + 0.75 * dq * (w2 / w1) / geom
+    df_inverted = 1.0 - w2 / w1 + 0.75 * dq * (w1 / w2) / geom
+    got = float(blade_loading_loss(w1, w2, u2, dh_euler, z, rr))
+    assert got == pytest.approx(0.05 * df_correct ** 2 * u2 ** 2, rel=2e-3)
+    assert got < 0.05 * df_inverted ** 2 * u2 ** 2       # correct < inverted
+
+
+def test_blade_loading_grows_with_loading():
+    # The blade-loading loss is a LOADING loss: at fixed velocities it grows
+    # with the aerodynamic loading (Euler work dh_euler). Diffusion itself is
+    # carried by the leading 1 - W2/W1 term; the W2/W1 loading term is a
+    # positive correction proportional to dh_euler (Oh 1997).
+    w1, w2, u2, z, rr = 240.0, 110.0, 340.0, 17, 0.55
+    losses = [float(blade_loading_loss(w1, w2, u2, dh, z, rr))
+              for dh in (40000.0, 60000.0, 80000.0, 100000.0)]
     assert all(a < b for a, b in zip(losses, losses[1:]))
 
 

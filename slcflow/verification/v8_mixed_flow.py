@@ -15,29 +15,30 @@ loss, exits at the intended intermediate angle with a radius rise,
 PR/efficiency in sane bands. Point-by-point reproduction of a specific
 mixed-flow rotor is **[VERIFY]** (reference-library calibration + deferred
 loss); the geometry is representative, not a digitised design. Efficiency
-reads high for the same reason as V7 (only incidence + skin friction
-modelled).
+reads a realistic ~0.86-0.87 now that the dominant blade-loading loss is
+modelled (with the Coppage/Oh-1997 diffusion factor, ratio-corrected
+2026-07-12; tip-clearance/disk-friction stay deferred).
 
-**Measured (M8-4), REVISED 2026-07: the Tier-3 failure was a driver
-artifact, not a repositioning envelope.** M8-4 originally recorded Tier-3
-full-SLC repositioning as failing across a wide ``(n_sl, n_inblade, omega)``
-grid at ``phi_max`` in 45-70 deg ("the section 6.4 odd-even mode again",
-with the V7 pocket "angle-specific"). The 2026-07 diagnosis refuted the
-attribution: the failure chain was (i) the master ODE crossing its Vm = 0
-singularity when integrated from boundary values stale relative to the
-transported fields (the unrelaxed closure switch-on being the big producer,
-amplified by the REE swirl term ~ rVt/r^2 at the low-radius mid-bend
-stations), (ii) the driver fatally boundary-checking the stale-guess split
-that the per-q-o solves were about to repair, and (iii) continuity roots
-accepted on spurious negative-Vm branches. With the stabilization (solved-
-state check, positive-branch root validation with freeze-and-patience
-choke handling, and the closure switch-on ramped through the section 6.2.4
-under-relaxation) Tier 3 converges on this bend -- slowly, at the section
-6.4 throttle (~400 iterations; acceleration is the recorded follow-up).
-``test_tier3_converges_after_stabilization`` pins the flipped behaviour.
+**Tier-3 status (2026-07-12): converges at the re-centred mdot = 14 with the
+realistic loss.** History: M8-4 originally recorded Tier-3 full-SLC
+repositioning as failing across a wide ``(n_sl, n_inblade, omega)`` grid; the
+2026-07 stabilization refuted that attribution (the failure was the driver's
+stale-split boundary check + spurious negative-Vm continuity branches + the
+unrelaxed closure switch-on -- fixed by the solved-state check, positive-branch
+root validation with freeze-and-patience choke handling, and the section 6.2.4
+closure ramp) and Tier 3 converged on the *pre*-blade-loading bend. Adding the
+dominant blade-loading loss then pushed Tier 3 into a narrow choke/max-iter
+pocket (choke_limited at the old mdot=12). The **Coppage/Oh-1997 D_f ratio fix**
+(2026-07-12, ~2.3x less loss -> ~27-30% less spanwise stratification) LOWERED
+that pocket into a genuine converging window ``mdot in {13, 14}`` (choke at 12,
+slow-max-iter at 15/16). At the re-centred ``mdot = 14`` all three tiers
+converge (validity 1, Tier 3 PR agrees Tier 2 to ~2.5%) -- still slow at the
+section 6.4 throttle (acceleration, e.g. Newton finishing, is the recorded
+follow-up). ``test_tier3_converges_at_recentred_mdot`` pins it. (V7's tighter
+90-deg bend is NOT liftable this way -- it stays an infeasible fold; C.7.)
 
 Provenance: M8 sub-step 4, written with the mixed-flow case; Tier-3 status
-revised at the 2026-07 stabilization.
+revised at the 2026-07 stabilization and the 2026-07-12 blade-loading fix.
 """
 from __future__ import annotations
 
@@ -74,7 +75,14 @@ class V8MixedFlow:
     r_outer: float = 0.18
     phi_max_deg: float = 55.0      # exit meridional angle (mixed-flow)
     omega: float = 1450.0          # rad/s
-    mdot: float = 12.0             # kg/s
+    # Re-centred 12 -> 14 kg/s (2026-07-12) after the Coppage/Oh-1997 blade-
+    # loading ratio fix (~2.3x less loss). The reduced loss/stratification
+    # LOWERED the Tier-3 feasible pocket into a converging window mdot in
+    # {13, 14} (was choke_limited at 12 and a knife-edge ~15 pre-fix): at 12 the
+    # exit q-o still chokes, 15/16 slow-max-iter. mdot = 14 sits in the pocket
+    # with all three tiers converging (validity 1, T3 agrees T2 to ~2.5%). Same
+    # category of operating-point re-centre as V7 T2 (12 -> 17). See Appendix C.8.
+    mdot: float = 14.0             # kg/s
     h0_in: float = 3.0e5           # J/kg
     s_in: float = 0.0
     beta1_blade_deg: float = -60.0  # inducer relative metal angle (sgn = -1)

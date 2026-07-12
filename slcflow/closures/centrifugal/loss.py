@@ -11,10 +11,12 @@ impeller across its range:
   * **skin-friction / passage loss**: the pipe-friction analogy over the mean
     relative velocity, ``dh_sf = 2 Cf (L/D_hyd) W_avg^2`` with
     ``W_avg = 1/2 (W1 + W2)``;
-  * **blade-loading (diffusion) loss** (Coppage/Aungier 5.15):
-    ``dh_bl = 0.05 D_f^2 U2^2`` with the radial diffusion factor ``D_f`` --
-    the secondary-flow loss driven by the blade-to-blade pressure gradient,
-    added 2026-07 (was deferred). See :func:`blade_loading_loss`.
+  * **blade-loading (diffusion) loss** (Coppage et al. 1956; Oh-Yoon-Chung
+    1997 Table 6): ``dh_bl = 0.05 D_f^2 U2^2`` with the radial diffusion factor
+    ``D_f`` -- the secondary-flow loss driven by the blade-to-blade pressure
+    gradient, added 2026-07 (was deferred). The ``D_f`` loading-term ratio was
+    corrected 2026-07 (``W2/W1``, verbatim Oh 1997; see
+    :func:`blade_loading_loss`).
 
 Each internal loss is an *enthalpy* rise, converted to entropy INDIVIDUALLY
 (B.5) at the exit static temperature via ``delta_s_enthalpy_loss``. Exit-state
@@ -36,8 +38,10 @@ Galvas full-KE 1.0), exposed as a tunable ``CentrifugalLoss.f_inc`` field.
 ``1/2(W1^2+W2^2)`` (was the square-of-mean ``[1/2(W1+W2)]^2``) -- the physical
 passage average since friction ~ local W^2.
 
-**Blade-loading added 2026-07** (Coppage/Aungier 5.15; Oh-Yoon-Chung 1997), the
-dominant remaining internal component. Still deferred and **[VERIFY]** -- a
+**Blade-loading added 2026-07** (Coppage et al. 1956; Oh-Yoon-Chung 1997), the
+dominant remaining internal component; its ``D_f`` loading-term ratio corrected
+2026-07 (``W2/W1``, verbatim Oh 1997 -- was ``W1/W2``, ~2.3x over-loss). Some
+remaining components are still deferred and **[VERIFY]** -- a
 per-streamtube closure does not cleanly see the inputs they need: **tip-
 clearance** (Jansen 1967 needs the exit blade width ``b2`` and hub/tip radii,
 absent from the section 4.1 contract) and **disk-friction/windage** (a
@@ -64,7 +68,7 @@ _DEG = _PI / 180.0
 _ANG_CAP, _ANG_W = 85.0 * _DEG, 2.0 * _DEG   # metal-angle soft-clip (tan bound)
 _T_FLOOR, _T_W = 20.0, 5.0                   # exit static-T floor (a2 real)
 _BL_C = 0.05                                 # Coppage blade-loading constant
-_BL_LOAD = 0.75                              # Coppage loading-term constant
+_BL_LOAD = 0.75                              # Coppage loading-term constant (W2/W1)
 _V_FLOOR, _V_W = 1.0, 1.0                    # C1 velocity floor (m/s) for ratios
 _BL_DF_CEIL, _BL_DF_W = 2.5, 0.2             # D_f ceiling (stalled/out-of-range)
 
@@ -81,40 +85,53 @@ def incidence_loss(w_theta_flow, w_theta_blade, *, xp=None):
 
 def blade_loading_loss(w1, w2, u2, dh_euler, blade_count, r_ratio, *, xp=None):
     """Coppage/Jansen blade-loading (diffusion) loss ``dh = 0.05 D_f^2 U2^2``
-    [J/kg] (Aungier 2000 Eq 5.15; Oh-Yoon-Chung 1997 optimum set;
-    docs/references/CENT-LOSS.md). The loss of the secondary flows driven by
-    the blade-to-blade pressure gradient, scaled by an equivalent radial
-    *diffusion factor*
+    [J/kg] (**Coppage et al. 1956** WADC 55-257; Oh-Yoon-Chung 1997 optimum set
+    Table 6; docs/references/CENT-LOSS.md). The loss of the secondary flows
+    driven by the blade-to-blade pressure gradient, scaled by an equivalent
+    radial *diffusion factor*
 
-        D_f = 1 - W2/W1 + 0.75 (dh_euler/U2^2) (W1/W2)
+        D_f = 1 - W2/W1 + 0.75 (dh_euler/U2^2) (W2/W1)
                           / [ (Z/pi)(1 - r1/r2) + 2 (r1/r2) ]
 
     with ``r_ratio = r1/r2`` and ``dh_euler`` the Euler work
-    ``U2 Vtheta2 - U1 Vtheta1`` [J/kg]. The loading term uses ``W1/W2`` (> 1
-    under diffusion) so the loss GROWS with diffusion (W2 << W1) -- the
-    physically-required direction, and the Oh-Yoon-Chung / Galvas consensus
-    (the MathML source render is ambiguous on this fraction; pinned by
-    ``test_blade_loading_grows_with_diffusion``). ``W1`` is the local
+    ``U2 Vtheta2 - U1 Vtheta1`` [J/kg]. **The loading term ratio is ``W2/W1``**
+    (equivalently ``(W1/W2)`` in the DENOMINATOR of that fraction) -- verbatim
+    from Oh-Yoon-Chung (1997), the exact paper the ``0.05 D_f^2 U2^2`` form is
+    cited from, which prints
+
+        D_f = 1 - W2/W1t + 0.75 (dh_Euler/U2^2)
+                           / { (W1t/W2)[(Z/pi)(1 - D1t/D2) + 2 D1t/D2] }.
+
+    Diffusion is carried by the leading ``1 - W2/W1`` term; the loading term is
+    a positive correction proportional to the aerodynamic *loading*
+    (``dh_euler``), NOT a second diffusion term (a 2026-07 fix -- the closure
+    previously used ``W1/W2`` in the numerator on an ambiguous MathML scrape and
+    a mistaken "must grow with diffusion" argument, over-reading the loss ~2.3x
+    at the V7 design point; the Aungier "Eq 5.15" attribution was also wrong --
+    Aungier uses a different ``(dW/W1)^2/24`` form, Eq 5-34). Pinned verbatim by
+    ``test_blade_loading_matches_coppage_oh1997`` and the regression guard
+    ``test_blade_loading_uses_w2_over_w1_not_w1_over_w2``. ``W1`` is the local
     streamtube inlet relative velocity (the Coppage shroud value ``W1s`` at the
     meanline; a spanwise run supplies the per-streamtube value).
 
-    C1 in every flow input (section 7.3): ``W2`` and ``U2`` enter a division and
+    C1 in every flow input (section 7.3): ``W1`` and ``U2`` enter a division and
     are softplus-floored; the geometric bracket is a positive constant
     (``Z >= 1``, ``r1 < r2``). ``D_f`` may dip slightly negative at very low
     loading -- harmless, since only ``D_f^2`` enters."""
     xp = get_xp(xp)
     w1f = _V_FLOOR + softplus(w1 - _V_FLOOR, _V_W, xp=xp)
-    w2f = _V_FLOOR + softplus(w2 - _V_FLOOR, _V_W, xp=xp)
     u2f = _V_FLOOR + softplus(u2 - _V_FLOOR, _V_W, xp=xp)
     dq = dh_euler / (u2f * u2f)                       # dimensionless Euler work
     geom = (blade_count / _PI) * (1.0 - r_ratio) + 2.0 * r_ratio
-    d_f = 1.0 - w2 / w1f + _BL_LOAD * dq * (w1 / w2f) / geom
+    d_f = 1.0 - w2 / w1f + _BL_LOAD * dq * (w2 / w1f) / geom
     # Smoothly cap D_f at a stalled/out-of-correlation ceiling (Coppage is a
     # design-range fit; real impeller D_f ~ 0.4-2). This leaves the design
-    # point untouched (V7 D_f ~ 1.1) and bounds the transient blow-up when a
-    # lagged W2 goes small mid-solve -- the same role the axial omega-bar
-    # ceiling plays (section 7.3.2). Only the upper side is capped; low/negative
-    # D_f is harmless since only D_f^2 enters.
+    # point untouched (V7 D_f ~ 0.67 with the corrected W2/W1 loading term) and
+    # bounds the transient when a lagged W2 goes small mid-solve. With the
+    # corrected ratio D_f -> 1 as W2 -> 0 (the loading term vanishes), so the
+    # ceiling is rarely active -- but it still guards the high-loading direction,
+    # the same role the axial omega-bar ceiling plays (section 7.3.2). Only the
+    # upper side is capped; low/negative D_f is harmless since only D_f^2 enters.
     d_f = smooth_min(d_f, _BL_DF_CEIL, _BL_DF_W, xp=xp)
     return _BL_C * d_f * d_f * u2 * u2
 

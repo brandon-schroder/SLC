@@ -364,7 +364,9 @@ many *structural* ones. Be precise about which is which.
   they are representative fits, not calibrated against the reference library.
   Efficiencies read closer to realistic now that the dominant loss components
   are modeled (axial endwall/clearance/shock; centrifugal **blade-loading** added
-  2026-07 — centrifugal η ≈ 0.98 → ~0.80 at the loaded design point), but
+  2026-07 — centrifugal η ≈ 0.98 → ~0.83 at the loaded design point, using the
+  Coppage/Oh-1997 diffusion factor whose loading-term ratio was corrected
+  `W1/W2`→`W2/W1` on 2026-07-12, ~2.3× less loss; CENT-LOSS.md), but
   centrifugal **tip-clearance** and
   **disk-friction** are still deferred (a per-streamtube closure lacks their
   geometry/`ṁ` inputs).
@@ -390,27 +392,32 @@ many *structural* ones. Be precise about which is which.
     **closure-in-Newton was measured not to help**, and the fold terminates *at*
     the singularity so continuation has no far side. **Raising `ṁ` lifts every
     `Vm` off the singularity:** re-centring V7 to `ṁ = 17` (window ≈ [16, 20])
-    makes Tier 2 a **passing** test with realistic loss (PR 1.97, η 0.80). Same
+    makes Tier 2 a **passing** test with realistic loss (PR 2.03, η 0.83, with
+    the corrected Coppage/Oh-1997 blade-loading loss — CENT-LOSS.md). Same
     category as the V5/transonic-V5 retunes.
   - **V7 Tier 3 = a physical feasibility fold at realistic loss (OPEN, NOT a
     solver gap).** Raising `ṁ` does *not* fix it. A damped-Newton +
     curvature-strength continuation (2026-07) showed the flow branch *folds*
     (interior `Vm→0`) at ~9% of full Tier-3 curvature at `ṁ`=17 (~26% at 20):
     the tight 0.08 m bend (κ~20) + realistic-loss stratification drive an
-    interior streamtube to `Vm→0` (incipient reversal). The fold is `ṁ`-liftable
-    but reaching full curvature needs `ṁ`~32 ≫ the choke ceiling ~22. **No
-    positive-Vm root exists** → a stiff integrator / compact-support fit / damped
-    Newton *cannot* help; this is **not** the robust-repositioning item. Levers
-    are case-side (calibrated/lower loss, gentler bend). Stays an `xfail`
-    tripwire.
-  - **V8 Tier 3 = a narrow pocket (OPEN, distinct from V7 T3).** choke_limited
-    at the case `ṁ = 12`, converges only in a knife-edge pocket at `ṁ ≈ 15`
-    (593 iters, agrees Tier 2 to ~3%), too narrow/slow to pin robustly. The
-    blockers are the Tier-3 radial **slowness** (`ω_sl ≈ 0.066` → Newton
-    finishing / §6.4 recalibration) plus operating point. V8 keeps Tier 1+2 at
-    `ṁ = 12`; Tier 3 an `xfail` tripwire.
+    interior streamtube to `Vm→0` (incipient reversal). **No positive-Vm root
+    exists** → a stiff integrator / compact-support fit / damped Newton *cannot*
+    help; this is **not** the robust-repositioning item. The case-side
+    "calibrated/lower loss" lever was **tried** (the 2026-07-12 `D_f` ratio fix,
+    ~2.3× less loss): it *eased* the fold (Tier 3 now fails at sane PR/η ~2.3/0.9
+    rather than garbage) but did **not** crack it — Tier 3 still fails at every
+    `ṁ` in 13…32. Stays an `xfail` tripwire.
+  - **V8 Tier 3 = now converges at the re-centred `ṁ = 14` (2026-07-12).** With
+    the earlier over-estimated loss this was a narrow choke/max-iter pocket
+    (`xfail` at `ṁ=12`); the `D_f` ratio fix (~2.3× less loss → ~27–30% less
+    stratification) LOWERED the pocket into a converging window `ṁ ∈ {13, 14}`
+    (choke at 12, slow-max-iter at 15/16). At the re-centred `ṁ = 14` all three
+    tiers converge (validity 1, Tier 3 PR agrees Tier 2 to ~2.5%) — still slow
+    (`ω_sl ≈ 0.066`; Newton finishing / §6.4 recalibration are the recorded
+    acceleration follow-ups). This is now a **passing** test; V7's tighter 90°
+    bend is not liftable the same way.
 
-  Both `xfail(strict=True)` tripwires auto-flip if a fix makes them XPASS.
+  The V7 T3 `xfail(strict=True)` tripwire auto-flips if a fix makes it XPASS.
   Reasonable robustness patches (reposition-freeze, capacity-peak freeze) were
   re-measured non-curative and reverted. See Appendix C.7/C.8 and memory
   `wedge-closure-in-newton`, `centrifugal-blade-loading-wip`. The M8-3 "mixing is a
@@ -474,14 +481,15 @@ Jacobian, and the **meridional-supersonic-branch driver**
 Post-ladder open items (no numbered milestone drives them; recorded in
 `CLAUDE.md` and the memory files):
 
-1. **Robust radial/mixed Tier-3 stabilization** — narrowed by the 2026-07
-   diagnosis. **V7 Tier 3 is NO LONGER on this item**: it was shown to be a
-   physical feasibility fold (interior `Vm→0`) with no positive-Vm root, so no
-   repositioning/integration method can help — its levers are case-side (loss
-   calibration, gentler bend). The surviving item is **V8 Tier 3**, a narrow,
-   slow pocket (`ω_sl ≈ 0.066`, converges only near `ṁ`≈15). Attacks there:
-   Newton finishing, a compact-support streamline fit, or §6.4 recalibration.
-   Closure-in-Newton was measured **not** to help the V7 folds.
+1. **Radial/mixed Tier-3 acceleration** (was "robust stabilization") — the
+   2026-07 diagnosis + 2026-07-12 blade-loading calibration narrowed this to a
+   *speed* problem on the cases that converge. **V7 Tier 3** is off this item: a
+   physical feasibility fold (interior `Vm→0`, no positive-Vm root) that the
+   ~2.3× loss reduction *eased but did not crack* — case-side levers only.
+   **V8 Tier 3 now converges** at the re-centred `ṁ=14` (a **passing** test) but
+   is **slow** (`ω_sl ≈ 0.066`). The open work is acceleration: Newton finishing,
+   a compact-support streamline fit, or §6.4 recalibration. Closure-in-Newton was
+   measured **not** to help the V7 folds.
 2. `[VERIFY]` correlation calibration against the reference library (all sets);
    the deferred centrifugal loss components.
 3. The A.8 in-blade meridional force (`f_b,q = f_b,θ·tanλ`; zero for radial

@@ -43,32 +43,66 @@ Confirmed forms pinned in `tests/test_centrifugal_loss_reference.py`.
    `d_H` from throat/tip areas and `L_H` from the mean-camberline path length.
    Fine as a design input; a geometry-derived value is the recorded refinement.
 
-## Blade-loading (diffusion) loss — added 2026-07
+## Blade-loading (diffusion) loss — added 2026-07, ratio CORRECTED 2026-07-12
 
-`Δh_bl = 0.05 D_f² U2²` (Coppage/Jansen; **Aungier 2000 Eq 5.15**;
-Oh-Yoon-Chung 1997 optimum set), with the radial diffusion factor
+`Δh_bl = 0.05 D_f² U2²` (**Coppage et al. 1956** WADC 55-257; Oh-Yoon-Chung 1997
+optimum-set Table 6), with the radial diffusion factor
 
 ```
-D_f = 1 − W2/W1 + 0.75 (Δh_euler/U2²)(W1/W2) / [ (Z/π)(1 − r1/r2) + 2 (r1/r2) ]
+D_f = 1 − W2/W1 + 0.75 (Δh_euler/U2²)(W2/W1) / [ (Z/π)(1 − r1/r2) + 2 (r1/r2) ]
 ```
 
-Leading constant `0.05` and the `D_f` structure CONFIRMED via NotebookLM (Staging
-Area Theory). **Ratio caveat:** the source render is ambiguous on the loading-term
-fraction; it is `W1/W2` (>1 under diffusion), resolved by (i) the Oh-Yoon-Chung /
-Galvas consensus and (ii) the physical requirement that the loss GROW with
-diffusion (W2≪W1) — pinned by `test_blade_loading_grows_with_diffusion`. A smooth
-`D_f` ceiling (2.5) bounds the transient blow-up (the axial ω̄-ceiling analogue).
-`blade_loading_loss` + reference tests in `test_centrifugal_loss_reference.py`.
+Leading constant `0.05` and the `D_f` structure CONFIRMED. **The loading-term
+ratio was `W1/W2` (numerator) and is now corrected to `W2/W1`** (equivalently
+`W1/W2` in the *denominator* of that fraction).
 
-**Measured:** at V7 design `D_f ≈ 1.12`, `Δh_bl ≈ 6.9 kJ/kg` — the DOMINANT
-internal loss (vs friction ~1.2, incidence ~0.2). Drops V7/V8 η 0.98 → a realistic
-**~0.90**. **Landing note (memory `centrifugal-blade-loading-wip`):** the loss is
-so dominant it drives the fragile radial/mixed **spanwise** solves into the
-documented freeze-fallback wedge — V7's 90° bend at BOTH Tier 2 and Tier 3, V8's
-mixed-flow bend at Tier 3. Landed with those tiers as `xfail` tripwires
-(Tier-1 meanline + V8 Tier-2 carry the realistic-loss validation); cracking the
-wedge (closure-in-Newton / compact-support streamline fit) is the standing #1
-open item, separate from this loss.
+- **Source (decisive):** Oh, Yoon & Chung (1997) — the exact paper the
+  `0.05 D_f² U2²` form is cited from — prints, verbatim in clean text (Drive
+  `oh_optimum_1997.md`, eqn above Table 5 + Table 6):
+  `D_f = 1 − W2/W1t + 0.75(Δh_Euler/U2²) / { (W1t/W2)[(Z/π)(1 − D1t/D2)
+  + 2 D1t/D2] }`. The `(W1t/W2)` is in the **denominator**, so the loading term
+  carries `W2/W1`.
+- **The earlier `W1/W2` was a bug**, on (i) an ambiguous NotebookLM MathML
+  scrape and (ii) a mistaken "must grow with diffusion" argument — diffusion is
+  carried by the leading `1 − W2/W1` term; the loading term is a positive
+  correction proportional to the *loading* `Δh_Euler`, not a second diffusion
+  term. Same category as the LIEB59 ω̄ velocity-ratio inversion.
+- **The "Aungier 2000 Eq 5.15" attribution was also wrong.** Aungier's book
+  (Drive `aungier_centrifugal_2000_part1.md`) uses a *different* blade-loading
+  form entirely: `ω̄_BL = (ΔW/W1)²/24` (Eq **5-34**), a total-pressure coefficient
+  based on the blade velocity difference `ΔW` — not `0.05 D_f² U2²`. Citation
+  corrected to Coppage/Oh.
+
+A smooth `D_f` ceiling (2.5) bounds transients (the axial ω̄-ceiling analogue);
+with the corrected ratio `D_f → 1` as `W2 → 0` (the loading term vanishes), so
+the transient is intrinsically better-behaved than the old blow-up.
+`blade_loading_loss` + reference tests `test_blade_loading_matches_coppage_oh1997`,
+`test_blade_loading_uses_w2_over_w1_not_w1_over_w2`,
+`test_blade_loading_grows_with_loading` in `test_centrifugal_loss_reference.py`.
+
+**Measured (2026-07-12, ratio fix).** At V7 design the loading term drops from
++0.400 to +0.062 → `D_f 1.005 → 0.668`, `Δh_bl 5609 → 2474 J/kg` (**2.27× less**,
+still the dominant internal loss vs friction ~1.2, incidence ~0.2 kJ/kg).
+Downstream (Tier 1/Tier 2, `n_sl=7`):
+
+| Case | η before | η after | exit s-spread before → after |
+|---|---|---|---|
+| V7 T1 | 0.799 | **0.839** | — |
+| V7 T2 | 0.803 | **0.828** | 69.6 → 50.5 J/(kg·K) (−27%) |
+| V8 T1 | 0.897 | **0.930** | — |
+| V8 T2 | 0.897 | **0.918** | 20.3 → 14.2 J/(kg·K) (−30%) |
+
+Efficiency moves toward realistic and stratification falls ~27–30% ("less
+stratified is key"). The radial/mixed **Tier-3 fragility is EASED but not
+cracked**: the V7 T3 fold shifts (mdot=14 now reaches PR 2.28/η 0.91/s-spread 27
+before failing, vs garbage before) but T3 still does not converge, and V8 T3
+stays choke_limited at its mdot=12 — so the T3 `xfail` tripwires stand (see the
+V7/V8 test dispositions and Appendix C.7/C.8). Multistage V5 is unaffected (axial
+Lieblein set, AD-5).
+
+Tip-clearance and disk-friction remain deferred (below); a full point-by-point
+Eckardt *stage* validation additionally needs the parasitic (disk/recirc/leakage)
++ vaneless-diffuser losses Oh 1997 includes in its stage η — a separate item.
 
 ## Residual (tip-clearance / disk-friction)
 

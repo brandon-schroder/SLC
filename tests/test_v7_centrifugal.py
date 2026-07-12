@@ -128,10 +128,13 @@ _TIER3_REASON = (
     "mdot ~32 >> the Tier-2 choke ceiling ~22, so no non-choked mass flow admits "
     "full radial equilibrium on the tight 0.08 m bend (kappa~20) with this loss. "
     "No positive-Vm root exists -> stiff integrator / compact-support fit / "
-    "damped Newton cannot help. Levers are case-side: calibrated/lower "
-    "blade-loading loss ([VERIFY], likely high), gentler bend, or beyond-model "
-    "validity. Remove this xfail if a case-side change makes it feasible "
-    "(memory v7-tier3-root-cause, Appendix C.7).")
+    "damped Newton cannot help. The 'calibrated/lower loss' case-side lever was "
+    "TRIED (2026-07-12: the Coppage/Oh-1997 D_f ratio fix cut the blade-loading "
+    "loss ~2.3x): it EASED the fold (Tier 3 now fails at sane PR/eta ~2.3/0.9 "
+    "rather than garbage) but did NOT crack it -- Tier 3 still fails at every "
+    "mdot in 13..32. Remaining levers: a further-calibrated/lower loss, a gentler "
+    "bend, or beyond-model validity. Remove this xfail if a case-side change makes "
+    "it feasible (memory v7-tier3-root-cause, Appendix C.7).")
 
 
 @pytest.mark.filterwarnings("ignore::RuntimeWarning")  # fold transient

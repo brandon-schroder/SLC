@@ -671,6 +671,44 @@ These are not suggestions; violating them is a bug even if tests pass.
   scratchpad. The robust Tier-3 radial/mixed stabilization is now scoped to **V8
   T3 only** (narrow/slow pocket); V7 T3 was reclassified as a physical
   feasibility fold, off that item (case-side levers only).
+- **Centrifugal blade-loading D_f ratio fix + validation-effort kickoff
+  (2026-07-12).** First action of the validation+calibration gate
+  (`model-readiness` #1/#2): characterize-before-changing the highest-leverage
+  `[VERIFY]`, the centrifugal **blade-loading loss magnitude** ("reads high;
+  less-stratified is key"). **Found + fixed a ratio-inversion bug** in the
+  Coppage/Jansen diffusion factor `D_f` (`closures/centrifugal/loss.py`): the
+  loading term used `(W1/W2)` in the NUMERATOR; the authoritative **Oh-Yoon-Chung
+  1997** (the exact paper the `0.05 D_f² U2²` form is cited from — Drive
+  `oh_optimum_1997.md`, clean verbatim text) prints `(W1t/W2)` in the
+  DENOMINATOR → the loading term carries `W2/W1`. The old `W1/W2` rested on an
+  ambiguous NotebookLM MathML scrape + a mistaken "must grow with diffusion"
+  argument (diffusion is the leading `1−W2/W1` term; the loading term scales with
+  LOADING Δh_Euler). Same category as the LIEB59 ω̄ inversion. **Also the "Aungier
+  2000 Eq 5.15" citation was wrong** — Aungier uses a different form
+  `ω̄_BL=(ΔW/W1)²/24` (Eq 5-34, Drive `aungier_centrifugal_2000_part1.md`); the
+  `0.05 D_f² U2²` form is **Coppage et al. 1956**. Fixed `(w1/w2f)`→`(w2/w1f)`;
+  citation corrected; docstrings/CENT-LOSS.md/theory C.7-C.8/overview/guide-3
+  synced. Reference tests: `test_blade_loading_matches_coppage_oh1997`,
+  `test_blade_loading_uses_w2_over_w1_not_w1_over_w2` (regression guard),
+  `test_blade_loading_grows_with_loading` (replaced the wrong
+  `_grows_with_diffusion`). **Measured (V7 design):** loading term +0.400→+0.062,
+  `D_f 1.005→0.668`, `Δh_bl 5609→2474 J/kg` (2.27× less). **Downstream:** V7 η
+  0.799→0.839 (T1) / 0.803→0.828 (T2); V8 η 0.897→0.930 / →0.918; exit
+  entropy-spread V7 T2 −27%, V8 T2 −30% ("less stratified"). **Fragility eased,
+  partly cracked:** V7 T3 fold shifted (now fails at sane PR/η, not garbage) but
+  still infeasible at every mdot → xfail stands (calibrated-loss lever tried,
+  didn't crack the tight 90° bend); **V8 T3 pocket LOWERED into a converging
+  window mdot∈{13,14}** — V8 re-centred 12→14, its Tier-3 xfail **flipped to a
+  passing test** (`test_tier3_converges_at_recentred_mdot`, all three tiers,
+  Tier 3 agrees Tier 2 ~2.5%). Multistage V5 unaffected (axial Lieblein set,
+  AD-5). **Validation-dataset status surfaced** (`centrifugal-validation-dataset`
+  memory): no primary Eckardt/Krain paper in Drive; Oh-1997 has Eckardt O/A/B
+  PR+η MAPS (figures → need digitization) + only the KIMM impeller fully
+  tabulated; full point-by-point STAGE η validation is confounded (Oh's η
+  includes deferred parasitic + vaneless-diffuser losses) — the coefficient-level
+  ratio fix did NOT need the dataset, but the point-by-point map reproduction
+  still does. Memory: `centrifugal-blade-loading-wip`, `reference-calibration`,
+  `centrifugal-validation-dataset`, `v7-tier3-root-cause`, `model-readiness`.
 
 ## Commands
 

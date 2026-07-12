@@ -345,7 +345,7 @@ the honest part — the guide series must record what turned out to be wrong:
 
 | Claim (pre-2026-07) | Reality after diagnosis |
 |---|---|
-| V8 Tier-3 "converges nowhere; angle-specific pocket" | Converges: 396 iterations, PR 1.5873, within a few % of Tier 2 (`test_v8_mixed_flow.py::test_tier3_converges_after_stabilization`) |
+| V8 Tier-3 "converges nowhere; angle-specific pocket" | Converges at the re-centred $\dot m=14$: PR 1.413, within ~2.5% of Tier 2 (`test_v8_mixed_flow.py::test_tier3_converges_at_recentred_mdot`). (History: converged pre-blade-loading; the dominant blade-loading loss then narrowed it to a choke/max-iter pocket, which the 2026-07-12 Coppage/Oh-1997 $D_f$ ratio fix — ~2.3× less loss — lowered into a converging $\dot m\in\{13,14\}$ window.) |
 | V7 Tier-3 "needs 6 INBLADE stations; edge-only diverges" | Edge-only converges: 173 iterations, PR 2.4433 vs the subdivided 2.4540 (<0.5%). **INBLADE is a resolution choice, not a convergence requirement.** |
 | Multistage mixing is a "convergence prerequisite" | Mixing-off *converges* (92 iterations, PR 1.1973). The surviving claim is physical stratification (§5), not convergence. |
 
