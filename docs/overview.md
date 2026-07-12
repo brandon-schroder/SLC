@@ -392,10 +392,17 @@ many *structural* ones. Be precise about which is which.
     `Vm` off the singularity:** re-centring V7 to `ṁ = 17` (window ≈ [16, 20])
     makes Tier 2 a **passing** test with realistic loss (PR 1.97, η 0.80). Same
     category as the V5/transonic-V5 retunes.
-  - **V7 Tier 3 = a separate curvature-repositioning collapse (OPEN).** Raising
-    `ṁ` does *not* fix it — fails at *every* `ṁ`, dying early (outer it 3–5),
-    §6.4 `wilkinson_c` inert. The standing robust-radial-repositioning item, now
-    isolated. Stays an `xfail` tripwire.
+  - **V7 Tier 3 = a physical feasibility fold at realistic loss (OPEN, NOT a
+    solver gap).** Raising `ṁ` does *not* fix it. A damped-Newton +
+    curvature-strength continuation (2026-07) showed the flow branch *folds*
+    (interior `Vm→0`) at ~9% of full Tier-3 curvature at `ṁ`=17 (~26% at 20):
+    the tight 0.08 m bend (κ~20) + realistic-loss stratification drive an
+    interior streamtube to `Vm→0` (incipient reversal). The fold is `ṁ`-liftable
+    but reaching full curvature needs `ṁ`~32 ≫ the choke ceiling ~22. **No
+    positive-Vm root exists** → a stiff integrator / compact-support fit / damped
+    Newton *cannot* help; this is **not** the robust-repositioning item. Levers
+    are case-side (calibrated/lower loss, gentler bend). Stays an `xfail`
+    tripwire.
   - **V8 Tier 3 = a narrow pocket (OPEN, distinct from V7 T3).** choke_limited
     at the case `ṁ = 12`, converges only in a knife-edge pocket at `ṁ ≈ 15`
     (593 iters, agrees Tier 2 to ~3%), too narrow/slow to pin robustly. The
@@ -435,7 +442,7 @@ plausibility bands are wide by intent. The right adversarial question is
 | **V3** | Tier consistency (Tier2≡Tier3, Tier1 mass-avg) | **Quantitative** (bit-for-bit) |
 | **V5** | Axial compressor (single + **multistage**) | Structural (in-window loss after 2026-07 retune); multistage shows mixing is a **modest damping** (~18%), not a homogenizer |
 | **V6** | Axial turbine (K-O set) | Structural |
-| **V7** | Centrifugal impeller (first radial end-to-end) | Structural at Tier 1+2 with realistic loss (re-centred `ṁ`=17, η≈0.80); **Tier 3** is a separate curvature-repositioning collapse at every `ṁ` (`xfail` tripwire) — see §10 |
+| **V7** | Centrifugal impeller (first radial end-to-end) | Structural at Tier 1+2 with realistic loss (re-centred `ṁ`=17, η≈0.80); **Tier 3** is a physical feasibility fold (interior `Vm→0`) at realistic loss — infeasible at every non-choked `ṁ`, not a solver gap (`xfail` tripwire) — see §10 |
 | **V8** | Mixed-flow (partial-φ bend) | Structural at Tier 1+2 with realistic loss; **Tier 3** a narrow pocket (converges only at `ṁ`≈15, choke_limited at 12) — `xfail` tripwire — see §10 |
 | **V9** | Operability: surge flag + BC-switching | Structural (behaviour demonstrated) |
 
@@ -467,12 +474,14 @@ Jacobian, and the **meridional-supersonic-branch driver**
 Post-ladder open items (no numbered milestone drives them; recorded in
 `CLAUDE.md` and the memory files):
 
-1. **Robust radial/mixed Tier-3 stabilization** — the top item, now split by the
-   2026-07 diagnosis: V7 Tier 3 is a hard curvature-repositioning collapse at
-   every `ṁ`; V8 Tier 3 is a narrow, slow pocket (`ω_sl ≈ 0.066`). Attacks: a
-   compact-support / end-condition-aware streamline fit, closure-in-repositioning,
-   or Newton finishing. Closure-in-Newton was measured **not** to help the V7
-   Tier-2 operating-point fold (which a `ṁ` re-centre cracked instead).
+1. **Robust radial/mixed Tier-3 stabilization** — narrowed by the 2026-07
+   diagnosis. **V7 Tier 3 is NO LONGER on this item**: it was shown to be a
+   physical feasibility fold (interior `Vm→0`) with no positive-Vm root, so no
+   repositioning/integration method can help — its levers are case-side (loss
+   calibration, gentler bend). The surviving item is **V8 Tier 3**, a narrow,
+   slow pocket (`ω_sl ≈ 0.066`, converges only near `ṁ`≈15). Attacks there:
+   Newton finishing, a compact-support streamline fit, or §6.4 recalibration.
+   Closure-in-Newton was measured **not** to help the V7 folds.
 2. `[VERIFY]` correlation calibration against the reference library (all sets);
    the deferred centrifugal loss components.
 3. The A.8 in-blade meridional force (`f_b,q = f_b,θ·tanλ`; zero for radial

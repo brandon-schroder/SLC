@@ -35,25 +35,32 @@ case-design re-centring as the V5 validity-0 annulus retune and the transonic-V5
 beta2 retune -- a loss-physics operating-point shift, not a solver change. See
 the module docstring's Tier-3 note, ``test_v7_centrifugal``, and Appendix C.7.
 
-**Tier-3 status (blade-loading loss, 2026-07).** Unlike the axial V5/V6 (where
-a straight annulus makes Tier 3 == Tier 2 bit-for-bit, V3), this is the first
-curved-path case carrying a blade row AND streamline repositioning. With the
-dominant blade-loading loss, **Tier 3 does not converge** -- the Tier-3
-curvature + lean repositioning feedback on the 90-degree bend collapses EARLY
-(outer iteration 3-5) at EVERY mass flow, including the Tier-2-feasible window
-(16-20 kg/s), and the section 6.4 ``wilkinson_c`` throttle does not move it. It
-is a **distinct failure from the Tier-2 operating-point wedge** (which raising
-mdot cracks; see above): the diagnosis (2026-07, ``probe_cin_*``) isolated the
-two -- Tier 2 is a stratification-capacity operating-point fold, Tier 3 is the
-curvature-repositioning collapse that remains the standing "robust radial/mixed
-repositioning" open item. Recorded attacks are a compact-support /
-end-condition-aware streamline fit or closure-in-Newton on the repositioning
-(both major, not patches; closure-in-Newton was measured NOT to help the Tier-2
-fold and is unproven on the Tier-3 mode). ``n_inblade`` stays at 6 as the
-in-blade RESOLUTION choice (sections 2.5, 4.5). (History: M7-4 originally
-claimed edge-only Tier-3 "requires" ``n_inblade``; the 2026-07 stabilization
-refuted that as a driver-robustness artifact for the PRE-blade-loading case --
-that revision stands, but the realistic-loss Tier-3 is a separate matter.)
+**Tier-3 status (blade-loading loss, 2026-07): a physical FEASIBILITY FOLD,
+not a solver gap.** Unlike the axial V5/V6 (where a straight annulus makes
+Tier 3 == Tier 2 bit-for-bit, V3), this is the first curved-path case carrying a
+blade row AND streamline repositioning. With the dominant blade-loading loss,
+**Tier 3 does not converge at any non-choked mass flow** -- and the 2026-07
+diagnosis (``probe_v7t3_*``, a damped-Newton + curvature-strength continuation)
+showed WHY: the flow branch **folds** (an interior streamtube's ``Vm`` -> 0, the
+master-ODE singularity) at only ~9% of the full Tier-3 curvature at mdot=17
+(~26% at mdot=20). The tight 0.08 m bend (kappa~20) makes the curvature term
+``curvature*(kappa*cos eps)*Vm`` swing the spanwise ``Vm`` hugely, and combined
+with the realistic-loss stratification it drives an interior streamtube to
+``Vm`` -> 0 (incipient meridional reversal the inviscid throughflow model
+correctly refuses) before the physical curvature is fully on. The fold IS
+mdot-liftable (the same mechanism as the Tier-2 wedge) but reaching full
+curvature needs mdot ~ 32 >> the Tier-2 choke ceiling ~22 -- so no operating
+point escapes it. **There is no positive-Vm root**, so this is NOT the "robust
+radial/mixed repositioning" open item and a stiff integrator / compact-support
+fit / damped Newton cannot help; the "repositioning failed" symptom is
+downstream of the fold. The case-side levers are a calibrated/lower blade-loading
+loss (``[VERIFY]``, likely high -> less stratification lifts the fold), a gentler
+bend (bigger radii -> smaller kappa), or accepting the case is beyond
+inviscid-throughflow validity at this loading. ``n_inblade`` stays at 6 as the
+in-blade RESOLUTION choice (sections 2.5, 4.5). (History: M7-4 originally claimed
+edge-only Tier-3 "requires" ``n_inblade``; the 2026-07 stabilization refuted that
+as a driver-robustness artifact for the PRE-blade-loading case -- that revision
+stands, but the realistic-loss Tier-3 fold is a separate matter.)
 
 Provenance: M7 sub-step 4, written with the centrifugal set; stability
 finding revised at the 2026-07 Tier-3 stabilization.

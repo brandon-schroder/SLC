@@ -647,10 +647,19 @@ These are not suggestions; violating them is a bug even if tests pass.
   case-design **re-centre ṁ 12→17** (mid-window; validity 1, PR 1.97, η 0.80),
   same category as the V5 validity-0 and transonic-V5 retunes. V7 `test_tier2_
   converges_with_realistic_loss` is now a PASSING structural test (was an xfail
-  tripwire). **(2) V7 Tier 3 = a SEPARATE curvature-repositioning collapse
-  (OPEN)** — fails at every ṁ (incl. the T2-feasible window), dies outer it 3-5,
-  §6.4 `wilkinson_c` inert; the standing robust-radial-repositioning item, now
-  isolated. Stays xfail (`test_tier3_hits_the_repositioning_collapse`).
+  tripwire). **(2) V7 Tier 3 = a physical FEASIBILITY FOLD at realistic loss
+  (OPEN, not a solver gap)** — later diagnosed (damped-Newton + curvature-strength
+  continuation, `probe_v7t3_*`): the flow branch folds (interior Vm→0, master-ODE
+  singularity) at ~9% of full Tier-3 curvature at ṁ=17 (~26% at ṁ=20). The tight
+  0.08 m bend (κ~20) swings spanwise Vm by +200..477 m/s; with the realistic-loss
+  stratification it drives an interior streamtube to Vm→0 before full curvature.
+  The fold IS ṁ-liftable (like the T2 wedge) but reaching c=1 needs ṁ~32 ≫ the T2
+  choke ceiling ~22 → no operating point admits full radial equilibrium. **No
+  positive-Vm root** → NOT the "robust repositioning" item; stiff integrator /
+  compact-support fit / damped Newton can't help ("repositioning failed" is
+  downstream of the fold). Case-side levers only: calibrated/lower loss ([VERIFY],
+  likely high), gentler bend, or beyond-model-validity. Stays xfail
+  (`test_tier3_infeasible_fold_at_realistic_loss`); memory `v7-tier3-root-cause`.
   **(3) V8 Tier 3 = a narrow pocket (OPEN, distinct from V7 T3)** — choke_limited
   at ṁ=12, converges only at ṁ≈15 (593 iters, agrees T2 ~3%), choke ≤14 /
   slow-max-iter ≥16; too narrow/slow to pin robustly, so V8 stays ṁ=12 with T3
@@ -659,8 +668,9 @@ These are not suggestions; violating them is a bug even if tests pass.
   `wedge-closure-in-newton` revised; `centrifugal-blade-loading-wip` "V7
   meanline-only" claim superseded. No new solver code (the wedge crack was an
   operating-point retune, not machinery); the coupled-residual probes stayed in
-  scratchpad. The robust Tier-3 radial/mixed stabilization is unchanged as #1
-  open, now correctly scoped (V7 T3 hard collapse, V8 T3 narrow/slow).
+  scratchpad. The robust Tier-3 radial/mixed stabilization is now scoped to **V8
+  T3 only** (narrow/slow pocket); V7 T3 was reclassified as a physical
+  feasibility fold, off that item (case-side levers only).
 
 ## Commands
 

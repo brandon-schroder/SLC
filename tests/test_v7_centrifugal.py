@@ -89,13 +89,22 @@ def test_inblade_stations_ramp_the_work(meanline):
 #   case default) Tier 2 converges with realistic loss (below) -- so this is a
 #   PASSING test now, the operating-point crack landed.
 #
-#   Tier 3 = a SEPARATE curvature-repositioning collapse on the 90-deg bend:
-#   it fails at EVERY mdot (including the Tier-2-feasible window), dies early
-#   (outer it 3-5), and the section 6.4 wilkinson_c throttle is inert -- the
-#   standing "robust radial/mixed repositioning" open item, now isolated from
-#   the operating-point confound. It stays an xfail tripwire; REMOVE it when a
-#   robust Tier-3 repositioning lands (strict=True flags the XPASS). See memory
-#   wedge-closure-in-newton; Appendix C.7.
+#   Tier 3 = a physical FEASIBILITY FOLD at realistic loss (diagnosed 2026-07,
+#   probe_v7t3_*): NOT a repositioning-mechanism gap. A damped-Newton +
+#   curvature-strength continuation showed the flow branch folds (interior
+#   Vm -> 0, the master-ODE singularity) at only ~9% of the full Tier-3
+#   curvature at mdot=17 (~26% at mdot=20). The tight 0.08 m bend (kappa~20)
+#   plus the realistic-loss stratification drive an interior streamtube to
+#   Vm -> 0 (incipient meridional reversal the inviscid model refuses). The
+#   fold is mdot-liftable (like the Tier-2 wedge) but reaching full curvature
+#   needs mdot ~ 32 >> the Tier-2 choke ceiling ~22 -- so NO non-choked mass
+#   flow admits full Tier-3 radial equilibrium. There is no positive-Vm root,
+#   so a stiff integrator / compact-support fit / damped Newton cannot help;
+#   the "repositioning failed" symptom is downstream of the fold. The levers
+#   are case-side: a calibrated/lower blade-loading loss ([VERIFY], likely
+#   high), a gentler bend, or accepting beyond-model-validity at this loading.
+#   Stays an xfail tripwire; REMOVE if a case-side change makes it feasible
+#   (strict=True flags the XPASS). See memory v7-tier3-root-cause; Appendix C.7.
 # --------------------------------------------------------------------------
 def test_tier2_converges_with_realistic_loss():
     # Operating-point crack (2026-07): at the re-centred mdot the Tier-2 REE
@@ -112,20 +121,25 @@ def test_tier2_converges_with_realistic_loss():
 
 
 _TIER3_REASON = (
-    "Tier-3 curvature+lean streamline repositioning on the 90-deg bend "
-    "collapses early (outer it 3-5) at EVERY mdot with the dominant "
-    "blade-loading loss -- a SEPARATE failure from the Tier-2 operating-point "
-    "wedge (which the mdot re-centre cracks; see test_tier2_converges...). This "
-    "is the standing robust-radial/mixed-repositioning open item. Remove this "
-    "xfail when a compact-support streamline fit / closure-in-repositioning "
-    "lands (memory wedge-closure-in-newton, Appendix C.7).")
+    "V7 Tier 3 at realistic loss is a physical FEASIBILITY FOLD, not a solver "
+    "gap (diagnosed 2026-07, probe_v7t3_*): a damped-Newton + curvature-strength "
+    "continuation showed the flow branch folds (interior Vm -> 0) at ~9% of full "
+    "Tier-3 curvature at mdot=17 / ~26% at mdot=20; reaching full curvature needs "
+    "mdot ~32 >> the Tier-2 choke ceiling ~22, so no non-choked mass flow admits "
+    "full radial equilibrium on the tight 0.08 m bend (kappa~20) with this loss. "
+    "No positive-Vm root exists -> stiff integrator / compact-support fit / "
+    "damped Newton cannot help. Levers are case-side: calibrated/lower "
+    "blade-loading loss ([VERIFY], likely high), gentler bend, or beyond-model "
+    "validity. Remove this xfail if a case-side change makes it feasible "
+    "(memory v7-tier3-root-cause, Appendix C.7).")
 
 
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # repositioning transient
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # fold transient
 @pytest.mark.xfail(strict=True, reason=_TIER3_REASON)
-def test_tier3_hits_the_repositioning_collapse():
-    # Tripwire: Tier 3 fails at the re-centred (Tier-2-feasible) mdot too, so
-    # this is the repositioning mode, NOT the operating-point fold.
+def test_tier3_infeasible_fold_at_realistic_loss():
+    # Tripwire: Tier 3 fails at the re-centred (Tier-2-feasible) mdot -- the
+    # curvature x loss fold into Vm -> 0, not the operating-point wedge and not
+    # a repositioning-mechanism gap (there is no positive-Vm root to reach).
     case = V7Centrifugal()
     r = case.machine().evaluate(MassFlowSpec(case.mdot),
                                 FidelityConfig.tier3(), n_sl=case.n_sl_rep,
