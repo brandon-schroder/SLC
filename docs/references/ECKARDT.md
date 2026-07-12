@@ -1,0 +1,93 @@
+# ECKARDT — Centrifugal impeller validation data (O / A / B): what is grounded
+
+The canonical centrifugal-compressor validation set (DFVLR laser-anemometry
+impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort. **The
+primary Eckardt papers are NOT in the user's library** (Google Drive search:
+no `title contains eckardt` hit; "Eckardt" appears only in secondary sources).
+What follows is what could be **grounded from the library**, and what is still
+missing.
+
+## Grounded from the library
+
+**Cumpsty, *Compressor Aerodynamics* (1989)** — Drive
+`cumpsty_compressor_1989_Combined.md` (44 Eckardt mentions, §2.4 and Ch. 6/7).
+Verbatim facts:
+
+- **Three impellers, common outer diameter** $D_2 = 400$ mm ($r_2 = 0.2$ m),
+  same tip/inlet radii and same axial tip width $b_2$ at outlet; each run with
+  a **vaneless diffuser** (Fig. 2.21, "From Eckardt, 1977"):
+  - **O** — radial outlet (no backsweep, $\beta_{2b}=0$), *with* inducer.
+  - **A** — *with* inducer, **30° backsweep** (vanes swept over the outer 20%
+    of the radius; same shroud line + blade shape as O to 80% of $r_2$).
+  - **B** — industrial type, **no inducer**, **40° backsweep**.
+- **Eckardt O design point (Eckardt 1976, quoted by Cumpsty Ch. 6):** "tip
+  diameter of 400 mm, designed to give a stagnation pressure ratio of **3.0**
+  with a mass flow of **7.2 kg/s at 18 000 rev/min**." Peak **polytropic
+  efficiency over 90%** (impeller) at the laser-measurement speed.
+- **Eckardt O laser-measurement point (Fig. 6.2):** **14 000 rev/min** (78% of
+  the 18 000 design speed), $\dot m = 5.31$ kg/s, **pressure ratio 2.1**.
+- **A/B choke map (Fig. 2.21):** at 16 000 rev/min B (no inducer) chokes at
+  ~6 kg/s; A (with inducer) passes >7 kg/s with no sign of choking.
+- **Inducer sizing rule (Cumpsty §1/§2, representative):** inducer tip diameter
+  ≈ **0.7–0.8 × outlet diameter** for best efficiency at $N_s\approx0.7$ → for
+  Eckardt O, inducer tip $\approx 0.28$ m ($r_{1t}\approx0.14$ m).
+- **NOT Eckardt (do not confuse):** Krain (1987) — 30° backsweep, $D_2=400$ mm,
+  $U_2=468$ m/s at design, $N_s\approx0.62$, impeller PR ≈4 at ~4 kg/s. A
+  *different* impeller with better shroud design.
+
+**Oh, Yoon & Chung 1997** (Drive `oh_optimum_1997.md`) — the loss-model paper
+whose blade-loading form slcflow uses; validates against Eckardt O/A/B with
+**PR maps (Figs 2–4) and isentropic-efficiency maps (Figs 7–9)**. These are
+**figures** (would need digitization). The paper tabulates only the KIMM
+impeller geometry, **not** the Eckardt geometry.
+
+## Still MISSING (needs the Eckardt primary papers, not in-library)
+
+The exact geometry for a rigorous point-by-point case:
+- inducer **hub** radius $r_{1h}$ (only the ~0.7·$D_2$ *tip* ratio is grounded);
+- exit width **$b_2$** (Cumpsty says "same for all three" but gives no value;
+  the widely-cited value is 26 mm — **unconfirmed from the library**);
+- **blade count $Z$** (widely cited as 20 for O — **unconfirmed here**);
+- inducer/exit **blade angles**, and the **meridional wall profiles** (Fig. 6.2
+  is a figure; the real shroud/hub lines are not concentric arcs).
+
+Primary sources to obtain: **Eckardt (1976)** *Trans. ASME J. Eng. Power* 98
+(detailed velocity measurements), **Eckardt (1980)** ASME 80-GT (laser
+velocimeter, backswept). Or a pedigree dataset (Japikse 1987, ref 19 in Oh).
+
+## First-order design-point ANCHOR (2026-07-12, not a rigorous validation)
+
+Using only the grounded numbers ($D_2=0.4$ m, radial, inducer tip $=0.7 r_2$,
+$T_{01}\approx288$ K, ambient) with slcflow's V7 machinery (concentric-bend
+meridional **approximation**, $Z=20$ assumed, impeller-internal loss only),
+`tools/eckardt_anchor.py` (rerunnable):
+
+| Operating point | slcflow PR | measured PR | Δ |
+|---|---|---|---|
+| 14 000 rpm, 5.31 kg/s | 1.95 | 2.1 | −7% |
+| 18 000 rpm, 7.2 kg/s | 2.84 | 3.0 | −5% |
+
+Right magnitude, right speed trend, a consistent ~5–7% under-prediction, and
+robust to $Z$ (16→30 moves PR 2.78→2.93 at 18 000 rpm). slcflow η reads ~0.95
+(**impeller-internal loss only**; the measured >90% is impeller polytropic, and
+slcflow's would fall toward it once the **deferred** tip-clearance + disk-friction
+losses are added). **This anchors the Euler-work + Wiesner-slip + corrected
+blade-loading loss at the design point — it is NOT a geometry-faithful
+point-by-point validation** (approximated meridional profile, unconfirmed
+$b_2/Z/r_{1h}$, η not yet stage-comparable). The ~5–7% PR offset is the size of
+the geometry-approximation error to close with the real profile.
+
+## Path to a rigorous V7 validation (recorded, not done)
+
+1. Obtain Eckardt 1976/1980 (or Japikse 1987) → exact $r_{1h}$, $b_2$, $Z$,
+   blade angles, and the shroud/hub meridional profiles.
+2. Fit the real meridional walls into a `WallCurve.from_callable` FlowPath
+   (replace the concentric-arc approximation).
+3. Digitize the PR + η maps (Oh 1997 Figs 2–4/7–9, or Eckardt's own) →
+   `tools/digitize_eckardt.py` + a reference test (the `digitize_*` pattern).
+4. For **efficiency**, either add the deferred parasitic (disk/recirc/leakage) +
+   vaneless-diffuser losses (Oh 1997 Table 6 gives every formula) to compare
+   **stage** η, or compare **impeller-exit** total conditions only. **PR** and
+   **exit swirl** are already ~comparable (loss-insensitive).
+
+See memory `centrifugal-validation-dataset`, `model-readiness`.
