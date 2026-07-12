@@ -13,19 +13,48 @@ continuation drivers, the axial-compressor, axial-turbine, and centrifugal
 correlation sets, all three fidelity tiers, and the §3.6 spanwise-mixing model.
 
 Post-ladder work (see `CLAUDE.md` for the full log) includes an independent
-audit + turbine-sign fix, a reference-library correlation-calibration pass, the
-axial-compressor endwall/clearance/shock loss stack, and a
-**meridional-supersonic-branch driver** — pseudo-arclength continuation
-(`drivers/supersonic.py`) that crosses the per-station `M_m = 1` continuity fold
-onto the supersonic-meridional branch, with both a prescribed-transport (duct)
-path and a closure-lagged blade-row path. Suite: 534 tests, both lint gates
-green.
+audit + turbine-sign fix, a reference-library correlation-calibration pass
+(coefficient level), the axial-compressor **endwall/clearance/shock** and
+centrifugal **blade-loading** loss stacks, a **meridional-supersonic-branch
+driver** (`drivers/supersonic.py`, pseudo-arclength continuation across the
+per-station `M_m = 1` fold), and a 2026-07 diagnosis of the radial/mixed
+Tier-3 fragility that separated it into distinct causes: V7 Tier 2 is a
+solvable operating-point fold (cracked by an `ṁ` re-centre), V7 Tier 3 is a
+physical feasibility fold at the current (high) loss, and V8 Tier 3 a narrow
+convergent pocket. Suite: **535 passed / 2 xfailed** (the two `xfail`s are the
+V7/V8 Tier-3 tripwires), both lint gates green.
 
-The verification ladder is largely **structural** (convergence + trends +
-plausibility bands), with pervasive `[VERIFY]` on the correlation
-coefficients — see [`docs/overview.md` §10](docs/overview.md) for an honest
-proven-vs-structural-vs-`[VERIFY]` breakdown before trusting any predicted
-performance number. See `CLAUDE.md` for the milestone-by-milestone log.
+The verification ladder is **structural** (convergence + trends + plausibility
+bands), with pervasive `[VERIFY]` on the correlation coefficients — see
+[`docs/overview.md` §10](docs/overview.md) for an honest
+proven-vs-structural-vs-`[VERIFY]` breakdown. See `CLAUDE.md` for the
+milestone-by-milestone log.
+
+### Before use for quantitative design
+
+The kernel, architecture, closure framework, and driver stack are **built and
+structurally verified**, but the model has **not been calibrated or validated
+against real turbomachinery data**. It is usable today as a **relative/trend
+tool** (meanline Tier 1, REE Tier 2) — sizing, sensitivity, configuration
+comparison. Before any *absolute* number (efficiency, PR, a speedline) can be
+trusted, in priority order:
+
+1. **Quantitative validation** — reproduce at least one published case per
+   machine type (axial compressor stage, turbine cascade, Eckardt impeller)
+   plus a speedline, point-by-point. Every V4–V8 case is structural-only today.
+2. **Correlation calibration** against that data — the coefficients are
+   representative fits (`[VERIFY]`); the **blade-loading loss magnitude** is the
+   highest-leverage one (it drives the spanwise stratification behind the
+   radial/mixed Tier-3 fragility).
+3. **Deferred centrifugal losses** — tip-clearance and disk-friction (need
+   exit width / hub-tip radii and a machine-level `ṁ`); centrifugal efficiency
+   reads optimistic without them. The axial loss stack is complete.
+4. **Tier-3 full-SLC reliability** on tight radial/mixed bends (V8 Tier-3
+   pocket; V7 Tier-3 infeasible at the current loss — calibrating #2 down
+   should help).
+5. **Operability validation** — surge-line / choke-traversal quantitative
+   match (the machinery exists and is demonstrated in V9; the match is
+   `[VERIFY]`).
 
 ## Documentation
 
