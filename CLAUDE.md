@@ -687,8 +687,8 @@ These are not suggestions; violating them is a bug even if tests pass.
   2000 Eq 5.15" citation was wrong** — Aungier uses a different form
   `ω̄_BL=(ΔW/W1)²/24` (Eq 5-34, Drive `aungier_centrifugal_2000_part1.md`); the
   `0.05 D_f² U2²` form is **Coppage et al. 1956**. Fixed `(w1/w2f)`→`(w2/w1f)`;
-  citation corrected; docstrings/CENT-LOSS.md/theory C.7-C.8/overview/guide-3
-  synced. Reference tests: `test_blade_loading_matches_coppage_oh1997`,
+  citation corrected; docstrings/CENT-LOSS.md/theory C.7-C.8/overview synced.
+  Reference tests: `test_blade_loading_matches_coppage_oh1997`,
   `test_blade_loading_uses_w2_over_w1_not_w1_over_w2` (regression guard),
   `test_blade_loading_grows_with_loading` (replaced the wrong
   `_grows_with_diffusion`). **Measured (V7 design):** loading term +0.400→+0.062,
