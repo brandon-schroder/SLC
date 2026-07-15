@@ -710,6 +710,43 @@ These are not suggestions; violating them is a bug even if tests pass.
   still does. Memory: `centrifugal-blade-loading-wip`, `reference-calibration`,
   `centrifugal-validation-dataset`, `v7-tier3-root-cause`, `model-readiness`.
 
+- **Measured-data validation campaign — first pass (2026-07-15).** The
+  `model-readiness` gate #1 opened: the user assembled the "Turbomachinery:
+  Test Cases" NotebookLM notebook (9 sources incl. the paywalled AGARD/
+  Eckardt/Krain/LS-89 primaries), and four validation deliverables landed on
+  `main`, each with a `docs/references/<KEY>.md` note + pinned
+  measured-agreement tests (bands encode MEASURED agreement, not success
+  claims): **(V4/TR1368)** NACA TR-1368 Fig. 107 (measured design turning
+  slope) digitized (grid-anchored + seeded trace + overlay) → validates
+  `deviation_slope` at the raw-data level, RMS 0.030/39 pts, β₁=70 low-σ a
+  documented deviation region (+0.097); the 65-series equivalence
+  θ_eq = 4·arctan(0.1103·C_l0) grounded (Fig. 111 cross-plots = recorded
+  extension). **(V5/ROTOR37)** geometry-faithful NASA Rotor 37
+  (`verification/v5_rotor37.py`, TP-1659 Table III(a) + measured 100%-speed
+  line): both tiers converge; η within ~1 pt; PR +12–16% decomposed by probe
+  into ~5 pts zero-blockage + ~7 pts Lieblein-deviation-on-MCA under-
+  prediction (β2_flow 44.2° vs design-intent 47.7°); validity 0 at Rotor-37
+  loading (D_eq ≥ SP-36 ceiling); speedline far shallower than the measured
+  choke-side collapse (sign-only pinned). The calibration targets (blockage
+  schedule, MCA deviation correction vs Table V, transonic loss level) are
+  now measured numbers with data attached. **(V7/ECKARDT)** the primary
+  Eckardt 1976 paper grounded the missing geometry (r1h 45/r1t 140/b2 26 mm,
+  Z=20 radial, 130 mm, z_s/b2 0.027) → geometry-faithful
+  `verification/v7_eckardt.py` (quarter-ellipse walls recorded): **all three
+  tiers converge, validity 1.0, ~0.1% tier agreement — the V7-testbed Tier-3
+  infeasibility fold is a property of its synthetic tight 0.08 m bend, not
+  of radial machines**; laser-point PR +4.7% (vaneless-diffuser-sized gap),
+  design +12.6% (deferred parasitic/clearance grow with speed); implied
+  measured slip ~0.90 vs Wiesner 0.877 (recorded). `eckardt_anchor.py`
+  superseded. **(V6/LS89)** VKI LS-89 cascade-level: `throat_exit_angle` =
+  the paper's gauging angle to 0.1° at M2is=1; predicted energy-ζ 0.0303 vs
+  measured 0.0225 (+35%, documented K-O behaviour; the TE curve carries most
+  of it; the rig's 0.5% exit/TE-shock is a recorded model boundary).
+  Remaining from the campaign (recorded in the notes + memory): TN D-6967
+  stage-level V6, Stage 37 stator/stage + other speeds + AGARD coords/tip
+  clearance, Fig. 111/Fig. 16/Oh-1997-map digitizations, Krain + Stage 38 +
+  CC3 second points, mixed-flow V8 (still no open rig dataset).
+
 ## Commands
 
 ```bash
