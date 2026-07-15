@@ -1,11 +1,30 @@
 # ECKARDT — Centrifugal impeller validation data (O / A / B): what is grounded
 
 The canonical centrifugal-compressor validation set (DFVLR laser-anemometry
-impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort. **The
-primary Eckardt papers are NOT in the user's library** (Google Drive search:
-no `title contains eckardt` hit; "Eckardt" appears only in secondary sources).
-What follows is what could be **grounded from the library**, and what is still
-missing.
+impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort.
+
+> **UPDATE 2026-07-15 — the primary Eckardt 1976 paper is now IN the
+> library** ("Turbomachinery: Test Cases" NotebookLM notebook) and the
+> missing geometry is grounded verbatim: **r1h = 45 mm, r1t = 140 mm
+> (inducer LE), b2 = 26 mm, Z = 20 radially-ending blades, axial length
+> 130 mm, z_s/b2 = 0.027**; laser point 14 000 rpm / 5.31 kg/s / stage
+> PR 2.1 / stage η_is 0.88; design speed 18 000 rpm at 7.16 kg/s. The
+> geometry-faithful-endpoints case is `slcflow/verification/v7_eckardt.py`
+> (quarter-ellipse wall assumption recorded there), pinned by
+> `tests/test_v7_eckardt.py`. **Results:** ALL THREE tiers converge with
+> validity 1.0 and agree to ~0.1% (the synthetic-V7-testbed Tier-3 fold is
+> a property of its tight 0.08 m bend, not of radial machines); laser-point
+> impeller-exit PR 2.20 vs measured stage 2.1 (+4.7%, the unmodelled
+> vaneless-diffuser p0 loss is the right size for the gap); design-point PR
+> 3.38 vs 3.0 (+12.6%, gap grows with the deferred parasitic/clearance/
+> diffuser losses); measured (PR, η) implies slip ~0.90 vs Wiesner 0.877
+> (−3% work — a slip calibration observation). Stage η is NOT directly
+> comparable (deferred parasitic + diffuser). The first-order
+> `tools/eckardt_anchor.py` concentric-bend study is SUPERSEDED by this
+> case. Remaining refinements: the true Fig. 1 wall contours (raster), the
+> Oh-1997 map digitization for off-design points, Eckardt A/B backswept.
+
+Historical context (2026-07-12, pre-primary-paper) below.
 
 ## Grounded from the library
 
