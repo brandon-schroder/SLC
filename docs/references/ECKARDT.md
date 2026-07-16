@@ -24,6 +24,19 @@ impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort.
 > case. Remaining refinements: the true Fig. 1 wall contours (raster), the
 > Oh-1997 map digitization for off-design points, Eckardt A/B backswept.
 
+> **PARASITIC SET LANDED (2026-07-16, gate #3 —
+> `closures/centrifugal/parasitic.py`, CENT-LOSS.md "parasitic"):** the
+> deferred disk-friction + leakage + recirculation works (Aungier 2000
+> ch. 4 verbatim) now debit the stage efficiency via
+> `EckardtO.stage_efficiency`. Measured at the laser point: DF 370 +
+> leakage 765 + recirculation 2327 J/kg (≈4.4% of work) → **η 0.969 →
+> 0.9265** vs measured stage 0.88; at the 18 000-rpm design point
+> recirculation grows with loading → η 0.877. The remaining ~4.6-pt
+> laser-point gap is the unmodelled **R/R₂ = 2 vaneless diffuser** (+ the
+> λ tip-distortion internal clearance effect) — the recorded next
+> refinements for a full stage-η comparison. Assumptions recorded: disk
+> backface gap s/r2 = 0.02, blade length = the friction-length chord.
+
 Historical context (2026-07-12, pre-primary-paper) below.
 
 ## Grounded from the library

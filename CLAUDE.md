@@ -910,6 +910,27 @@ These are not suggestions; violating them is a bug even if tests pass.
   dispositioned by measurement; the remaining physical levers are the
   inlet-swallowing capacity level and knee sharpness.
 
+- **Centrifugal parasitic losses (2026-07-16, gate #3 discharged).** The
+  deferred disk-friction + leakage + recirculation components, grounded
+  verbatim from Aungier 2000 ch. 4 (theory notebook; CENT-LOSS.md
+  "parasitic" section): `closures/centrifugal/parasitic.py` — Daily-Nece
+  four-regime disk torque (largest-C_M rule, ×0.75 experience, Eqs
+  4-21..25/4-31), the Δp_CL→U_CL→ṁ_CL leakage chain (4-17..19/4-40),
+  and recirculation `I_R U2²` with Aungier's impeller D_eq (4-41..43,
+  ≥0 floor). Parasitic accounting = shaft-side, post-solve scalar debits
+  (`EckardtO.parasitic_breakdown`/`stage_efficiency`) — machine-level ṁ
+  is exactly why they were never per-streamtube LossModel components (the
+  M7 deferral, now discharged); the flow solution is untouched, so all
+  existing pins stand. **Measured (Eckardt O):** laser point DF 370 +
+  leak 765 + recirc 2327 J/kg ≈ 4.4% of work → η 0.969 → **0.9265** vs
+  measured stage 0.88 (remaining ~4.6 pts = the unmodelled R/R₂=2
+  vaneless diffuser + λ tip-distortion, the recorded refinements);
+  design point recirculation grows with loading → η 0.877. Reference
+  tests pin each formula against hand-computed chains
+  (`test_parasitic_reference.py`) + the Eckardt integration levels.
+  Recorded assumptions: disk backface gap s/r2 = 0.02, μ = 1.81e-5,
+  blade length = the case chord.
+
 ## Commands
 
 ```bash

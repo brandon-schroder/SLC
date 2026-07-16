@@ -179,3 +179,52 @@ class EckardtO:
         target = self.mdot if mdot is None else mdot
         return self.machine().evaluate(MassFlowSpec(target), fidelity,
                                        n_sl=n_sl)
+
+    # ------------------------------------------------------------------
+    def parasitic_breakdown(self, result: PerformanceResult,
+                            mdot: float = None) -> dict:
+        """Aungier ch.-4 parasitic (shaft-side) works [J/kg] evaluated on
+        the converged state (post-solve scalars; gate-#3 components —
+        see closures/centrifugal/parasitic.py for provenance and why
+        these are machine-level, not per-streamtube). Disk backface gap
+        ratio 0.02 is a recorded assumption (not published for the rig).
+        """
+        from ..closures.centrifugal.parasitic import (
+            disk_friction_work, leakage_work, recirculation_work)
+        md = self.mdot if mdot is None else mdot
+        res = result.result
+        f, tr = res.fields, res.frozen.transported
+        j_le, j_te = 1, 2 + self.n_inblade
+        r1 = float(np.mean(f.metrics.r[:, j_le]))
+        r2 = float(np.mean(f.metrics.r[:, j_te]))
+        cu1 = float(np.mean(tr.rvt[:, j_le])) / r1
+        cu2 = float(np.mean(tr.rvt[:, j_te])) / r2
+        vm1 = float(np.mean(f.vm[:, j_le]))
+        cm2 = float(np.mean(f.vm[:, j_te]))
+        rho2 = float(np.mean(f.rho[:, j_te]))
+        u1, u2 = self.omega * r1, self.omega * r2
+        w1 = float(np.hypot(vm1, u1 - cu1))
+        wu2 = u2 - cu2
+        w2 = float(np.hypot(cm2, wu2))
+        return {
+            "disk_friction": disk_friction_work(md, rho2, u2, self.r2),
+            "leakage": leakage_work(
+                md, rho2, u2, r1, self.r2, self.r1t - self.r1h, self.b2,
+                cu1, cu2, self.blade_count, self.clearance, self.chord),
+            "recirculation": recirculation_work(
+                u2, w1, w2, cm2, wu2, 0.0,   # radial blades: cot(90) = 0
+                r1 * cu1, self.r2 * cu2, self.blade_count, self.chord),
+        }
+
+    def stage_efficiency(self, result: PerformanceResult,
+                         mdot: float = None) -> float:
+        """Total-to-total efficiency with the parasitic works debited from
+        the shaft side: ``eta = dh_ideal(PR) / (dh0_flow + sum dh_par)``.
+        Still excludes the vaneless-diffuser p0 loss (the measured 'stage'
+        plane sits at R/R2 = 2) — the recorded remaining gap."""
+        par = sum(self.parasitic_breakdown(result, mdot).values())
+        cp = self.gas.gamma * self.gas.R / (self.gas.gamma - 1.0)
+        kappa = (self.gas.gamma - 1.0) / self.gas.gamma
+        dh_id = cp * self.T0_in * (result.pressure_ratio ** kappa - 1.0)
+        dh0 = dh_id / result.efficiency
+        return float(dh_id / (dh0 + par))

@@ -112,3 +112,29 @@ from the §4.1 contract) and **disk-friction/windage** (machine-level parasitic
 `~ρ2 U2³ r2²/ṁ`, no `ṁ` in a per-streamtube model); recirculation/leakage likewise.
 Incidence + skin friction remain form-verified with both convention `[DECIDE]`s
 resolved to Aungier (2000). No bug found here (contrast LIEB59).
+
+## Parasitic (shaft-side) set — ADDED 2026-07-16 (gate #3)
+
+Extracted verbatim from **Aungier 2000 ch. 4** via the theory notebook →
+`closures/centrifugal/parasitic.py`, pinned by
+`tests/test_parasitic_reference.py`:
+
+- **Disk friction** (Eqs 4-21..4-25, 4-31): `dh_DF = C_M ρ r2² U2³/(2ṁ)`,
+  `Re = ρωr2²/μ`, `C_M` = 0.75 × the LARGEST of the four Daily-Nece regime
+  correlations (`2π/((s/r2)Re)`, `3.7(s/r2)^0.1/√Re`,
+  `0.08/((s/r2)^{1/6}Re^{1/4})`, `0.102(s/r2)^0.1/Re^{0.2}`).
+- **Leakage** (Eqs 4-17..4-19, 4-40): `Δp_CL = ṁ(r2C_U2−r1C_U1)/(z r̄ b̄ L)`;
+  `U_CL = 0.816√(2Δp_CL/ρ2)`; `ṁ_CL = ρ2 z s L U_CL`;
+  `dh_L = ṁ_CL U_CL U2/(2ṁ)`.
+- **Recirculation** (Eqs 4-41..4-43): `dh_RC = I_R U2²`,
+  `I_R = (D_eq/2−1)(W_U2/C_m2 − 2cot β2b) ≥ 0`, impeller
+  `D_eq = W_max/W2`, `W_max = (W1+W2+ΔW)/2`,
+  `ΔW = 2π d2 U2 I_B/(z L_B) = 4π(r2C_U2−r1C_U1)/(z L_B)`.
+
+Parasitic accounting (Aungier): added to SHAFT work, no pressure rise →
+post-solve scalar debits of stage efficiency at the case/facade level
+(machine-level `ṁ` is why they cannot be per-streamtube LossModel
+components — the recorded M7 deferral, now discharged). Recorded
+assumptions: disk backface gap `s/r2 = 0.02`, `μ = 1.81e-5`, blade length
+= the case friction-length chord. Aungier's internal clearance effect
+(the λ tip-distortion factor, Eq 5-36) is a separate recorded refinement.
