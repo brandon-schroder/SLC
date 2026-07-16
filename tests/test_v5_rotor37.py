@@ -197,6 +197,51 @@ def test_swan_offdesign_rule_runs_but_is_not_adopted(case):
     assert r.pressure_ratio == pytest.approx(2.165, abs=0.09)
 
 
+def test_capacity_gap_and_blockage_calibration():
+    # MEASURED capacity findings (2026-07-16, docs/references/ROTOR37.md):
+    # the rig chokes at 20.93 +- 0.3 kg/s (AGARD-AR-355). At B = 0 the
+    # Tier-2 spanwise solve chokes at ~21.65 (+3.5%; the meanline at
+    # ~22.25 — the spanwise tier captures half the gap by resolving the
+    # endwall streamtubes). A uniform B = 0.033 lands the Tier-2 choke
+    # INSIDE the measured band — pinned here — but costs the mid-line PR
+    # ~7% (defaults therefore stay B = 0; the residual deficit lives at
+    # the unmodelled blade-passage throat, the recorded model item).
+    from slcflow.machine import FidelityConfig
+    from slcflow.verification.v5_rotor37 import Rotor37
+    free = Rotor37(offdesign_loss="aungier")
+    r = free.evaluate(n_sl=5, fidelity=FidelityConfig.tier2(), mdot=21.8)
+    assert not r.converged                     # B=0 chokes by ~21.8
+    cal = Rotor37(offdesign_loss="aungier", blockage=0.033)
+    r_ok = cal.evaluate(n_sl=5, fidelity=FidelityConfig.tier2(), mdot=21.0)
+    r_ch = cal.evaluate(n_sl=5, fidelity=FidelityConfig.tier2(), mdot=21.2)
+    assert r_ok.converged                      # inside the AGARD band
+    assert not r_ch.converged
+    # The documented cost: mid-line PR reads low with capacity calibrated.
+    r_mid = cal.evaluate(n_sl=5, fidelity=FidelityConfig.tier2())
+    assert r_mid.converged
+    assert r_mid.pressure_ratio == pytest.approx(1.916, abs=0.09)
+
+
+def test_agard_offdesign_loss_options_measured_not_adopted(case):
+    # Both AGARD Eq. 3.3 loss variants solve end-to-end (the opt-in paths
+    # work) and the measured reasons for non-adoption hold: the FULL
+    # variant collapses the stall-side efficiency (0.776 vs measured
+    # 0.852 at 19.60 kg/s), the CHOKE-ONLY hybrid is inert at this
+    # rotor's incidences (same PR as Aungier to 1%). If either changes,
+    # re-measure adoption (docs/references/AGARD745.md).
+    from slcflow.verification.v5_rotor37 import Rotor37
+    full = Rotor37(offdesign_loss="cetin_agard745",
+                   blockage=0.055).evaluate(n_sl=1, mdot=19.60)
+    assert full.converged and full.efficiency < 0.82
+    base = Rotor37(offdesign_loss="aungier",
+                   blockage=0.055).evaluate(n_sl=1)
+    hyb = Rotor37(offdesign_loss="cetin_agard745_choke",
+                  blockage=0.055).evaluate(n_sl=1)
+    assert hyb.converged
+    assert hyb.pressure_ratio == pytest.approx(base.pressure_ratio,
+                                               rel=0.01)
+
+
 def test_design_intent_record_matches_report(case):
     # Table I anchors used by the docs (guards the transcription record).
     assert DESIGN["rotor_pr"] == 2.106

@@ -55,8 +55,8 @@ from dataclasses import dataclass, field
 import numpy as np  # verification layer: case definitions  # ad6: allow
 from scipy.interpolate import PchipInterpolator
 
-from ..closures.axial_compressor import LIEBLEIN_NACA65
 from ..closures.axial_compressor.lieblein import LieblienSwirl
+from ..closures.axial_compressor.loss import LieblienLoss
 from ..fluid.perfectgas import PerfectGas
 from ..geometry import FlowPath, StationDef, StationType, WallCurve
 from ..geometry.bladerow import ParamRowGeometry
@@ -159,6 +159,27 @@ class Rotor37:
     # offdesign_rule="swan_agard745".
     transonic_correction: str = "cetin_agard745"
     offdesign_rule: str = "aungier"
+    # Off-design LOSS + capacity model — MEASURED 2026-07-16, defaults kept
+    # parameter-free (docs/references/ROTOR37.md "capacity" note):
+    #  * offdesign_loss: the AGARD-R-745 Eq 3.3 parabola was measured in
+    #    both variants. FULL: the stall-side line over-penalizes when fed
+    #    the meanline's incidence (eta 0.776 vs measured 0.852 at
+    #    19.60 kg/s) -> not adopted. CHOKE-ONLY hybrid: INERT here — with
+    #    capacity calibrated the rotor (like the rig) never runs below
+    #    reference incidence; its choke-side PR collapse is the vertical
+    #    characteristic (a back-pressure-mode comparison), not a loss
+    #    bucket -> not adopted.
+    #  * blockage: B = 0 chokes the meanline at ~22.25 kg/s (+6.5% vs the
+    #    AGARD measured 20.93 +- 0.3) and Tier 2 at ~21.65 (+3.5% — the
+    #    spanwise tier captures half the gap by resolving endwall
+    #    streamtubes). A uniform B = 0.033 lands the TIER-2 choke inside
+    #    the measured band but costs the mid-line PR ~7% (four of five
+    #    measured points degrade): the capacity deficit is NOT uniform
+    #    blockage — it lives at the unmodelled blade-passage THROAT
+    #    (a compressor throat/capacity station is the recorded model
+    #    item). Both knobs stay available; tests pin the calibration.
+    offdesign_loss: str = "aungier"
+    blockage: float = 0.0
     T0_in: float = 288.15        # K   (report standard-day: 288.2)
     p0_in: float = 101325.0      # Pa  (report: 10.13 N/cm^2)
     tip_clearance_m: float = 4.0e-4   # [VERIFY] AGARD-AR-355 blind-test value
@@ -233,11 +254,14 @@ class Rotor37:
         h0 = cp * self.T0_in
         swirl = LieblienSwirl(transonic_correction=self.transonic_correction,
                               offdesign_rule=self.offdesign_rule)
+        loss = LieblienLoss(offdesign_loss=self.offdesign_loss,
+                            blade_family="mca")
         row = RowSpec(row_id="r37", omega=self.omega,
-                      swirl=swirl, loss=LIEBLEIN_NACA65.loss,
+                      swirl=swirl, loss=loss,
                       blade_count=36, geometry=self._geometry())
         return Machine(self._flowpath(), self.gas,
-                       InletCondition(h0=h0, s=0.0, rvt=0.0), rows=[row])
+                       InletCondition(h0=h0, s=0.0, rvt=0.0), rows=[row],
+                       blockage=self.blockage)
 
     def evaluate(self, n_sl: int = 1, fidelity: FidelityConfig = None,
                  mdot: float = None) -> PerformanceResult:

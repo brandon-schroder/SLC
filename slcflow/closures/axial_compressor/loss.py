@@ -61,7 +61,8 @@ from ..conversions import delta_s_compressor_omega_bar, relative_stagnation
 from ..interfaces import LossBreakdown, RowFlowView, RowView
 from ..smoothmath import (blend, blend_between, smooth_min, soft_clip,
                           softplus)
-from .lieblein import reference_deviation, reference_incidence
+from .lieblein import (equivalent_diffusion, reference_deviation,
+                       reference_incidence)
 
 __all__ = ["equivalent_diffusion", "wake_momentum_thickness",
            "profile_loss_coefficient", "blade_loading_coefficient",
@@ -128,13 +129,44 @@ _DEN_FLOOR, _DEN_FW = 0.05, 0.02   # inlet dynamic-head denominator floor (AD-10
 _MSH_CEIL, _MSH_VW = 1.7, 0.15     # validity fade far supersonic [VERIFY]
 
 
-def equivalent_diffusion(w1, w2, beta1_rad, beta2_rad, sigma, *, xp=None):
-    """Lieblein equivalent diffusion ratio ``D_eq`` (cascade frame,
-    positive angles; [VERIFY coefficients])."""
+# AGARD-R-745 (Cetin et al. 1987) Table 1: transonic off-design loss
+# parabola curvature c_m = A*M1 + B [1/deg^2] per blade family and side
+# (Eq 3.3: omega = omega* + c_m (i - i*)^2; choke side i < i*, stall side
+# i > i*; docs/references/AGARD745.md). The MCA choke-side line is ~5x the
+# stall side at M1 ~ 1.4 -- the measured near-choke loss blow-up.
+_CETIN_CM = {
+    "mca": {"choke": (0.02845, -0.01741), "stall": (0.00363, -0.00065)},
+    "dca": {"choke": (0.05336, -0.02937), "stall": (0.00500, -0.00075)},
+}
+_CM_FLOOR, _CM_W = 1.0e-4, 5.0e-4   # lines go negative below M1 ~ 0.6
+_CETIN_M1_HI, _CETIN_M1_W = 1.55, 0.10   # AGARD data range upper edge
+_CETIN_DI_W = 0.5                   # side-blend width [deg]
+
+
+def cetin_offdesign_loss(i_deg, i_ref_deg, m1, family="mca",
+                         choke_only=False, *, xp=None):
+    """AGARD-R-745 Eq. 3.3 transonic off-design profile-loss INCREMENT
+    (section 4.4): ``c_m(M1, side) * (i - i*)^2`` with the Table-1 linear
+    Mach laws per blade family, C1 side-blended across ``i = i*`` (the
+    increment vanishes to second order there, so the blend is cosmetic
+    smoothing of ``c_m`` only), softplus-floored curvature (the published
+    lines go negative below M1 ~ 0.6 — the caller blends to the subsonic
+    Aungier bucket there anyway), validity ending at the AGARD data range
+    (M1 ~ 1.5). ``choke_only`` (config constant) zeroes the stall-side
+    contribution — the caller then keeps the Aungier bucket on that side
+    (the measured Rotor 37 hybrid; see LieblienLoss docstring). Returns
+    ``(delta_omega_bar, validity)``.
+    """
     xp = get_xp(xp)
-    turning = xp.tan(beta1_rad) - xp.tan(beta2_rad)
-    return (w1 / w2) * (1.12 + 0.61 * xp.cos(beta1_rad) ** 2 / sigma
-                        * turning)
+    a_c, b_c = _CETIN_CM[family]["choke"]
+    a_s, b_s = _CETIN_CM[family]["stall"]
+    cm_c = _CM_FLOOR + softplus(a_c * m1 + b_c - _CM_FLOOR, _CM_W, xp=xp)
+    cm_s = _CM_FLOOR + softplus(a_s * m1 + b_s - _CM_FLOOR, _CM_W, xp=xp)
+    di = i_deg - i_ref_deg
+    side = blend(di, 0.0, _CETIN_DI_W, xp=xp)
+    cm = (1.0 - side) * cm_c + (0.0 if choke_only else 1.0) * side * cm_s
+    v = 1.0 - blend(m1, _CETIN_M1_HI, _CETIN_M1_W, xp=xp)
+    return cm * di * di, v
 
 
 def wake_momentum_thickness(d_eq, *, xp=None):
@@ -353,10 +385,34 @@ class LieblienLoss:
     zero-clearance cases see only the secondary + annulus endwall loss.
 
     Requires ``row.geometry`` (section 4.1 contract) and the view's lagged
-    TE fields."""
+    TE fields.
+
+    ``offdesign_loss`` selects the off-design profile-loss mechanism:
+    ``"aungier"`` (default: the multiplicative xi-bucket with physical
+    stall/choke ranges) or ``"cetin_agard745"``
+    (:func:`cetin_offdesign_loss`: the AGARD-R-745 Eq. 3.3 additive
+    Mach-dependent parabola for MCA/DCA transonic rows, C1-blended with
+    the Aungier bucket across the M1 = 0.6 onset — below it the rule
+    degenerates to Aungier exactly). ``blade_family`` ("mca"/"dca")
+    selects the Table-1 curvature lines and is only consumed by the AGARD
+    option. Both are geometry-constant config (ARCH-4.2)."""
 
     k_sh: float = 1.0
     aspect_ratio: float = 2.5
+    offdesign_loss: str = "aungier"
+    blade_family: str = "mca"
+
+    def __post_init__(self):
+        from ...errors import ConfigError
+        if self.offdesign_loss not in ("aungier", "cetin_agard745",
+                                       "cetin_agard745_choke"):
+            raise ConfigError(       # config boundary (AD-10)
+                f"unknown offdesign_loss {self.offdesign_loss!r}; expected "
+                f"'aungier', 'cetin_agard745' or 'cetin_agard745_choke'")
+        if self.blade_family not in _CETIN_CM:
+            raise ConfigError(
+                f"unknown blade_family {self.blade_family!r}; expected "
+                f"one of {sorted(_CETIN_CM)}")
 
     def evaluate(self, row: RowView, flow: RowFlowView) -> LossBreakdown:
         xp = get_xp(None)
@@ -396,7 +452,29 @@ class LieblienLoss:
         # ranges from the reference inlet flow angle, replacing the old fixed
         # 10-deg width (section 4.3; docs/references/LIEB59.md).
         r_s, r_c = stall_choke_ranges(camber, b1_blade + i_ref, xp=xp)
-        omega_profile = omega_min * off_design_bucket(i, i_ref, r_s, r_c, xp=xp)
+        bucket = off_design_bucket(i, i_ref, r_s, r_c, xp=xp)
+        omega_profile = omega_min * bucket
+        if self.offdesign_loss != "aungier":
+            # AGARD-R-745 Eq. 3.3 additive transonic parabola, C1-blended
+            # with the subsonic Aungier bucket across the stated M1 = 0.6
+            # onset (blend on the flow Mach — AD-6, never a branch). The
+            # "_choke" variant keeps the Aungier bucket on the stall side
+            # and applies the AGARD line on the choke side only (the
+            # measured Rotor 37 hybrid, class docstring).
+            choke_only = self.offdesign_loss == "cetin_agard745_choke"
+            m1_off = (w1 / flow.a)
+            inc_cetin, v_ct = cetin_offdesign_loss(
+                i, i_ref, m1_off, self.blade_family, choke_only, xp=xp)
+            b_m = blend(m1_off, 0.6, 0.05, xp=xp)
+            if choke_only:
+                stall_side = blend(i - i_ref, 0.0, _CETIN_DI_W, xp=xp)
+                w_aungier = (1.0 - b_m) + b_m * stall_side
+            else:
+                w_aungier = 1.0 - b_m
+            omega_profile = (omega_min
+                             + w_aungier * omega_min * (bucket - 1.0)
+                             + b_m * inc_cetin)
+            v_i = v_i * (1.0 - b_m * (1.0 - v_ct))
         # Howell endwall (secondary + annulus) + Lakshminarayana tip-clearance
         # loss (section 4.4; docs/references/HOWELL.md). Evaluated at the
         # reference (design) loading and ADDED to the bucketed profile loss --

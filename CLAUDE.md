@@ -797,9 +797,33 @@ These are not suggestions; violating them is a bug even if tests pass.
   Mach bracket at M1≈1.4 cutting deviation) and does not steepen the line;
   the measured collapse is loss/choking physics (the rig is choked at
   20.93 kg/s where the meanline still has capacity margin). Finding pinned
-  (`test_swan_offdesign_rule_runs_but_is_not_adopted`); the promising
-  speedline levers are now the off-design/near-choke LOSS side + a
-  capacity/blockage model.
+  (`test_swan_offdesign_rule_runs_but_is_not_adopted`). **The remaining
+  two speedline hypotheses were then also implemented and dispositioned
+  by measurement (same day):** (a) the AGARD Eq. 3.3 Mach-dependent
+  off-design loss parabola (`loss.cetin_offdesign_loss`,
+  `LieblienLoss(offdesign_loss="cetin_agard745"|"cetin_agard745_choke",
+  blade_family="mca"|"dca")`, C¹ M1-blend at the 0.6 onset,
+  softplus-floored Table-1 curvature lines, choke-only hybrid variant) —
+  NOT adopted: the full variant's stall-side line collapses low-flow η
+  (0.776 vs measured 0.852 at 19.60 kg/s) and the choke-only hybrid is
+  INERT (with capacity calibrated the rotor, like the rig, never runs
+  below reference incidence; the measured choke-side PR collapse is the
+  VERTICAL CHARACTERISTIC — a BackPressureSpec comparison, not a loss
+  bucket); (b) a uniform-blockage capacity model via the existing
+  `Machine` blockage seam (`Rotor37(blockage=...)`) calibrated to the
+  AGARD-AR-355 measured choke flow 20.93 ± 0.3 kg/s — B=0 chokes the
+  meanline +6.5% high and Tier-2 +3.5% (the spanwise tier resolves
+  endwall streamtubes, capturing half the gap); **B = 0.033 lands the
+  Tier-2 choke inside the measured band but costs the mid-line PR ~7%
+  → the capacity deficit is NOT uniform blockage, it lives at the
+  unmodelled blade-passage THROAT** (a compressor throat/capacity
+  station is the recorded model item). Case defaults stay parameter-free
+  (B=0, Aungier bucket) so the Çetin-corrected pins stand; the
+  calibration + non-adoption findings are pinned
+  (`test_capacity_gap_and_blockage_calibration`,
+  `test_agard_offdesign_loss_options_measured_not_adopted`). AGARD-AR-355
+  also grounds the tip clearance ≈ 0.41 mm (the case's 0.4 mm assumption
+  is consistent — `[VERIFY]` softened).
 
 ## Commands
 

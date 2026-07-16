@@ -128,6 +128,68 @@ def test_unknown_offdesign_rule_raises_at_construction():
         LieblienSwirl(offdesign_rule="swan")
 
 
+def test_cetin_offdesign_loss_table1_coefficients():
+    # AGARD-R-745 Table 1 (Eq. 3.3): c_m = A*M1 + B per family and side,
+    # deep inside the floors so the raw lines show through.
+    from slcflow.closures.axial_compressor.loss import cetin_offdesign_loss
+    di = 3.0
+    for family, side_i, (a, b) in (
+            ("mca", -di, (0.02845, -0.01741)),   # choke side
+            ("mca", +di, (0.00363, -0.00065)),   # stall side
+            ("dca", -di, (0.05336, -0.02937)),
+            ("dca", +di, (0.00500, -0.00075))):
+        m1 = 1.3
+        got, v = cetin_offdesign_loss(side_i, 0.0, m1, family)
+        assert float(got) == pytest.approx((a * m1 + b) * di * di, rel=0.02)
+        assert float(v) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_cetin_offdesign_loss_choke_side_dominates_transonic():
+    # The physics the correlation encodes: at M1 ~ 1.4 the MCA choke-side
+    # curvature is ~5x the stall side (section 4.4 / AGARD745.md).
+    from slcflow.closures.axial_compressor.loss import cetin_offdesign_loss
+    ch, _ = cetin_offdesign_loss(-2.0, 0.0, 1.4, "mca")
+    st, _ = cetin_offdesign_loss(+2.0, 0.0, 1.4, "mca")
+    assert float(ch) > 4.0 * float(st)
+
+
+def test_cetin_offdesign_loss_choke_only_zeroes_stall_side():
+    # The measured-hybrid switch: choke_only keeps the choke-side line and
+    # returns ~0 on the stall side (the caller keeps Aungier there).
+    from slcflow.closures.axial_compressor.loss import cetin_offdesign_loss
+    st_full, _ = cetin_offdesign_loss(+3.0, 0.0, 1.3, "mca")
+    st_choke, _ = cetin_offdesign_loss(+3.0, 0.0, 1.3, "mca", True)
+    ch_full, _ = cetin_offdesign_loss(-3.0, 0.0, 1.3, "mca")
+    ch_choke, _ = cetin_offdesign_loss(-3.0, 0.0, 1.3, "mca", True)
+    assert float(st_choke) < 0.05 * float(st_full)
+    assert float(ch_choke) == pytest.approx(float(ch_full), rel=1e-6)
+
+
+def test_cetin_offdesign_loss_floored_at_low_mach_and_c1():
+    # The published lines go negative below M1 ~ 0.6: the curvature is
+    # softplus-floored (never a negative loss increment), and the
+    # increment is C1 in both M1 and incidence (section 7.3).
+    from slcflow.closures.axial_compressor.loss import cetin_offdesign_loss
+    lo, _ = cetin_offdesign_loss(-3.0, 0.0, 0.3, "mca")
+    assert 0.0 <= float(lo) < 0.01
+    _assert_c1_continuous(
+        lambda m: np.asarray(cetin_offdesign_loss(-2.5, 0.0, m, "mca")[0]),
+        0.2, 1.6)
+    _assert_c1_continuous(
+        lambda i: np.asarray(cetin_offdesign_loss(i, 0.0, 1.3, "mca")[0]),
+        -6.0, 6.0)
+
+
+def test_unknown_offdesign_loss_and_family_raise_at_construction():
+    from slcflow.closures.axial_compressor.loss import LieblienLoss
+    with pytest.raises(ConfigError):
+        LieblienLoss(offdesign_loss="cetin")
+    with pytest.raises(ConfigError):
+        LieblienLoss(blade_family="naca65")
+    # Default instance stays the Aungier bucket (behavior preservation).
+    assert LieblienLoss().offdesign_loss == "aungier"
+
+
 def test_default_swirl_is_uncorrected():
     # Behavior preservation: the shipped LIEBLEIN_NACA65 set stays the
     # SP-36 NACA-65 pedigree (correction off, Aungier slope, by default).

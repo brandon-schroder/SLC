@@ -69,12 +69,50 @@ cases that genuinely traverse large incidence swings; the Rotor 37 case
 keeps `offdesign_rule="aungier"` with the finding pinned
 (`test_swan_offdesign_rule_runs_but_is_not_adopted`).
 
+## Eq. 3.3 off-design loss — implemented, measured, NOT default-adopted (2026-07-16)
+
+Extracted verbatim (Table 1): ω̄_T = ω̄*_T + c_m(i−i*)² with linear Mach
+laws per family/side —
+
+    MCA: choke (i<i*): c_m = 0.02845·M1 − 0.01741;  stall: 0.00363·M1 − 0.00065
+    DCA: choke:        c_m = 0.05336·M1 − 0.02937;  stall: 0.00500·M1 − 0.00075
+
+(valid M1 ≥ 0.5, 1970s MCA/DCA rotors; stall/choke = 2×min-loss at
+i = i* ± √(ω̄*/c_m), Eq. 3.4. The report's min-loss recommendations —
+Koch-Smith + LE-bluntness shock + Jansen-Moffatt Mach factor — are
+recorded but NOT stacked on the Aungier §6.7 shock term already carried.)
+
+Implemented as `loss.cetin_offdesign_loss` + `LieblienLoss(offdesign_loss=
+"cetin_agard745" | "cetin_agard745_choke", blade_family="mca"|"dca")`:
+C¹ M1-blend to the Aungier bucket at the 0.6 onset, softplus-floored
+curvature, validity to M1 ≈ 1.5; the `_choke` variant applies the choke-side
+line only and keeps Aungier on the stall side. Pinned in
+`tests/test_cetin_correction.py`.
+
+**Measured on Rotor 37 (with capacity calibrated): both variants
+non-adopted.** The FULL parabola's stall-side line collapses the low-flow
+efficiency (0.776 vs measured 0.852 at 19.60 kg/s — it over-penalizes the
+meanline's incidence excursions). The CHOKE-ONLY hybrid is **inert**: with
+capacity calibrated, this rotor (like the rig, whose measured incidence
+stays positive at choke) never runs below reference incidence — its
+choke-side PR collapse is the **vertical characteristic** (a
+back-pressure-mode comparison where mdot is degenerate), not an off-design
+loss bucket. Pinned: `test_agard_offdesign_loss_options_measured_not_adopted`.
+
+## Capacity finding (same pass — see ROTOR37.md)
+
+Rig choke 20.93 ± 0.3 kg/s (AGARD-AR-355). B=0: meanline chokes ~22.25
+(+6.5%), Tier-2 ~21.65 (+3.5% — spanwise endwall streamtubes capture half
+the gap). Uniform B = 0.033 lands the Tier-2 choke in the measured band but
+costs the mid-line PR ~7% (4 of 5 measured points degrade) → **the capacity
+deficit is not uniform blockage; it lives at the unmodelled blade-passage
+THROAT** (a compressor throat/capacity station is the recorded model item).
+Defaults stay parameter-free; the calibration is pinned as a test.
+
 ## Recorded, not adopted (deferred)
 
 - **Crouse m-factor** (an alternative design-deviation route; Eq. 3.5
   chosen as the direct, validated correction).
-- The AGARD loss-correlation half (off-design loss buckets for transonic
-  rows) — the Lieblein/Aungier ξ-bucket + shock loss currently carry this;
-  after the Swan finding, this loss half (with near-choke loss rise) is
-  the more promising speedline lever, together with a capacity/blockage
-  model (the rig chokes where the meanline still passes flow).
+- **Koch-Smith min-loss + LE-bluntness shock + Jansen-Moffatt** (would
+  double-count the Aungier §6.7 shock term; revisit only with a min-loss
+  level discrepancy in hand).

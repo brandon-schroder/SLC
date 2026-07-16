@@ -84,9 +84,32 @@ correction.
 > Çetin AGARD-R-745 Eq. 3.5 polynomial, applied as published (no local
 > constant), takes this to **RMS 1.2°, mean ~0**; the Rotor 37 case now
 > defaults it ON. End-to-end: **Tier-2 PR 2.051 vs measured 2.056
-> (+0.2%)**, Tier-1 2.135 (+3.8%), validity 0 → ~0.8 at Tier 1. Remaining
-> gaps: the choke-side speedline collapse (Swan Eq. 70 = recorded lever)
-> and the blockage schedule.
+> (+0.2%)**, Tier-1 2.135 (+3.8%), validity 0 → ~0.8 at Tier 1.
+
+## Capacity / near-choke findings (2026-07-16, second AGARD pass)
+
+Grounded targets: rig **choke flow 20.93 ± 0.3 kg/s**, tip clearance
+implied ≈ 0.41 mm (AGARD-AR-355 via the notebook — the case's 0.4 mm
+assumption is consistent; no single blockage number exists, only inlet
+profiles).
+
+- **Capacity gap measured:** B=0 chokes the meanline at ~22.25 kg/s
+  (+6.5%) and Tier-2 at ~21.65 (+3.5% — the spanwise tier resolves the
+  endwall streamtubes and captures half the gap). A uniform **B = 0.033
+  lands the Tier-2 choke inside the measured band** (pinned) but costs
+  the mid-line PR ~7% (4 of 5 points degrade) → the deficit is NOT
+  uniform blockage; it lives at the unmodelled blade-passage **throat**
+  (a compressor throat/capacity station = the recorded model item).
+  Case defaults stay parameter-free (B=0).
+- **AGARD Eq. 3.3 off-design loss measured in both variants, not
+  adopted:** the full parabola collapses stall-side η (0.776 vs measured
+  0.852 at 19.60); the choke-only hybrid is inert (this rotor, like the
+  rig, never runs below reference incidence — the measured choke-side PR
+  collapse is the **vertical characteristic**, i.e. a back-pressure-mode
+  comparison, not a loss bucket). Swan Eq. 70 likewise measured inert →
+  the three speedline hypotheses are now all dispositioned by
+  measurement; the remaining levers are the throat/capacity station and
+  a `BackPressureSpec` comparison for the vertical-characteristic points.
 
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation
