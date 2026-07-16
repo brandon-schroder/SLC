@@ -101,6 +101,13 @@ profiles).
   uniform blockage; it lives at the unmodelled blade-passage **throat**
   (a compressor throat/capacity station = the recorded model item).
   Case defaults stay parameter-free (B=0).
+- **Row-throat check landed (2026-07-16, `test_throat_capacity.py`):**
+  with a gauging-estimate throat `o = s·cos(KIC)` the rotor-relative
+  throat capacity computes ~24.6 kg/s — ABOVE the ~22.25 annulus limit,
+  so the internal throat does not bind: a supersonic-inlet rotor chokes
+  at its inlet swallowing limit. The check stays on (inert here; it is
+  the binding constraint on the TN D-6967 turbine, where it lands within
+  ~1% of the rig's choke).
 - **AGARD Eq. 3.3 off-design loss measured in both variants, not
   adopted:** the full parabola collapses stall-side η (0.776 vs measured
   0.852 at 19.60); the choke-only hybrid is inert (this rotor, like the

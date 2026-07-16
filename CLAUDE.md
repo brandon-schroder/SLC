@@ -825,6 +825,32 @@ These are not suggestions; violating them is a bug even if tests pass.
   also grounds the tip clearance ≈ 0.41 mm (the case's 0.4 mm assumption
   is consistent — `[VERIFY]` softened).
 
+- **Row-throat capacity check (2026-07-16, §6.6 `c_row` implemented).** The
+  "compressor throat/capacity station" item, landed as the manual's
+  anticipated row-throat margin: `drivers/classical.py
+  row_throat_capacity` — 1-D blade-passage sonic capacity
+  `cd·Z·Σρ*a*·o·dq` on the mid-passage q-o in the RELATIVE frame (B.1
+  rothalpy at r_th=(r_LE+r_TE)/2), applied POST-SOLVE (solved-state-check
+  pattern) to every row whose §4.1 geometry provides a throat; converged
+  solutions with `mdot > capacity` are declared CHOKE_LIMITED with the
+  capacity in the reason. `RowSpec.throat_cd` (default 1.0) folds
+  passage-BL blockage. **Measured:** TN D-6967 — per-row capacities
+  s1 2.19 / r1 2.06 / s2 2.14 / r2 2.20 kg/s eq; machine choke =
+  min(annulus ~2.02, rotor-1 throat) ≈ 2.02 vs the rig's measured
+  2.03–2.05 (**within ~1% at cd=1**), which RE-DIAGNOSES the −17%
+  matched-mdot PR gap as NEAR-CHOKE SENSITIVITY (both rig and model sit
+  1–2% from choke at 2.004 kg/s where PR-vs-mdot is near-vertical; the
+  right frame there is matched-PR/BackPressureSpec — recorded, not run).
+  Rotor 37 — with a gauging-estimate throat `o = s·cos(KIC)` the
+  rotor-relative capacity is ~24.6 kg/s > the ~22.25 annulus limit: a
+  supersonic-inlet rotor chokes at its inlet swallowing limit, the check
+  is correctly inert, all case pins stand. Tests
+  (`test_throat_capacity.py`): closed-form analytic match, meanline
+  degenerate span, rothalpy sign effects, cd linearity, both machine
+  integrations. Recorded extensions: flow-responding throat physics,
+  `c_row` into the §6.7 continuation margins + Newton driver, and a
+  first-stage-only TN D-6967 back-pressure comparison.
+
 ## Commands
 
 ```bash

@@ -15,12 +15,15 @@ MEASURED AGREEMENT (2026-07-16), pinned as recorded findings:
     height), so the internal-loss model is honestly ~1-1.5 pt pessimistic,
     inside K-O's own +/-1.5 pt stage-eta target.
   * PR_tt at matched flow reads 3.13 vs the rig's 3.765 (work 74.6 vs
-    84.9 J/g): a FLOW-CAPACITY gap, not a loss gap — the geometric
-    cos(alpha_design)*pitch throat with no blockage passes ~2.19 kg/s
-    choked vs the rig's ~2.03, so at 2.004 kg/s the code still has
-    capacity margin where the rig was nearly choked (its stator hubs run
-    near-sonic BY DESIGN). Effective-throat blockage / the deferred AM
-    low-speed exit-angle correction are the recorded calibration levers.
+    84.9 J/g). RE-DIAGNOSED 2026-07-16 with the section 6.6 row-throat
+    check (test_throat_capacity.py): the model's capacity is NOT high —
+    it chokes at ~2.02 kg/s (annulus) with rotor-1's throat at ~2.06,
+    within ~1% of the rig's measured 2.03-2.05 choke. Both rig and model
+    sit within 1-2% of their choke flows at 2.004, where the PR-vs-mdot
+    characteristic is near-vertical — so matched-MDOT comparison
+    amplifies a ~1% capacity difference into the -17% PR read. The right
+    comparison frame near choke is matched-PR (BackPressureSpec) or
+    matched choke margin; recorded, not yet run.
   * Tier-2 spanwise is OPEN: at the measured flow the free-vortex hub
     (near-sonic by design) chokes the hub streamtube (CHOKE_LIMITED), and
     reduced flows hit NUMERICAL_FAILURE — the 4-row spanwise closure-lag
@@ -68,9 +71,10 @@ def test_eta_tt_matches_measured_within_half_point(result):
 
 
 def test_pr_and_work_bounded_capacity_gap_recorded(result):
-    # At matched mdot the PR/work read LOW by the flow-capacity gap
-    # (module docstring): observed 1/PR = 3.13 vs rig 3.765. Bounded so a
-    # drift beyond the understood capacity effect (or a fixed capacity
-    # model silently changing the level) turns this red.
+    # At matched mdot the PR/work read LOW: observed 1/PR = 3.13 vs rig
+    # 3.765 — re-diagnosed (2026-07-16) as NEAR-CHOKE SENSITIVITY, not a
+    # capacity error (module docstring; the model's choke is within ~1%
+    # of the rig's, and PR-vs-mdot is near-vertical there). Bounded so a
+    # drift beyond the understood effect turns this red.
     inv_pr = 1.0 / result.pressure_ratio
     assert 2.8 < inv_pr < DESIGN_EQ["pr_tt"] * 1.02

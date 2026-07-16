@@ -137,6 +137,76 @@ class RowSpec:
     loss: LossModel
     blade_count: int = 0
     geometry: object = None     # BladeRowGeometry (section 4.1), M4-3
+    # Throat discharge coefficient for the section 6.6 row-throat capacity
+    # check (1.0 = ideal 1-D sonic capacity; a real passage's effective
+    # capacity is a few % lower — boundary layers inside the throat).
+    throat_cd: float = 1.0
+
+
+def row_throat_capacity(fluid, h0, s, rvt, omega, r_le, r_te, q_nodes,
+                        q_walls, throat_o, blade_count, cd=1.0):
+    """Blade-row THROAT sonic capacity [kg/s] (section 6.6; the
+    blade-passage sibling of the A.7 annulus ``qo_capacity``).
+
+    One-dimensional per-streamtube sonic capacity through the passage
+    throat: in the blade-relative frame (B.1 rothalpy re-referencing to
+    the throat radius, taken as the LE/TE mean per node — exact for axial
+    rows), the maximum mass flux is the sonic ``rho* a*`` on the local
+    isentrope, through the total throat area ``Z * o(y) * dq``:
+
+        I        = h0 - omega * rvt              (rothalpy, per node)
+        h0rel_th = I + 0.5 (omega r_th)^2
+        h*       = h0rel_th * 2/(gamma+1);  a* = a(h*, s); rho* = rho(h*, s)
+        capacity = cd * Z * sum_k rho*_k a*_k o_k dq_k
+
+    Assumptions (recorded): isentropic LE -> throat (the loss model's
+    entropy lands at the TE), throat spanwise line at the MID-PASSAGE q-o
+    (r_th = (r_le + r_te)/2 and the caller passes mid-passage q
+    coordinates/span — the real throat sits near the TE for accelerating
+    turbine rows and near the LE for supersonic compressor rows; the
+    mid-passage convention splits the difference and is exact for
+    parallel-annulus rows), no boundary-layer blockage inside the throat
+    (fold into ``cd``). Driver-facing operability logic like
+    ``qo_capacity`` (ARCH-4.3) — never on the residual path (AD-3).
+    """
+    h0 = np.atleast_1d(np.asarray(h0, dtype=float))
+    s = np.atleast_1d(np.asarray(s, dtype=float))
+    rvt = np.atleast_1d(np.asarray(rvt, dtype=float))
+    r_th = 0.5 * (np.atleast_1d(r_le) + np.atleast_1d(r_te))
+    o = np.atleast_1d(np.asarray(throat_o, dtype=float))
+    qn = np.atleast_1d(np.asarray(q_nodes, dtype=float))
+    q0, q1 = float(q_walls[0]), float(q_walls[1])
+    # Trapezoid ownership widths: node k owns [mid(k-1,k), mid(k,k+1)],
+    # the end nodes own out to the walls.
+    if qn.size == 1:
+        dq = np.array([q1 - q0])
+    else:
+        mids = 0.5 * (qn[1:] + qn[:-1])
+        edges = np.concatenate([[q0], mids, [q1]])
+        dq = np.diff(edges)
+    h0rel = h0 - omega * rvt + 0.5 * (omega * r_th) ** 2
+    h_star = h0rel * 2.0 / (fluid.gamma + 1.0)
+    a_star = np.asarray(fluid.a(h_star, s), dtype=float)
+    rho_star = np.asarray(fluid.rho(h_star, s), dtype=float)
+    return float(cd * blade_count * np.sum(rho_star * a_star * o * dq))
+
+
+def _throat_checked_rows(resolved_rows):
+    """Rows whose geometry provides a throat (config-time probe: the
+    section 4.1 ``throat`` slot raises ConfigError when unset — AD-10
+    keeps that at the boundary, so probe once here, never per iterate)."""
+    checked = []
+    for entry in resolved_rows:
+        spec = entry[0]
+        g = spec.geometry
+        if g is None:
+            continue
+        try:
+            g.throat(0.5)
+        except ConfigError:
+            continue
+        checked.append(entry)
+    return checked
 
 
 def _resolve_rows(topology: GridTopology, rows):
@@ -432,6 +502,7 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
         raise ConfigError("steps and rows are mutually exclusive: closure-fed"
                           " rows build their own transport steps")
     resolved_rows = _resolve_rows(topology, rows) if rows else []
+    throat_rows = _throat_checked_rows(resolved_rows)
     if not rows and steps is None and any(
             st.row_id is not None for st in topology.flowpath.stations):
         raise ConfigError("topology declares blade rows: provide RowSpecs "
@@ -688,6 +759,32 @@ def solve_classical(topology: GridTopology, fluid, fidelity: FidelityConfig,
                 and closure_norm < config.tol_closure):
             status = SolveStatus.CONVERGED
             break
+
+    # Section 6.6 row-throat capacity check (post-solve, on the SOLVED
+    # state — the solved-state-check precedent): a converged annulus
+    # solution passing more flow than some row's blade-passage throat can
+    # swallow is not an operating point of the real machine. Typed status,
+    # fields kept for diagnosis (AD-10).
+    if status is SolveStatus.CONVERGED and throat_rows and fields is not None:
+        for entry in throat_rows:
+            rspec, j_le, j_te = entry[0], entry[1], entry[2]
+            tr = asm.frozen.transported
+            cap = row_throat_capacity(
+                fluid, tr.h0[:, j_le], tr.s[:, j_le],
+                tr.rvt[:, j_le], rspec.omega,
+                fields.metrics.r[:, j_le], fields.metrics.r[:, j_te],
+                0.5 * (fields.q[:, j_le] + fields.q[:, j_te]),
+                (0.0, 0.5 * (topology.flowpath.qo_curves[j_le].length
+                             + topology.flowpath.qo_curves[j_te].length)),
+                rspec.geometry.throat(topology.psi), rspec.blade_count,
+                rspec.throat_cd)
+            if spec.mdot > cap:
+                status = SolveStatus.CHOKE_LIMITED
+                reason = (f"row {rspec.row_id!r} throat capacity "
+                          f"{cap:.4g} kg/s < mdot {spec.mdot} "
+                          f"(section 6.6 row-throat check, cd = "
+                          f"{rspec.throat_cd})")
+                break
 
     record = ConvergenceRecord(status=status, iterations=tuple(history),
                                reason=reason)

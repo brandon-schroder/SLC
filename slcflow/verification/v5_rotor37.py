@@ -237,14 +237,25 @@ class Rotor37:
 
     def _geometry(self) -> ParamRowGeometry:
         n = self.n_span_nodes
+        # Throat estimate for the section 6.6 row-throat capacity check:
+        # supersonic unique-incidence gauging o = s cos(KIC) at the LE
+        # radius (TP-1659 gives no throat table). MEASURED 2026-07-16:
+        # this throat does NOT bind (~27 kg/s in the rotor-relative frame
+        # vs the ~22 kg/s annulus limit) — a supersonic-inlet rotor chokes
+        # at its inlet swallowing limit, not the internal throat; the
+        # check is kept ON as the recorded (inert) documentation of that.
+        kic = _resample_hub_to_tip(_KIC_DEG, n) * _DEG
+        r_le = _resample_hub_to_tip(_RI_CM, n) / 100.0
+        throat = np.cos(kic) * (2.0 * np.pi * r_le / 36.0)
         return ParamRowGeometry(
             blade_count=36,
-            beta1=-_resample_hub_to_tip(_KIC_DEG, n) * _DEG,
+            beta1=-kic,
             beta2=-_resample_hub_to_tip(_KOC_DEG, n) * _DEG,
             chord_len=_resample_hub_to_tip(_CHORD_CM, n) / 100.0,
             solidity_val=_resample_hub_to_tip(_SOLIDITY, n),
             thickness=_resample_hub_to_tip(_TM_CM / _CHORD_CM, n),
             stagger_val=-_resample_hub_to_tip(_SETTING_DEG, n) * _DEG,
+            throat_val=throat,
             clearance=self.tip_clearance_m)
 
     def machine(self) -> Machine:
