@@ -893,6 +893,22 @@ These are not suggestions; violating them is a bug even if tests pass.
   Newton/backpressure/supersonic families green. Regression:
   `test_v6_tnd6967.py::test_backpressure_newton_stays_on_seed_branch`
   (station-7 repro, subsonic-everywhere + measured-work assertions).
+- **Rotor 37 matched-PR traversal (2026-07-16, the campaign's last
+  recorded comparison).** Descending `BackPressureSpec` continuation from
+  a near-choke seed converges down the vertical-characteristic side at
+  BOTH tiers (branch guard holding; Tier 2 rides to 22.0 kg/s, past the
+  classical patience-declared 21.65 — BP mode reaches closer to true
+  capacity than the §6.6 patience declaration). Model mdot at the
+  measured PRs (2.056/1.917/1.785; rig 20.74/20.83/20.93): Tier 1
+  ~21.3/22.0/22.5 (+2.7→+7.5%), Tier 2 ~20.9/21.5/21.9 (+0.9→+4.9%) —
+  **in the correct frame the entire choke-side disagreement is a
+  capacity/knee error** (the rig's unique-incidence knee spans 0.2 kg/s;
+  the annulus model rounds over ~1), not a PR/loss error. Pinned:
+  `test_v5_rotor37.py::test_matched_pr_traversal_down_the_vertical_characteristic`
+  (Tier-1 graded descent to PR 1.80, on-branch, mdot 22.4±0.4 recorded
+  gap). With this, every V5 speedline hypothesis and comparison frame is
+  dispositioned by measurement; the remaining physical levers are the
+  inlet-swallowing capacity level and knee sharpness.
 
 ## Commands
 

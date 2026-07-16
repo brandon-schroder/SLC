@@ -101,6 +101,20 @@ profiles).
   uniform blockage; it lives at the unmodelled blade-passage **throat**
   (a compressor throat/capacity station = the recorded model item).
   Case defaults stay parameter-free (B=0).
+- **Matched-PR (vertical-characteristic) comparison RUN (2026-07-16,
+  `test_matched_pr_traversal_down_the_vertical_characteristic`):**
+  descending `BackPressureSpec` traversal from a near-choke seed
+  CONVERGES down the steep side at both tiers (branch guard holding, no
+  spurious fixed points; Tier 2 even rides past the classical
+  patience-declared choke, 22.0 vs 21.65). Reading the model
+  characteristic at the measured PRs (2.056/1.917/1.785, where the rig
+  passes 20.74/20.83/20.93 kg/s): Tier 1 ~21.3/22.0/22.5 (+2.7→+7.5%),
+  Tier 2 ~20.9/21.5/21.9 (+0.9→+4.9%). **In the correct frame the whole
+  choke-side disagreement is a capacity/knee error, not a PR/loss
+  error** — the rig's unique-incidence knee is razor-sharp (0.2 kg/s
+  over that PR span) while the annulus model rounds over ~1 kg/s.
+  Levers unchanged: capacity level (inlet swallowing physics) + knee
+  sharpness; the speedline-shape story is now fully dispositioned.
 - **Row-throat check landed (2026-07-16, `test_throat_capacity.py`):**
   with a gauging-estimate throat `o = s·cos(KIC)` the rotor-relative
   throat capacity computes ~24.6 kg/s — ABOVE the ~22.25 annulus limit,

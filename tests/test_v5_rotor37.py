@@ -242,6 +242,66 @@ def test_agard_offdesign_loss_options_measured_not_adopted(case):
                                                rel=0.01)
 
 
+def test_matched_pr_traversal_down_the_vertical_characteristic(case):
+    # The matched-PR (BackPressureSpec) frame for the choke-side points
+    # (2026-07-16, docs/references/ROTOR37.md "matched-PR" note): descend
+    # p_exit from a near-choke seed and read the model's characteristic
+    # where the rig's measured PRs sit. MEASURED (B=0, Cetin-corrected):
+    #
+    #   Tier 1: at PR_tt 2.056/1.917/1.785 the model passes ~21.3/22.0/
+    #           22.5 kg/s vs measured 20.74/20.83/20.93 (+2.7 -> +7.5%)
+    #   Tier 2: ~20.9/21.5/21.9 (+0.9 -> +4.9%)
+    #
+    # i.e. in the correct frame the whole choke-side disagreement is a
+    # CAPACITY/KNEE error (the rig's unique-incidence knee is razor-sharp,
+    # 0.2 kg/s over that PR span; the annulus model rounds over ~1 kg/s) —
+    # NOT a PR/loss error. This test pins the Tier-1 capability + gap:
+    # the BP traversal must CONVERGE down the steep side (branch guard
+    # holding, no spurious fixed points) with the documented mdot level.
+    import numpy as np
+
+    from slcflow.assembly.pack import unpack
+    from slcflow.drivers.classical import ClassicalConfig, solve_classical
+    from slcflow.drivers.newton import NewtonConfig, solve_newton
+    from slcflow.grid.core import GridTopology
+    from slcflow.types import (BackPressureSpec, FidelityConfig,
+                               MassFlowSpec)
+
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=1)
+    inlet = m.inlet.fields(topo.psi)
+    fid = FidelityConfig.tier1()
+    st = topo.n_qo - 1
+    seed = solve_classical(topo, case.gas, fid, MassFlowSpec(21.5), inlet,
+                           rows=m.rows,
+                           config=ClassicalConfig(max_outer=800))
+    assert seed.converged
+    f, tr = seed.fields, seed.frozen.transported
+    vt0 = tr.rvt[0, st] / f.metrics.r[0, st]
+    h = tr.h0[0, st] - 0.5 * (f.vm[0, st] ** 2 + vt0 ** 2)
+    p_seed = float(case.gas.p(h, tr.s[0, st]))
+    prev = seed
+    # Graded descent (Newton is local; ~4% p_exit steps, each seeded from
+    # the previous point — the continuation discipline).
+    for fac in (0.96, 0.92, 0.88):      # down to PR_tt ~ 1.80
+        res = solve_newton(topo, case.gas, fid,
+                           BackPressureSpec(p_seed * fac, st), inlet,
+                           rows=m.rows, warm_start=prev,
+                           config=NewtonConfig(max_outer=800,
+                                               tol_closure=1e-6))
+        assert res.converged, fac
+        assert float(np.max(res.fields.mach_m)) < 1.0   # on-branch
+        prev = res
+    mdot = unpack(prev.x, topo.n_sl, topo.n_qo, backpressure=True)[2]
+    tr = prev.frozen.transported
+    pr = float(case.gas.p(tr.h0[0, -1], tr.s[0, -1])
+               / case.gas.p(tr.h0[0, 0], tr.s[0, 0]))
+    assert pr == pytest.approx(1.80, abs=0.06)
+    # The documented Tier-1 matched-PR gap: model ~22.4 vs rig 20.93
+    # at this depth (+7%) — capacity/knee, recorded not tuned.
+    assert mdot == pytest.approx(22.4, abs=0.4)
+
+
 def test_design_intent_record_matches_report(case):
     # Table I anchors used by the docs (guards the transcription record).
     assert DESIGN["rotor_pr"] == 2.106
