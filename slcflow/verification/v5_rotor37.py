@@ -37,13 +37,16 @@ gap):
     separately from the stage values.
 
 Status: this case exists to MEASURE agreement, not to assert it. The
-Lieblein NACA-65 correlation set is being applied far outside its pedigree
-(MCA transonic sections, DCA-era loading): the equivalent-diffusion factor
-at design loading sits near/above the SP-36 window ceiling, so closure
-validity is expected < 1 on the stall side; the Aungier section 6.7 shock
-loss and Howell endwall model carry the transonic/endwall physics. The
-pinned tests encode the MEASURED agreement bands of 2026-07 — see
-``tests/test_v5_rotor37.py`` for the numbers and their honest caveats.
+Lieblein NACA-65 correlation set is out of pedigree on MCA transonic
+sections — measured 2026-07-15 as a −3.6 deg mean deviation gap driving
+PR +12-16%. Since 2026-07-16 the case defaults the **Cetin AGARD-R-745
+Eq 3.5 transonic deviation correction** ON (the library-grounded
+correction for exactly this blade family, applied as published): per-span
+deviation RMS 3.8 -> 1.2 deg, Tier-2 PR lands on the measured value
+(2.051 vs 2.056), Tier-1 +3.8%. The choke-side speedline collapse remains
+un-modelled (Swan's M1-dependent off-design rule is the recorded next
+lever), and the blockage schedule stays open. The pinned tests encode the
+MEASURED agreement bands — see ``tests/test_v5_rotor37.py``.
 """
 from __future__ import annotations
 
@@ -53,6 +56,7 @@ import numpy as np  # verification layer: case definitions  # ad6: allow
 from scipy.interpolate import PchipInterpolator
 
 from ..closures.axial_compressor import LIEBLEIN_NACA65
+from ..closures.axial_compressor.lieblein import LieblienSwirl
 from ..fluid.perfectgas import PerfectGas
 from ..geometry import FlowPath, StationDef, StationType, WallCurve
 from ..geometry.bladerow import ParamRowGeometry
@@ -137,6 +141,12 @@ class Rotor37:
 
     mdot: float = 20.74          # kg/s — the measured peak-eta reading
     rpm: float = 17188.7
+    # Rotor 37's MCA transonic sections are exactly the AGARD-R-745 blade
+    # family; the Cetin Eq 3.5 design-deviation correction is ON by default
+    # (validated per-span vs MEASURED_BE_4182: RMS 3.8 -> 1.2 deg; see
+    # cetin_deviation_correction and docs/references/AGARD745.md). Set
+    # "none" to reproduce the uncorrected 2026-07-15 record.
+    transonic_correction: str = "cetin_agard745"
     T0_in: float = 288.15        # K   (report standard-day: 288.2)
     p0_in: float = 101325.0      # Pa  (report: 10.13 N/cm^2)
     tip_clearance_m: float = 4.0e-4   # [VERIFY] AGARD-AR-355 blind-test value
@@ -209,8 +219,9 @@ class Rotor37:
         # PerfectGas reference state is (288.15 K, 101325 Pa) with s=0 —
         # the report's standard-day inlet to within 0.02%.
         h0 = cp * self.T0_in
+        swirl = LieblienSwirl(transonic_correction=self.transonic_correction)
         row = RowSpec(row_id="r37", omega=self.omega,
-                      swirl=LIEBLEIN_NACA65.swirl, loss=LIEBLEIN_NACA65.loss,
+                      swirl=swirl, loss=LIEBLEIN_NACA65.loss,
                       blade_count=36, geometry=self._geometry())
         return Machine(self._flowpath(), self.gas,
                        InletCondition(h0=h0, s=0.0, rvt=0.0), rows=[row])

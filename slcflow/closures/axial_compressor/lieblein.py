@@ -40,7 +40,7 @@ from ..interfaces import RowFlowView, RowView, SwirlResult
 from ..smoothmath import blend, smooth_min, soft_clip, softplus
 
 __all__ = ["reference_incidence", "reference_deviation", "deviation_slope",
-           "LieblienSwirl", "CALIBRATED"]
+           "cetin_deviation_correction", "LieblienSwirl", "CALIBRATED"]
 
 # Calibrated input domain of the SP-36 charts (cascade frame, degrees):
 # (lo, hi, transition width) for the validity windows, plus the hard
@@ -50,6 +50,11 @@ CALIBRATED = {
     "beta1_deg": (0.0, 70.0, 2.0, 0.0),
     "sigma": (0.4, 2.0, 0.05, 0.1),
     "tc": (0.02, 0.12, 0.005, 0.005),
+    # Cetin (AGARD-R-745) Eq 3.5 input domain: the polynomial is monotone
+    # up to its vertex at delta_CAR = 7.59 deg and was fitted on 1970s
+    # MCA/DCA transonic-rotor data; below ~0.5 deg it returns negative
+    # deviation. Saturate into the monotone fitted branch.
+    "dev_cetin": (0.5, 7.5, 0.25, 0.5),
 }
 
 
@@ -113,6 +118,30 @@ def reference_deviation(beta1_deg, sigma, tc, camber_deg, *, xp=None):
     return k_td * d0_10 + m * camber_deg, v1 * v2 * v3
 
 
+def cetin_deviation_correction(dev_deg, *, xp=None):
+    """Transonic MCA/DCA design-deviation correction [deg] (section 4.3).
+
+    Cetin, Ucer, Hirsch & Serovy, AGARD-R-745 (1987) Eq. 3.5, verbatim
+    (docs/references/AGARD745.md):
+
+        delta*_cor = -1.099379 + 3.0186 delta* - 0.1988 delta*^2
+
+    fitted on 1970s-technology MCA/DCA transonic rotor blade-element data,
+    where classical subsonic rules "underestimate the deviation angle" (the
+    +3-4 deg gap measured on Rotor 37, ROTOR37.md). The input is the
+    subsonic-rule reference deviation (AGARD's baseline is Carter's rule;
+    applying it to the SP-36/Aungier reference is the recorded reading —
+    both are the subsonic-cascade minimum-loss family the report corrects,
+    and against the Rotor 37 measured blade elements the as-published
+    polynomial takes the error from RMS 3.8 deg to 1.2 deg with no local
+    tuning). Saturated into the monotone fitted branch (vertex 7.59 deg);
+    returns ``(dev_cor_deg, validity)``.
+    """
+    xp = get_xp(xp)
+    d, v = _saturate(dev_deg, "dev_cetin", xp=xp)
+    return -1.099379 + 3.0186 * d - 0.1988 * d * d, v
+
+
 def deviation_slope(beta1_deg, sigma, *, xp=None):
     """Off-design deviation slope ``(d delta / d i)`` at the reference
     point (Aungier's fit); dimensionless, applied as
@@ -137,9 +166,25 @@ class LieblienSwirl:
 
     Requires ``row.geometry`` implementing the section 4.1 contract and
     the view's ``r_te``/``vm_te`` fields (driver-provided, lagged).
+
+    ``transonic_correction`` selects an optional design-deviation
+    correction for out-of-pedigree blade families (geometry-constant
+    config, safe to branch on per ARCH-4.2): ``"none"`` (default,
+    behavior-preserving — the SP-36 NACA-65 pedigree) or
+    ``"cetin_agard745"`` (:func:`cetin_deviation_correction`, for MCA/DCA
+    transonic rotors; its validity multiplies the closure validity).
     """
 
     k_sh: float = 1.0    # blade shape factor; NACA-65 = 1.0 [VERIFY others]
+    transonic_correction: str = "none"
+
+    def __post_init__(self):
+        if self.transonic_correction not in ("none", "cetin_agard745"):
+            from ...errors import ConfigError
+            raise ConfigError(       # config boundary (AD-10)
+                f"unknown transonic_correction "
+                f"{self.transonic_correction!r}; expected 'none' or "
+                f"'cetin_agard745'")
 
     def exit_rvt(self, row: RowView, flow: RowFlowView) -> SwirlResult:
         xp = get_xp(None)
@@ -157,6 +202,9 @@ class LieblienSwirl:
         i = b1_flow - b1_blade            # incidence, cascade frame (4.3)
         i_ref, v_i = reference_incidence(b1_flow, sigma, tc, camber, xp=xp)
         d_ref, v_d = reference_deviation(b1_flow, sigma, tc, camber, xp=xp)
+        if self.transonic_correction == "cetin_agard745":
+            d_ref, v_c = cetin_deviation_correction(d_ref, xp=xp)
+            v_d = v_d * v_c
         slope = deviation_slope(b1_flow, sigma, xp=xp)
         dev = d_ref + slope * (i - i_ref)
 

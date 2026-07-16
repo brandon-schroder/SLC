@@ -759,6 +759,34 @@ These are not suggestions; violating them is a bug even if tests pass.
   Krain + Stage 38 + CC3 second points, TN D-6967 maps/first-stage config,
   mixed-flow V8 (still no open rig dataset).
 
+- **MCA/transonic deviation correction (2026-07-16, gate #2's first
+  data-validated calibration).** The Rotor 37 deviation gap is closed by a
+  **library-grounded published correction, not a local fit**: AGARD-R-745
+  (Çetin et al. 1987 — found IN the loss-models notebook) Eq. 3.5,
+  `δ*cor = −1.099379 + 3.0186·δ* − 0.1988·δ*²`, fitted on exactly this
+  blade family (1970s MCA/DCA transonic rotors, where Carter-family rules
+  "underestimate the deviation angle"). Implemented verbatim as
+  `lieblein.cetin_deviation_correction` — **opt-in**
+  (`LieblienSwirl(transonic_correction="cetin_agard745")`, default `"none"`
+  so the NACA-65 pedigree and every existing case are untouched),
+  C¹-saturated into the polynomial's monotone fitted branch (window
+  0.5–7.5°, vertex 7.59°) with compact-support validity, ConfigError on
+  unknown options at construction (AD-10). Applied to the SP-36/Aungier
+  reference deviation (recorded reading; AGARD's baseline is Carter — same
+  subsonic-minimum-loss family). **Measured, with zero locally fitted
+  constants**: Rotor 37 per-span deviation error RMS 3.8° → 1.2° (mean
+  −3.6° → ~0) vs `MEASURED_BE_4182`; end-to-end with the correction ON
+  (the Rotor 37 case's new default) **Tier-2 PR 2.051 vs measured 2.056
+  (+0.2%, was +12%)**, Tier-1 2.135 (+3.8%, was +16%), closure validity
+  0 → ~0.8 at Tier 1. The choke-side speedline collapse remains (recorded
+  next lever: Swan's Eq. 70 M1-dependent off-design deviation, extracted
+  in `AGARD745.md` but deferred — needs D_eq* reference plumbing), as does
+  the blockage schedule. Tests: `test_cetin_correction.py` (Eq. 3.5
+  coefficient pins, C¹ refinement check across the saturation knees,
+  validity compact support, config boundary, default-off preservation) +
+  re-pinned `test_v5_rotor37.py` (uncorrected-gap record kept alongside
+  the corrected pin).
+
 ## Commands
 
 ```bash

@@ -80,6 +80,14 @@ contamination). This quantifies, per span, the deviation gap behind the
 +7-point PR excess — the concrete target for an MCA/transonic deviation
 correction.
 
+> **CORRECTION LANDED (2026-07-16, [`AGARD745.md`](AGARD745.md)):** the
+> Çetin AGARD-R-745 Eq. 3.5 polynomial, applied as published (no local
+> constant), takes this to **RMS 1.2°, mean ~0**; the Rotor 37 case now
+> defaults it ON. End-to-end: **Tier-2 PR 2.051 vs measured 2.056
+> (+0.2%)**, Tier-1 2.135 (+3.8%), validity 0 → ~0.8 at Tier 1. Remaining
+> gaps: the choke-side speedline collapse (Swan Eq. 70 = recorded lever)
+> and the blockage schedule.
+
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation
 correction (the `MEASURED_BE_4182` deviation profile above is the target);
