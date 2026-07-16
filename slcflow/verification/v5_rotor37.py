@@ -59,7 +59,7 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["Rotor37", "MEASURED_100", "DESIGN"]
+__all__ = ["Rotor37", "MEASURED_100", "MEASURED_BE_4182", "DESIGN"]
 
 _DEG = np.pi / 180.0
 
@@ -96,6 +96,29 @@ MEASURED_100 = {
     "mdot": np.array([20.93, 20.83, 20.74, 20.43, 19.60]),
     "rotor_pr": np.array([1.785, 1.917, 2.056, 2.157, 2.196]),
     "rotor_eta": np.array([0.842, 0.862, 0.876, 0.867, 0.852]),
+}
+
+# --- Table V(c): measured rotor blade-element data, reading 4182 (100%
+# speed, the peak-eta point; transcribed 2026-07-16 from a page render).
+# RP 1..9 = 5..95 percent span FROM TIP (no 0/100 rows in Table V). The
+# measured DEV column is the direct calibration target for the Lieblein
+# deviation on MCA transonic sections (docs/references/ROTOR37.md).
+MEASURED_BE_4182 = {
+    "pct_span_from_tip": np.array([5., 10., 15., 30., 50., 70., 85., 90., 95.]),
+    "beta1_rel": np.array([69.1, 65.4, 64.5, 62.2, 59.8, 58.1, 57.2, 57.0,
+                           57.3]),
+    "beta2_rel": np.array([59.4, 56.9, 55.5, 51.3, 46.3, 39.5, 36.4, 34.0,
+                           30.7]),
+    "incidence_mean": np.array([7.3, 4.5, 4.4, 3.7, 3.2, 3.8, 4.5, 4.5, 5.0]),
+    "deviation": np.array([10.1, 8.5, 7.9, 7.0, 7.4, 7.2, 11.0, 11.2, 10.7]),
+    "rel_mach_in": np.array([1.448, 1.487, 1.477, 1.454, 1.403, 1.331,
+                             1.260, 1.234, 1.197]),
+    "eff": np.array([0.793, 0.773, 0.831, 0.856, 0.881, 0.902, 0.938,
+                     0.931, 0.936]),
+    "loss_tot": np.array([0.199, 0.213, 0.156, 0.137, 0.121, 0.108, 0.071,
+                          0.082, 0.082]),
+    "loss_prof": np.array([0.067, 0.087, 0.035, 0.032, 0.030, 0.028, 0.001,
+                           0.019, 0.026]),
 }
 
 

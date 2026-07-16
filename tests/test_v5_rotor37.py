@@ -97,6 +97,46 @@ def test_speedline_slope_sign_matches_measured(case):
     assert lo.pressure_ratio > hi.pressure_ratio
 
 
+def test_measured_deviation_gap_on_mca_sections(case):
+    # Table V(c) reading 4182: the MEASURED per-span deviation vs the
+    # Lieblein chain evaluated at the measured incidence and the
+    # transcribed blade-element geometry (section 4.3). MEASURED GAP
+    # (2026-07-16): the NACA-65 correlation UNDER-predicts deviation on
+    # Rotor 37's MCA transonic sections by mean -3.6 deg / RMS 3.8 deg
+    # (-1.6 at 70% span, worst -5.5 near the tip; endwall stations carry
+    # secondary/leakage contamination in the measured value). This is the
+    # quantified calibration target behind the +7-point PR excess. Pinned
+    # as a band: mean error in [-5, -1.5] deg and RMS < 5 -- an MCA/
+    # transonic deviation correction should shrink it toward zero and
+    # deliberately re-pin.
+    import numpy as np
+
+    from slcflow.closures.axial_compressor.lieblein import (
+        deviation_slope, reference_deviation, reference_incidence)
+    from slcflow.verification.v5_rotor37 import (_CHORD_CM, _KIC_DEG,
+                                                 _KOC_DEG, _PCT_SPAN,
+                                                 _SOLIDITY, _TM_CM,
+                                                 MEASURED_BE_4182 as BE)
+
+    geo_idx = [int(np.where(_PCT_SPAN == p)[0][0])
+               for p in BE["pct_span_from_tip"]]
+    errs = []
+    for k, gi in enumerate(geo_idx):
+        camber = _KIC_DEG[gi] - _KOC_DEG[gi]
+        b1f = float(BE["beta1_rel"][k])
+        i = b1f - _KIC_DEG[gi]
+        sol = _SOLIDITY[gi]
+        tc = _TM_CM[gi] / _CHORD_CM[gi]
+        i_ref, _ = reference_incidence(b1f, sol, tc, camber)
+        d_ref, _ = reference_deviation(b1f, sol, tc, camber)
+        dev = float(d_ref) + float(deviation_slope(b1f, sol)) \
+            * (i - float(i_ref))
+        errs.append(dev - float(BE["deviation"][k]))
+    e = np.asarray(errs)
+    assert -5.0 < float(e.mean()) < -1.5
+    assert float(np.sqrt(np.mean(e * e))) < 5.0
+
+
 def test_design_intent_record_matches_report(case):
     # Table I anchors used by the docs (guards the transcription record).
     assert DESIGN["rotor_pr"] == 2.106

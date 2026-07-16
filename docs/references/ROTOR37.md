@@ -60,8 +60,28 @@ peak-η point (20.74 kg/s; measured PR 2.056, η 0.876):
    shock/choking-dominated — outside the subsonic off-design bucket. Only
    the slope SIGN is pinned.
 
+## Measured blade-element data — Table V(c), reading 4182 (added 2026-07-16)
+
+The peak-η reading's full radial survey is transcribed into
+`MEASURED_BE_4182` (9 stations, 5–95% span from tip): measured relative
+flow angles, **deviation**, incidence, Mach, per-span efficiency and loss
+coefficients. Direct comparison of the coded Lieblein deviation chain at
+the measured incidence (pinned:
+`test_v5_rotor37.py::test_measured_deviation_gap_on_mca_sections`):
+
+| span % (from tip) | 5 | 10 | 15 | 30 | 50 | 70 | 85 | 90 | 95 |
+|---|---|---|---|---|---|---|---|---|---|
+| dev measured [°] | 10.1 | 8.5 | 7.9 | 7.0 | 7.4 | 7.2 | 11.0 | 11.2 | 10.7 |
+| dev predicted [°] | 4.6 | 4.1 | 4.1 | 4.3 | 4.8 | 5.6 | 6.6 | 7.0 | 7.6 |
+
+**Mean error −3.6°, RMS 3.8°** (best −1.6° at 70%, worst −5.5° near tip;
+the endwall stations' measured "deviation" carries secondary/tip-leakage
+contamination). This quantifies, per span, the deviation gap behind the
++7-point PR excess — the concrete target for an MCA/transonic deviation
+correction.
+
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation
-correction (Table V measured exit angles are the calibration target);
-extending the loss validity window / transonic loss level vs the measured η
-line; stator + stage comparison; 50–90% speedlines.
+correction (the `MEASURED_BE_4182` deviation profile above is the target);
+extending the loss validity window / transonic loss level vs the measured
+per-span loss coefficients; stator + stage comparison; 50–90% speedlines.
