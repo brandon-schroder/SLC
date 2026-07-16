@@ -179,6 +179,24 @@ def test_cetin_corrected_deviation_matches_measured(case):
     assert float(np.sqrt(np.mean(e * e))) < 1.8
 
 
+def test_swan_offdesign_rule_runs_but_is_not_adopted(case):
+    # Swan Eq. 70 (AGARD-R-745) IMPLEMENTED + MEASURED on this case,
+    # NOT adopted as the default (2026-07-16): across the measured line
+    # the incidence stays within ~3 deg of reference, so off-design
+    # deviation is small under either rule — Swan shifts PR a uniform
+    # ~+0.03 (its negative Mach bracket at M1~1.4 cuts deviation) and
+    # does NOT steepen the choke side; that collapse is loss/choking
+    # physics. This pins (a) the opt-in path solves end-to-end, (b) the
+    # measured shift stays small — if either changes, re-measure adoption.
+    from slcflow.verification.v5_rotor37 import Rotor37
+    swan = Rotor37(offdesign_rule="swan_agard745")
+    r = swan.evaluate(n_sl=1)
+    base = case.evaluate(n_sl=1)
+    assert r.converged
+    assert abs(r.pressure_ratio - base.pressure_ratio) < 0.08
+    assert r.pressure_ratio == pytest.approx(2.165, abs=0.09)
+
+
 def test_design_intent_record_matches_report(case):
     # Table I anchors used by the docs (guards the transcription record).
     assert DESIGN["rotor_pr"] == 2.106

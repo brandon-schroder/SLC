@@ -146,7 +146,19 @@ class Rotor37:
     # (validated per-span vs MEASURED_BE_4182: RMS 3.8 -> 1.2 deg; see
     # cetin_deviation_correction and docs/references/AGARD745.md). Set
     # "none" to reproduce the uncorrected 2026-07-15 record.
+    #
+    # The Swan Eq. 70 off-design rule (same source) was IMPLEMENTED,
+    # MEASURED here, and NOT adopted as this case's default (2026-07-16):
+    # across the measured 100%-speed line the incidence stays within ~3 deg
+    # of reference, so off-design deviation is small under either rule —
+    # Swan shifts PR a uniform +0.03 (slightly away from measured, its
+    # negative Mach bracket at M1~1.4 cutting deviation) and does NOT
+    # steepen the choke side. The measured choke-side collapse is
+    # loss/choking physics (the rig is choked at 20.93 kg/s; the meanline
+    # still has capacity margin), not deviation. Rule stays available:
+    # offdesign_rule="swan_agard745".
     transonic_correction: str = "cetin_agard745"
+    offdesign_rule: str = "aungier"
     T0_in: float = 288.15        # K   (report standard-day: 288.2)
     p0_in: float = 101325.0      # Pa  (report: 10.13 N/cm^2)
     tip_clearance_m: float = 4.0e-4   # [VERIFY] AGARD-AR-355 blind-test value
@@ -219,7 +231,8 @@ class Rotor37:
         # PerfectGas reference state is (288.15 K, 101325 Pa) with s=0 —
         # the report's standard-day inlet to within 0.02%.
         h0 = cp * self.T0_in
-        swirl = LieblienSwirl(transonic_correction=self.transonic_correction)
+        swirl = LieblienSwirl(transonic_correction=self.transonic_correction,
+                              offdesign_rule=self.offdesign_rule)
         row = RowSpec(row_id="r37", omega=self.omega,
                       swirl=swirl, loss=LIEBLEIN_NACA65.loss,
                       blade_count=36, geometry=self._geometry())

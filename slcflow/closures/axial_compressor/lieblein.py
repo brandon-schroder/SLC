@@ -40,7 +40,8 @@ from ..interfaces import RowFlowView, RowView, SwirlResult
 from ..smoothmath import blend, smooth_min, soft_clip, softplus
 
 __all__ = ["reference_incidence", "reference_deviation", "deviation_slope",
-           "cetin_deviation_correction", "LieblienSwirl", "CALIBRATED"]
+           "cetin_deviation_correction", "equivalent_diffusion",
+           "swan_offdesign_deviation", "LieblienSwirl", "CALIBRATED"]
 
 # Calibrated input domain of the SP-36 charts (cascade frame, degrees):
 # (lo, hi, transition width) for the validity windows, plus the hard
@@ -142,6 +143,48 @@ def cetin_deviation_correction(dev_deg, *, xp=None):
     return -1.099379 + 3.0186 * d - 0.1988 * d * d, v
 
 
+def equivalent_diffusion(w1, w2, beta1_rad, beta2_rad, sigma, *, xp=None):
+    """Lieblein equivalent diffusion ratio ``D_eq`` (cascade frame,
+    positive angles; [VERIFY coefficients]). Lives here (Lieblein 1953)
+    so both the loss chain and the Swan off-design deviation rule can
+    consume it; re-exported unchanged via ``loss``."""
+    xp = get_xp(xp)
+    turning = xp.tan(beta1_rad) - xp.tan(beta2_rad)
+    return (w1 / w2) * (1.12 + 0.61 * xp.cos(beta1_rad) ** 2 / sigma
+                        * turning)
+
+
+# Swan rule guards: the linear Mach bracket is applied as published, but the
+# increment is smoothly ceilinged (transient lagged states can produce wild
+# D_eq excursions; section 7.3.2) and the validity window ends where the
+# AGARD-R-745 data does (1970s transonic rotors, M1 up to ~1.5).
+_SWAN_DD_CEIL, _SWAN_DD_W = 8.0, 0.5       # |delta - delta*| ceiling [deg]
+_SWAN_M1_HI, _SWAN_M1_W = 1.55, 0.10       # data-range upper window
+
+
+def swan_offdesign_deviation(m1, d_eq, d_eq_ref, *, xp=None):
+    """Swan (1961) transonic off-design deviation increment [deg]
+    (section 4.3; AGARD-R-745 Appendix II Eq. 70, verbatim —
+    docs/references/AGARD745.md):
+
+        delta - delta* = [6.40 - 9.45 (M1 - 0.60)] (D_eq - D_eq*)
+
+    stated for M1 > 0.6 (the caller C1-blends to the subsonic Aungier
+    slope across that onset). The bracket changes sign at M1 = 1.277: on a
+    supersonic-inlet rotor the choke side (D_eq < D_eq*) then RAISES
+    deviation and the stall side lowers it — the measured speedline
+    steepening classical slopes miss. The increment is smoothly ceilinged
+    at +-8 deg and validity ends at the data range (M1 ~ 1.5). Returns
+    ``(delta_dev_deg, validity)``.
+    """
+    xp = get_xp(xp)
+    dd = (6.40 - 9.45 * (m1 - 0.60)) * (d_eq - d_eq_ref)
+    dd = smooth_min(dd, _SWAN_DD_CEIL, _SWAN_DD_W, xp=xp)
+    dd = -smooth_min(-dd, _SWAN_DD_CEIL, _SWAN_DD_W, xp=xp)
+    v = 1.0 - blend(m1, _SWAN_M1_HI, _SWAN_M1_W, xp=xp)
+    return dd, v
+
+
 def deviation_slope(beta1_deg, sigma, *, xp=None):
     """Off-design deviation slope ``(d delta / d i)`` at the reference
     point (Aungier's fit); dimensionless, applied as
@@ -173,18 +216,33 @@ class LieblienSwirl:
     behavior-preserving — the SP-36 NACA-65 pedigree) or
     ``"cetin_agard745"`` (:func:`cetin_deviation_correction`, for MCA/DCA
     transonic rotors; its validity multiplies the closure validity).
+
+    ``offdesign_rule`` selects the off-design deviation increment:
+    ``"aungier"`` (default: ``slope * (i - i_ref)``) or
+    ``"swan_agard745"`` (:func:`swan_offdesign_deviation`, driven by
+    ``D_eq - D_eq*`` with the reference triangle evaluated exactly as the
+    loss chain does — LE at ``i_ref``, TE at the corrected reference
+    deviation, current meridional velocities). Swan is stated for
+    M1 > 0.6, so it is C1-BLENDED with the Aungier slope across that
+    onset (``blend`` on the flow M1, never a branch — AD-6); below the
+    onset the rule degenerates to Aungier exactly.
     """
 
     k_sh: float = 1.0    # blade shape factor; NACA-65 = 1.0 [VERIFY others]
     transonic_correction: str = "none"
+    offdesign_rule: str = "aungier"
 
     def __post_init__(self):
+        from ...errors import ConfigError
         if self.transonic_correction not in ("none", "cetin_agard745"):
-            from ...errors import ConfigError
             raise ConfigError(       # config boundary (AD-10)
                 f"unknown transonic_correction "
                 f"{self.transonic_correction!r}; expected 'none' or "
                 f"'cetin_agard745'")
+        if self.offdesign_rule not in ("aungier", "swan_agard745"):
+            raise ConfigError(
+                f"unknown offdesign_rule {self.offdesign_rule!r}; "
+                f"expected 'aungier' or 'swan_agard745'")
 
     def exit_rvt(self, row: RowView, flow: RowFlowView) -> SwirlResult:
         xp = get_xp(None)
@@ -206,7 +264,30 @@ class LieblienSwirl:
             d_ref, v_c = cetin_deviation_correction(d_ref, xp=xp)
             v_d = v_d * v_c
         slope = deviation_slope(b1_flow, sigma, xp=xp)
-        dev = d_ref + slope * (i - i_ref)
+        off = slope * (i - i_ref)
+        if self.offdesign_rule == "swan_agard745":
+            # Reference triangle exactly as the loss chain (loss.py):
+            # LE at i_ref, TE at the (corrected) reference deviation,
+            # current meridional velocities.
+            b1r_op = xp.deg2rad(soft_clip(b1_flow, -80.0, 80.0, 2.0, xp=xp))
+            b1r_ref = xp.deg2rad(soft_clip(b1_blade + i_ref, -80.0, 80.0,
+                                           2.0, xp=xp))
+            b2r_ref = xp.deg2rad(soft_clip(b2_blade + d_ref, -80.0, 80.0,
+                                           2.0, xp=xp))
+            w1_op = flow.vm / xp.cos(b1r_op)
+            w1_ref = flow.vm / xp.cos(b1r_ref)
+            w2_ref = flow.vm_te / xp.cos(b2r_ref)
+            d_eq_op = equivalent_diffusion(w1_op, w2_ref, b1r_op, b2r_ref,
+                                           sigma, xp=xp)
+            d_eq_ref = equivalent_diffusion(w1_ref, w2_ref, b1r_ref,
+                                            b2r_ref, sigma, xp=xp)
+            m1 = w1_op / flow.a
+            dd_swan, v_sw = swan_offdesign_deviation(m1, d_eq_op, d_eq_ref,
+                                                     xp=xp)
+            b = blend(m1, 0.6, 0.05, xp=xp)     # C1 onset (AD-6, no branch)
+            off = (1.0 - b) * off + b * dd_swan
+            v_d = v_d * (1.0 - b * (1.0 - v_sw))
+        dev = d_ref + off
 
         b2_deg = soft_clip(b2_blade + dev, -80.0, 80.0, 2.0, xp=xp)
         w_theta_2 = flow.vm_te * xp.tan(sgn * xp.deg2rad(b2_deg))

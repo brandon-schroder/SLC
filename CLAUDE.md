@@ -778,14 +778,28 @@ These are not suggestions; violating them is a bug even if tests pass.
   −3.6° → ~0) vs `MEASURED_BE_4182`; end-to-end with the correction ON
   (the Rotor 37 case's new default) **Tier-2 PR 2.051 vs measured 2.056
   (+0.2%, was +12%)**, Tier-1 2.135 (+3.8%, was +16%), closure validity
-  0 → ~0.8 at Tier 1. The choke-side speedline collapse remains (recorded
-  next lever: Swan's Eq. 70 M1-dependent off-design deviation, extracted
-  in `AGARD745.md` but deferred — needs D_eq* reference plumbing), as does
+  0 → ~0.8 at Tier 1. The choke-side speedline collapse remains, as does
   the blockage schedule. Tests: `test_cetin_correction.py` (Eq. 3.5
   coefficient pins, C¹ refinement check across the saturation knees,
   validity compact support, config boundary, default-off preservation) +
   re-pinned `test_v5_rotor37.py` (uncorrected-gap record kept alongside
-  the corrected pin).
+  the corrected pin). **Swan Eq. 70 (same source) was then implemented,
+  measured, and NOT default-adopted** (2026-07-16): opt-in
+  `LieblienSwirl(offdesign_rule="swan_agard745")` — verbatim bracket,
+  C¹-blended with the Aungier slope across the stated M1=0.6 onset (AD-6,
+  no flow branch), ±8° smooth increment ceiling, validity to the M1≈1.5
+  data edge, D_eq* via the loss chain's reference-triangle convention
+  (`equivalent_diffusion` moved to `lieblein.py`, re-exported via `loss`).
+  Measured on Rotor 37 the choke-side-steepening hypothesis was REFUTED:
+  the measured 100%-speed line spans only ~±3° of incidence about
+  reference, so off-design deviation is small under either rule — Swan
+  shifts PR a uniform +0.03 (slightly away from measured, its negative
+  Mach bracket at M1≈1.4 cutting deviation) and does not steepen the line;
+  the measured collapse is loss/choking physics (the rig is choked at
+  20.93 kg/s where the meanline still has capacity margin). Finding pinned
+  (`test_swan_offdesign_rule_runs_but_is_not_adopted`); the promising
+  speedline levers are now the off-design/near-choke LOSS side + a
+  capacity/blockage model.
 
 ## Commands
 

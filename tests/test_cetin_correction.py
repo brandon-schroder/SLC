@@ -1,16 +1,18 @@
-"""Cetin AGARD-R-745 transonic deviation correction (section 4.3, 7.3).
+"""Cetin/Swan AGARD-R-745 transonic deviation corrections (section 4.3, 7.3).
 
 Coefficient pins + smoothness + config-boundary behavior for
-``cetin_deviation_correction`` and the ``LieblienSwirl.transonic_correction``
-seam. Source note: docs/references/AGARD745.md (Eq. 3.5 verbatim via the
-loss-models notebook, 2026-07-16); end-to-end validation vs the measured
-Rotor 37 blade elements lives in ``test_v5_rotor37.py``.
+``cetin_deviation_correction``, ``swan_offdesign_deviation``, and the
+``LieblienSwirl`` option seams. Source note: docs/references/AGARD745.md
+(Eq. 3.5 / Eq. 70 verbatim via the loss-models notebook, 2026-07-16);
+end-to-end validation vs the measured Rotor 37 blade elements lives in
+``test_v5_rotor37.py`` (where the Swan rule's measured NON-adoption on the
+Rotor 37 line is also recorded).
 """
 import numpy as np
 import pytest
 
 from slcflow.closures.axial_compressor.lieblein import (
-    LieblienSwirl, cetin_deviation_correction)
+    LieblienSwirl, cetin_deviation_correction, swan_offdesign_deviation)
 from slcflow.errors import ConfigError
 
 
@@ -75,6 +77,45 @@ def test_validity_falls_outside_fitted_branch():
     assert float(hi) <= -1.099379 + 3.0186 * 7.59 - 0.1988 * 7.59 ** 2 + 0.1
 
 
+def test_swan_eq70_coefficients_verbatim():
+    # AGARD-R-745 App. II Eq. 70: delta - delta* =
+    # [6.40 - 9.45 (M1 - 0.60)] (D_eq - D_eq*), inside the ceiling.
+    for m1, ddeq in ((0.8, 0.10), (1.0, -0.15), (1.2, 0.20)):
+        expect = (6.40 - 9.45 * (m1 - 0.60)) * ddeq
+        got, v = swan_offdesign_deviation(m1, 1.5 + ddeq, 1.5)
+        assert float(got) == pytest.approx(expect, abs=1e-6)
+        assert float(v) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_swan_bracket_sign_change_at_transonic_mach():
+    # The bracket crosses zero at M1 = 1.277: above it, LOWER loading
+    # (D_eq < D_eq*, the choke side) RAISES deviation — the transonic
+    # reversal the rule exists for (section 4.3 / AGARD745.md).
+    lo, _ = swan_offdesign_deviation(1.0, 1.3, 1.5)    # subcritical bracket
+    hi, _ = swan_offdesign_deviation(1.45, 1.3, 1.5)   # supercritical
+    assert float(lo) < 0.0 < float(hi)
+
+
+def test_swan_increment_ceiling_and_validity_window():
+    # Section 7.3.2 guards: the increment is smoothly ceilinged at +-8 deg
+    # (lagged-state transients can produce wild D_eq excursions) and
+    # validity ends at the AGARD data range (M1 ~ 1.5).
+    big, _ = swan_offdesign_deviation(0.7, 6.0, 1.4)
+    assert float(big) <= 8.0 + 1e-6
+    small, _ = swan_offdesign_deviation(1.45, 6.0, 1.4)
+    assert float(small) >= -8.0 - 1e-6
+    _, v_in = swan_offdesign_deviation(1.0, 1.5, 1.5)
+    _, v_out = swan_offdesign_deviation(1.8, 1.5, 1.5)
+    assert float(v_in) > 0.95 and float(v_out) < 0.1
+
+
+def test_swan_c1_in_mach():
+    # C1 in the flow Mach across the ceiling knees (section 7.3).
+    _assert_c1_continuous(
+        lambda m: np.asarray(
+            swan_offdesign_deviation(m, 2.6, 1.4)[0]), 0.3, 1.6)
+
+
 def test_unknown_correction_option_raises_at_construction():
     # Config boundary (AD-10): a typo'd option fails loudly at build time,
     # never on the closure-evaluation path.
@@ -82,9 +123,16 @@ def test_unknown_correction_option_raises_at_construction():
         LieblienSwirl(transonic_correction="cetin")
 
 
+def test_unknown_offdesign_rule_raises_at_construction():
+    with pytest.raises(ConfigError):
+        LieblienSwirl(offdesign_rule="swan")
+
+
 def test_default_swirl_is_uncorrected():
     # Behavior preservation: the shipped LIEBLEIN_NACA65 set stays the
-    # SP-36 NACA-65 pedigree (correction off by default).
+    # SP-36 NACA-65 pedigree (correction off, Aungier slope, by default).
     from slcflow.closures.axial_compressor import LIEBLEIN_NACA65
     assert LieblienSwirl().transonic_correction == "none"
+    assert LieblienSwirl().offdesign_rule == "aungier"
     assert LIEBLEIN_NACA65.swirl.transonic_correction == "none"
+    assert LIEBLEIN_NACA65.swirl.offdesign_rule == "aungier"
