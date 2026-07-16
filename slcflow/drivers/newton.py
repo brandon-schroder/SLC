@@ -176,18 +176,54 @@ def _residual_scale(frozen: FrozenInputs):
                            np.full(n_pos, mdot / _TWO_PI)])
 
 
-def _safe_residual(asm: ResidualAssembler, x, scale):
+# Branch-guard hysteresis half-width on the q = 0 node meridional Mach:
+# trials may APPROACH M_m = 1 (near-choke convergence) but not JUMP across
+# it relative to the seed's per-station branch. Stations whose seed sits
+# inside the band are unconstrained.
+_BRANCH_DELTA = 0.05
+
+
+def _branch_masks(asm: ResidualAssembler, x):
+    """Per-station meridional-branch classification of the SEED state
+    (section 6.3 / C.9): boolean masks over stations whose q = 0 node is
+    firmly subsonic (M < 1 - delta) or firmly supersonic (M > 1 + delta).
+    ``None`` when the seed state cannot be split finitely (no guard)."""
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        try:
+            m0 = np.asarray(asm.split(x).mach_m[0, :], dtype=float)
+        except Exception:
+            return None
+    if not np.all(np.isfinite(m0)):
+        return None
+    return m0 < 1.0 - _BRANCH_DELTA, m0 > 1.0 + _BRANCH_DELTA
+
+
+def _safe_residual(asm: ResidualAssembler, x, scale, branch=None):
     """Scaled residual at ``x``, or ``None`` if the point is infeasible:
     a crossing streamline, a non-finite residual (out-of-domain Vm along
-    the ODE), or an integrated Vm field that is not strictly positive.
+    the ODE), an integrated Vm field that is not strictly positive, or a
+    meridional-branch jump relative to the seed.
 
     The positivity rule is the Newton-side counterpart of the classical
     driver's positive-branch root validation (2026-07 Tier-3 stabilization):
     the master ODE's RHS ~ core/Vm is singular at Vm = 0, and a trial whose
     profile crossed zero sits on a spurious branch whose residual can be
     FINITE (mass balancing by sign cancellation) — previously such garbage
-    passed this screen and could poison the line-search merit. No exception
-    crosses this boundary (AD-10)."""
+    passed this screen and could poison the line-search merit.
+
+    The BRANCH rule (2026-07-16, the TN D-6967 spurious-fixed-point root
+    cause) is its sub/supersonic sibling: the A.7 continuity has a root
+    PAIR per station, and a global Newton step can carry a station across
+    the capacity peak onto the other root — positive, finite, and
+    convergent, so the closure lag locks in a self-consistent SPURIOUS
+    fixed point (measured: rotor-2 LE at M_m 2.0, same PR, work 8% low).
+    ``branch`` carries the seed's per-station (subsonic, supersonic) masks;
+    a trial whose q = 0 node jumps across M_m = 1 (with ``_BRANCH_DELTA``
+    hysteresis) is rejected, so the solve converges on the SEED's branch —
+    branch SELECTION stays with the caller (the arclength driver crosses
+    folds deliberately and then hands solve_newton a seed already on the
+    supersonic branch, which this rule now also protects from falling
+    back). No exception crosses this boundary (AD-10)."""
     if not _is_feasible_q(x, asm.frozen):
         return None
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
@@ -195,6 +231,12 @@ def _safe_residual(asm: ResidualAssembler, x, scale):
         if not bool(np.all(np.isfinite(fields.vm))
                     and np.all(fields.vm > 0.0)):
             return None
+        if branch is not None:
+            lo, hi = branch
+            m0 = fields.mach_m[0, :]
+            if bool(np.any(lo & (m0 > 1.0 + _BRANCH_DELTA))
+                    or np.any(hi & (m0 < 1.0 - _BRANCH_DELTA))):
+                return None
         r = asm.residual_from(fields, x)
     if not np.all(np.isfinite(r)):
         return None
@@ -271,7 +313,7 @@ def _colored_groups(frozen: FrozenInputs, group_q: bool):
 
 
 def _fd_jacobian_colored(asm, x, r0, scale, config: NewtonConfig,
-                         group_q: bool):
+                         group_q: bool, branch=None):
     """Colored forward-difference Jacobian of the SCALED residual
     (ARCH-5.3): all columns of a group are perturbed in one residual
     evaluation and the response is attributed to each column's own station
@@ -284,13 +326,13 @@ def _fd_jacobian_colored(asm, x, r0, scale, config: NewtonConfig,
         h = config.fd_rel * np.abs(x[g]) + config.fd_abs
         xf = x.copy()
         xf[g] += h
-        rf = _safe_residual(asm, xf, scale)
+        rf = _safe_residual(asm, xf, scale, branch)
         if rf is not None:
             diff = rf - r0
         else:
             xb = x.copy()
             xb[g] -= h
-            rb = _safe_residual(asm, xb, scale)
+            rb = _safe_residual(asm, xb, scale, branch)
             if rb is None:
                 return None
             diff = r0 - rb
@@ -307,7 +349,7 @@ def _fd_jacobian_colored(asm, x, r0, scale, config: NewtonConfig,
     return jac
 
 
-def _fd_jacobian(asm, x, r0, scale, config: NewtonConfig):
+def _fd_jacobian(asm, x, r0, scale, config: NewtonConfig, branch=None):
     """Dense forward-difference Jacobian of the SCALED residual (section 6.3).
 
     Falls back to a backward step for any column whose forward perturbation is
@@ -320,20 +362,21 @@ def _fd_jacobian(asm, x, r0, scale, config: NewtonConfig):
         h = config.fd_rel * abs(x[k]) + config.fd_abs
         xf = x.copy()
         xf[k] += h
-        rf = _safe_residual(asm, xf, scale)
+        rf = _safe_residual(asm, xf, scale, branch)
         if rf is not None:
             jac[:, k] = (rf - r0) / h
             continue
         xb = x.copy()
         xb[k] -= h
-        rb = _safe_residual(asm, xb, scale)
+        rb = _safe_residual(asm, xb, scale, branch)
         if rb is None:
             return None
         jac[:, k] = (r0 - rb) / h
     return jac
 
 
-def newton_solve(asm: ResidualAssembler, x0, config: NewtonConfig = NewtonConfig()):
+def newton_solve(asm: ResidualAssembler, x0,
+                 config: NewtonConfig = NewtonConfig(), branch=None):
     """Drive ``asm.residual(x) = 0`` from warm start ``x0`` (section 6.3).
 
     Returns ``(x, status, iteration_records)``. ``status`` is CONVERGED,
@@ -344,7 +387,7 @@ def newton_solve(asm: ResidualAssembler, x0, config: NewtonConfig = NewtonConfig
     scale = _residual_scale(asm.frozen)
     x = np.array(x0, dtype=float)
     records = []
-    r = _safe_residual(asm, x, scale)
+    r = _safe_residual(asm, x, scale, branch)
     if r is None:
         return x, SolveStatus.NUMERICAL_FAILURE, records
     colored = config.jacobian == "colored"
@@ -355,9 +398,10 @@ def newton_solve(asm: ResidualAssembler, x0, config: NewtonConfig = NewtonConfig
             return x, SolveStatus.CONVERGED, records
         jac = None
         if colored:
-            jac = _fd_jacobian_colored(asm, x, r, scale, config, group_q)
+            jac = _fd_jacobian_colored(asm, x, r, scale, config,
+                                       group_q, branch)
         if jac is None:      # dense baseline, and the colored fallback
-            jac = _fd_jacobian(asm, x, r, scale, config)
+            jac = _fd_jacobian(asm, x, r, scale, config, branch)
         if jac is None:
             records.append(_rec(it, rnorm, 0.0))
             return x, SolveStatus.NUMERICAL_FAILURE, records
@@ -371,7 +415,7 @@ def newton_solve(asm: ResidualAssembler, x0, config: NewtonConfig = NewtonConfig
         phi0 = 0.5 * float(r @ r)
         alpha, accepted = 1.0, None
         for _ in range(config.max_backtrack):
-            r_try = _safe_residual(asm, x + alpha * dx, scale)
+            r_try = _safe_residual(asm, x + alpha * dx, scale, branch)
             if r_try is not None:
                 phi = 0.5 * float(r_try @ r_try)
                 if phi <= (1.0 - 2.0 * config.armijo * alpha) * phi0:
@@ -462,6 +506,12 @@ def solve_newton(topology, fluid, fidelity: FidelityConfig,
     history = []
     status, reason = SolveStatus.MAX_ITER, ""
     frozen = asm = None
+    # Per-station meridional-branch masks, classified ONCE from the seed on
+    # the first outer pass's assembler and held for the whole solve: branch
+    # SELECTION belongs to the caller/seed (section 6.3 / C.9); the guard
+    # only prevents an inner step from jumping a station across the A.7
+    # capacity peak onto the other continuity root.
+    branch_masks = None
 
     for outer in range(1, config.max_outer + 1):
         if not all(np.all(np.isfinite(a)) for a in
@@ -477,7 +527,10 @@ def solve_newton(topology, fluid, fidelity: FidelityConfig,
                               kappa_relax=kappa_relax, q_fixed=q_fixed,
                               metrics_config=metrics_config)
         asm = ResidualAssembler(frozen)
-        x, in_status, in_recs = newton_solve(asm, x, config)
+        if branch_masks is None:
+            branch_masks = _branch_masks(asm, x)
+        x, in_status, in_recs = newton_solve(asm, x, config,
+                                             branch=branch_masks)
         history.extend(in_recs)
         if in_status is not SolveStatus.CONVERGED:
             status, reason = in_status, (

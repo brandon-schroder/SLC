@@ -871,6 +871,28 @@ These are not suggestions; violating them is a bug even if tests pass.
   Follow-ups recorded: root-cause the spurious branch (which station
   flips continuity root), Rotor 37 vertical-characteristic points in the
   same frame.
+- **Spurious closure-lag branch ROOT-CAUSED + FIXED (2026-07-16): the
+  Newton branch-preserving trial guard (§6.3).** Diagnosis (skill loop,
+  22-s deterministic repro): the fresh-seed TN D-6967 BP solve converged
+  **station 7 (rotor-2 LE) on the SUPERSONIC continuity root** — M_m
+  1.997 / Vm 452 m/s, with the A.7 root pair proven by a continuity scan
+  on the suspect frozen fields (subsonic root 112 m/s, capacity peak
+  ~+1.3 kg/s at ~250, supersonic root 452.1) — the positivity-only Newton
+  guard accepts it (positive, finite, convergent) and the closure lag
+  locks in a self-consistent spurious fixed point (same PR, work 8% low,
+  garbage entropy downstream). Fix: `newton._safe_residual` now also
+  rejects trials whose q=0-node meridional Mach JUMPS across 1 relative
+  to the seed's per-station branch (`_branch_masks`, hysteresis
+  `_BRANCH_DELTA = 0.05` so near-choke convergence toward M→1 stays
+  free); masks classified once from the warm-start seed — branch
+  SELECTION stays with the caller, exactly the arclength/Newton division
+  of labor, and the supersonic-branch handoff is now *protected* from
+  falling back (its `_land` passes its own seed masks). Measured after
+  fix: the 2.0 and 2.004 seeds land the bit-identical physical fixed
+  point; the far 1.95 seed fails TYPED instead of converging wrong; all
+  Newton/backpressure/supersonic families green. Regression:
+  `test_v6_tnd6967.py::test_backpressure_newton_stays_on_seed_branch`
+  (station-7 repro, subsonic-everywhere + measured-work assertions).
 
 ## Commands
 

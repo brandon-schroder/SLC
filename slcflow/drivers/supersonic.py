@@ -337,8 +337,14 @@ def _land(frozen: FrozenInputs, x_seed, target_mdot, newton_config):
     ``(asm_t, frozen_t, x, status, records)``."""
     frozen_t = replace(frozen, spec=MassFlowSpec(float(target_mdot)))
     asm_t = ResidualAssembler(frozen_t)
+    # Branch-preserving trials from the LANDED seed (section 6.3): the
+    # arclength already selected the supersonic branch; the guard keeps the
+    # landing Newton from falling back across the fold (and, per the
+    # 2026-07-16 root cause, from jumping any other station's root).
+    from .newton import _branch_masks
     x, status, recs = newton_solve(asm_t, np.array(x_seed, dtype=float),
-                                   newton_config)
+                                   newton_config,
+                                   branch=_branch_masks(asm_t, x_seed))
     return asm_t, frozen_t, x, status, recs
 
 

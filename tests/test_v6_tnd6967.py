@@ -85,14 +85,16 @@ def test_matched_pr_backpressure_comparison(result):
     # In the natural near-choke frame the machine agrees with the rig to
     # ~1% ACROSS THE BOARD — confirming the matched-mdot "-17% PR" was
     # pure vertical-characteristic sensitivity, and that no additional
-    # turning/loss deficit hides behind it. TWO CAVEATS, both recorded:
-    # (1) the near-choke closure-lag has SEED-DEPENDENT fixed points — a
-    # fresh mdot=2.0 seed lands a spurious branch (same PR, work 8% low),
-    # a 1.95 seed runs away (NUMERICAL_FAILURE); warm-starting from the
-    # nearest converged operating point (the continuation driver's own
-    # discipline) selects the physical branch, which is what this test
-    # pins. (2) the closure lag rings at ~1e-6 near choke (benign limit
-    # cycle) — tol_closure loosened accordingly.
+    # turning/loss deficit hides behind it. History: this solve initially
+    # had SEED-DEPENDENT fixed points (a fresh mdot-2.0 seed landed a
+    # spurious branch — station 7 on the supersonic continuity root, same
+    # PR, work 8% low) — ROOT-CAUSED and FIXED 2026-07-16 by the section
+    # 6.3 branch-preserving Newton trial guard
+    # (test_backpressure_newton_stays_on_seed_branch); nearby seeds now
+    # land the identical physical fixed point (far seeds may still fail
+    # TYPED — Newton is local, warm-start quality is the caller's job).
+    # The closure lag rings at ~1e-6 near choke (benign limit cycle) —
+    # tol_closure loosened accordingly.
     import numpy as np
 
     from slcflow.assembly.pack import unpack
@@ -123,6 +125,49 @@ def test_matched_pr_backpressure_comparison(result):
     kappa = (case.gas.gamma - 1.0) / case.gas.gamma
     eta_tt = work / float(tr.h0[0, 0] * (1.0 - (1.0 / pr_tt) ** kappa))
     assert abs(eta_tt - MEASURED_EQ["eta_tt"]) < 0.02
+
+
+def test_backpressure_newton_stays_on_seed_branch(result):
+    # Regression for the SPURIOUS closure-lag branch (root-caused
+    # 2026-07-16): from a fresh subsonic mdot-2.0 seed, the BP Newton
+    # solve used to converge station 7 (rotor-2 LE) onto the SUPERSONIC
+    # continuity root (M_m 1.997, Vm 452 m/s — the two-root A.7 pair:
+    # subsonic ~112, capacity peak ~250, supersonic 452), because Newton
+    # trials were positivity-guarded but not BRANCH-guarded; the closure
+    # lag then locked in a self-consistent fixed point with the same PR
+    # but 8%-low work. The section 6.3 branch-preserving trial guard
+    # (newton._safe_residual: a trial may approach M_m = 1 but not jump
+    # across it relative to the seed's per-station branch) must now land
+    # the fresh seed on the PHYSICAL branch: subsonic everywhere, work at
+    # the measured level.
+    import numpy as np
+
+    from slcflow.assembly.pack import unpack
+    from slcflow.drivers.classical import ClassicalConfig, solve_classical
+    from slcflow.drivers.newton import NewtonConfig, solve_newton
+    from slcflow.grid.core import GridTopology
+    from slcflow.types import (BackPressureSpec, FidelityConfig,
+                               MassFlowSpec)
+
+    case = TND6967Turbine()
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=1)
+    inlet = m.inlet.fields(topo.psi)
+    fid = FidelityConfig.tier1()
+    seed = solve_classical(topo, case.gas, fid, MassFlowSpec(2.0), inlet,
+                           rows=m.rows,
+                           config=ClassicalConfig(max_outer=800))
+    assert seed.converged
+    res = solve_newton(topo, case.gas, fid,
+                       BackPressureSpec(101325.0 / 4.640, topo.n_qo - 1),
+                       inlet, rows=m.rows, warm_start=seed,
+                       config=NewtonConfig(max_outer=800, tol_closure=1e-6))
+    assert res.converged
+    # Subsonic everywhere (the seed's branch), physical-level work.
+    assert float(np.max(res.fields.mach_m)) < 1.0
+    tr = res.frozen.transported
+    work = float(tr.h0[0, 0] - tr.h0[0, -1]) / 1000.0
+    assert work == pytest.approx(MEASURED_EQ["work_J_per_g"], rel=0.035)
 
 
 def test_pr_and_work_bounded_capacity_gap_recorded(result):
