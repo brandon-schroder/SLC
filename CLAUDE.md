@@ -850,6 +850,27 @@ These are not suggestions; violating them is a bug even if tests pass.
   integrations. Recorded extensions: flow-responding throat physics,
   `c_row` into the §6.7 continuation margins + Newton driver, and a
   first-stage-only TN D-6967 back-pressure comparison.
+- **Matched-PR BackPressureSpec comparison (2026-07-16) — the TN D-6967
+  validation closes at ~1%.** Imposing the Table-I equivalent
+  total-to-static PR (p_exit = p0_in/4.640) via the M5-3 `BackPressureSpec`
+  + `solve_newton` (mdot joins the state), seeded from the converged
+  matched-mdot solution: **ṁ +0.35%, PR_tt −1.2%, work −1.2%, η_tt 0.926
+  vs measured 0.93** — the machine agrees with the rig to ~1% across the
+  board in the natural near-choke frame, confirming the matched-mdot
+  "−17% PR" was pure vertical-characteristic sensitivity with no hidden
+  turning/loss deficit (an intermediate "work −8.7% ⇒ AM under-turning"
+  reading was an artifact of a spurious closure-lag branch and is
+  retracted). Two measured solver findings recorded: the near-choke
+  closure lag has **seed-dependent fixed points** (fresh mdot-2.0 seed →
+  same PR but work 8% low; 1.95 seed → runaway NUMERICAL_FAILURE;
+  warm-starting from the nearest converged operating point — the
+  continuation driver's own discipline — selects the physical branch),
+  and it limit-cycles at ~1e-6 closure norm (benign; `tol_closure`
+  loosened in the pinned test). Pinned:
+  `test_v6_tnd6967.py::test_matched_pr_backpressure_comparison`.
+  Follow-ups recorded: root-cause the spurious branch (which station
+  flips continuity root), Rotor 37 vertical-characteristic points in the
+  same frame.
 
 ## Commands
 

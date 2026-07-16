@@ -70,6 +70,61 @@ def test_eta_tt_matches_measured_within_half_point(result):
     assert abs(eta_tt - MEASURED_EQ["eta_tt"]) < 0.02
 
 
+def test_matched_pr_backpressure_comparison(result):
+    # The MATCHED-PR frame (section 6.6 BackPressureSpec; the comparison
+    # the near-choke re-diagnosis called for): impose the Table-I
+    # equivalent total-to-static pressure ratio (p_exit = p0_in / 4.640)
+    # and let mdot join the state. MEASURED (2026-07-16), seeded from the
+    # converged matched-mdot state (the nearest operating point):
+    #
+    #     mdot   2.011  vs measured 2.004    (+0.35%)
+    #     PR_tt  3.718  vs measured eq 3.765 (-1.2%)
+    #     work   83.87  vs measured 84.90 J/g (-1.2%)
+    #     eta_tt 0.926  vs measured 0.93     (-0.4 pt)
+    #
+    # In the natural near-choke frame the machine agrees with the rig to
+    # ~1% ACROSS THE BOARD — confirming the matched-mdot "-17% PR" was
+    # pure vertical-characteristic sensitivity, and that no additional
+    # turning/loss deficit hides behind it. TWO CAVEATS, both recorded:
+    # (1) the near-choke closure-lag has SEED-DEPENDENT fixed points — a
+    # fresh mdot=2.0 seed lands a spurious branch (same PR, work 8% low),
+    # a 1.95 seed runs away (NUMERICAL_FAILURE); warm-starting from the
+    # nearest converged operating point (the continuation driver's own
+    # discipline) selects the physical branch, which is what this test
+    # pins. (2) the closure lag rings at ~1e-6 near choke (benign limit
+    # cycle) — tol_closure loosened accordingly.
+    import numpy as np
+
+    from slcflow.assembly.pack import unpack
+    from slcflow.drivers.newton import NewtonConfig, solve_newton
+    from slcflow.grid.core import GridTopology
+    from slcflow.types import BackPressureSpec, FidelityConfig
+
+    case = TND6967Turbine()
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=1)
+    inlet = m.inlet.fields(topo.psi)
+    # Seed from the already-solved matched-mdot fixture (same topology).
+    seed = result.result
+    res = solve_newton(topo, case.gas, FidelityConfig.tier1(),
+                       BackPressureSpec(101325.0 / 4.640, topo.n_qo - 1),
+                       inlet, rows=m.rows, warm_start=seed,
+                       config=NewtonConfig(max_outer=800, tol_closure=1e-6))
+    assert res.converged
+    _, _, mdot = unpack(res.x, topo.n_sl, topo.n_qo, backpressure=True)
+    tr = res.frozen.transported
+    pr_tt = float(case.gas.p(tr.h0[0, 0], tr.s[0, 0])
+                  / case.gas.p(tr.h0[0, -1], tr.s[0, -1]))
+    work = float(tr.h0[0, 0] - tr.h0[0, -1])
+    assert mdot == pytest.approx(MEASURED_EQ["mdot"], rel=0.015)
+    assert pr_tt == pytest.approx(DESIGN_EQ["pr_tt"], rel=0.03)
+    assert work / 1000.0 == pytest.approx(MEASURED_EQ["work_J_per_g"],
+                                          rel=0.03)
+    kappa = (case.gas.gamma - 1.0) / case.gas.gamma
+    eta_tt = work / float(tr.h0[0, 0] * (1.0 - (1.0 / pr_tt) ** kappa))
+    assert abs(eta_tt - MEASURED_EQ["eta_tt"]) < 0.02
+
+
 def test_pr_and_work_bounded_capacity_gap_recorded(result):
     # At matched mdot the PR/work read LOW: observed 1/PR = 3.13 vs rig
     # 3.765 — re-diagnosed (2026-07-16) as NEAR-CHOKE SENSITIVITY, not a
