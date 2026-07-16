@@ -742,10 +742,22 @@ These are not suggestions; violating them is a bug even if tests pass.
   the paper's gauging angle to 0.1° at M2is=1; predicted energy-ζ 0.0303 vs
   measured 0.0225 (+35%, documented K-O behaviour; the TE curve carries most
   of it; the rig's 0.5% exit/TE-shock is a recorded model boundary).
-  Remaining from the campaign (recorded in the notes + memory): TN D-6967
-  stage-level V6, Stage 37 stator/stage + other speeds + AGARD coords/tip
-  clearance, Fig. 111/Fig. 16/Oh-1997-map digitizations, Krain + Stage 38 +
-  CC3 second points, mixed-flow V8 (still no open rig dataset).
+  **(V6 machine-level, 2026-07-16 / TND6967)** NASA TN D-6967 two-stage
+  cold-air turbine (`verification/v6_tnd6967.py`, Tables I/II + Fig. 1
+  velocity diagrams, throats = design gauging): meanline η_tt 0.926 vs
+  measured 0.93 (−0.4 pt, tip-clearance loss unmodelled — inside K-O's own
+  ±1.5 pt target); PR/work −17/−12% at matched flow = a flow-CAPACITY gap
+  (no-blockage geometric throat vs near-sonic-by-design stator hubs), the
+  recorded levers being effective-throat blockage + the deferred AM
+  low-speed exit-angle correction; the 4-row Picard chain needs
+  `max_outer=800` (slow, not unstable; the case defaults it); Tier-2
+  spanwise OPEN (free-vortex hub chokes its streamtube at measured flow) —
+  joins the multi-row spanwise robustness items. Remaining from the
+  campaign (recorded in the notes + memory): Stage 37 stator/stage + other
+  speeds + Table V/VI surveys (the MCA-deviation calibration target) +
+  AGARD coords/tip clearance, Fig. 111/Fig. 16/Oh-1997-map digitizations,
+  Krain + Stage 38 + CC3 second points, TN D-6967 maps/first-stage config,
+  mixed-flow V8 (still no open rig dataset).
 
 ## Commands
 
