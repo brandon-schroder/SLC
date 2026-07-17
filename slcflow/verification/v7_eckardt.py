@@ -60,7 +60,8 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["EckardtO", "LASER_POINT", "DESIGN_POINT"]
+__all__ = ["EckardtO", "KrainImpeller", "LASER_POINT", "DESIGN_POINT",
+           "KRAIN_DESIGN"]
 
 _DEG = np.pi / 180.0
 
@@ -212,7 +213,11 @@ class EckardtO:
                 md, rho2, u2, r1, self.r2, self.r1t - self.r1h, self.b2,
                 cu1, cu2, self.blade_count, self.clearance, self.chord),
             "recirculation": recirculation_work(
-                u2, w1, w2, cm2, wu2, 0.0,   # radial blades: cot(90) = 0
+                u2, w1, w2, cm2, wu2,
+                # cot of the blade exit angle FROM TANGENTIAL:
+                # cot(90deg - |backsweep|) = tan(|backsweep|); radial
+                # blades (Eckardt) give 0, Krain's 30-deg backsweep 0.577.
+                float(np.tan(abs(self.beta2_blade_deg) * _DEG)),
                 r1 * cu1, self.r2 * cu2, self.blade_count, self.chord),
         }
 
@@ -294,3 +299,48 @@ class EckardtO:
         return {"pr_stage": float(pr_stage),
                 "eta_stage": float(dh_id_stage / (dh0 + par)),
                 "dh_vld": float(dh_vld), "dh_lambda": float(dh_lambda)}
+
+
+# Krain design/measured anchors (Krain 1988 + Krain & Hoffmann 1989, via
+# the Test Cases notebook 2026-07-17; see docs/references/ECKARDT.md
+# "Krain" note): design rotor PR_tt 4.7 at 22 363 rpm / 4.0 kg/s; measured
+# maxima: stage PR_tt ~4.5, impeller polytropic eta_tt 0.95, stage
+# isentropic eta_tt 0.84.
+KRAIN_DESIGN = {"rpm": 22363.0, "mdot": 4.0, "rotor_pr_design": 4.7,
+                "stage_pr_max": 4.5, "impeller_eta_poly": 0.95,
+                "stage_eta_max": 0.84}
+
+
+@dataclass(frozen=True)
+class KrainImpeller(EckardtO):
+    """Krain 30-deg backswept impeller (section 9.7) — the second
+    centrifugal validation point, cross-checking the Wiesner slip and the
+    loss set beyond Eckardt at twice the pressure ratio.
+
+    Geometry grounded from the PRIMARY papers via the Test Cases notebook
+    (2026-07-17; the 1989 paper's Cartesian blade-coordinate table):
+    r1h = 45.0 mm, r1t = 112.7 mm (LE, coordinate point 1); D2 ~ 400 mm
+    (from U2 = 470 m/s at 22 363 rpm); b2 ~ 14.7 mm (TE hub-tip
+    distance); 24 full blades, no splitters; exit backsweep 30 deg from
+    radial; impeller axial length ~119.1 mm (hub LE -> TE X-extent).
+    Tip clearance is NOT stated numerically in the papers (the 1989 CFD
+    "modeled [it] by one grid line") — 0.5 mm is a recorded assumption.
+    Same modelling frame as EckardtO (quarter-ellipse walls through the
+    grounded endpoints; inducer metal angles set for zero incidence at
+    the design triangle, Vm1_design ~ 102 m/s one-D compressible at
+    4.0 kg/s through the grounded inducer annulus).
+    """
+
+    rpm: float = 22363.0
+    mdot: float = 4.0
+    r1h: float = 0.045
+    r1t: float = 0.1127
+    r2: float = 0.200
+    b2: float = 0.0147
+    z_len: float = 0.11909
+    blade_count: int = 24
+    beta2_blade_deg: float = -30.0   # backsweep, from radial (section 2.4)
+    vm1_design: float = 102.0
+    rpm_design: float = 22363.0
+    chord: float = 0.16              # meridional blade-length representative
+    clearance: float = 5.0e-4        # [VERIFY] not published; assumption

@@ -77,6 +77,39 @@ def test_design_point_meanline_pr_vs_measured_stage(case):
         <= DESIGN_POINT["stage_pr"] * 1.15
 
 
+def test_krain_second_impeller_measured_agreement():
+    # The SECOND centrifugal point (Krain 1988 / Krain-Hoffmann 1989 via
+    # the Test Cases notebook): 30-deg backswept, 24 blades, PR-4.7-class
+    # — twice Eckardt's loading, cross-checking Wiesner slip + the loss
+    # set. MEASURED (2026-07-17, docs/references/ECKARDT.md "Krain"):
+    #   * Tier-1 AND Tier-2 converge with validity 1.0, agreeing to 0.2%
+    #     (impeller-exit PR ~5.00, internal eta 0.972).
+    #   * Stage chain: PR_stage 4.714 vs the measured stage max ~4.5
+    #     (+4.8%; design rotor PR_tt 4.7) — the PR side holds up.
+    #   * eta_stage 0.905 vs measured stage 0.84: +6.5 pt — the loss set
+    #     that CLOSES at Eckardt's PR 2.1 reads LIGHT at PR 4.7 (measured
+    #     impeller eta_poly 0.95 ~ eta_is 0.938 vs internal 0.972, so
+    #     ~3.4 pt of it is internal-loss level at high loading; the
+    #     recirculation term floors to exactly 0 at design backsweep;
+    #     clearance is an assumption). RECORDED trend finding, not tuned.
+    from slcflow.machine import FidelityConfig
+    from slcflow.verification.v7_eckardt import KRAIN_DESIGN, KrainImpeller
+    case = KrainImpeller()
+    r1 = case.evaluate(n_sl=1)
+    assert r1.converged and r1.validity == pytest.approx(1.0, abs=1e-6)
+    assert r1.pressure_ratio == pytest.approx(5.00, abs=0.15)
+    r2 = case.evaluate(n_sl=7, fidelity=FidelityConfig.tier2())
+    assert r2.converged
+    assert r2.pressure_ratio == pytest.approx(r1.pressure_ratio, rel=0.02)
+    sp = case.stage_performance(r1)
+    assert sp["pr_stage"] == pytest.approx(4.714, abs=0.1)
+    assert sp["pr_stage"] >= KRAIN_DESIGN["stage_pr_max"]  # +4.8% recorded
+    assert sp["eta_stage"] == pytest.approx(0.905, abs=0.015)
+    assert sp["eta_stage"] > KRAIN_DESIGN["stage_eta_max"]  # +6.5 pt gap
+    # Design-backsweep recirculation floors to zero (the -2 cot term):
+    assert case.parasitic_breakdown(r1)["recirculation"] == 0.0
+
+
 def test_all_tiers_converge_and_agree_on_real_geometry(case, tier1_laser):
     # The headline structural finding: Tier 2 AND Tier 3 (which folds on
     # the synthetic V7 testbed bend) converge on the real Eckardt geometry

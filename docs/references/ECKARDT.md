@@ -138,3 +138,28 @@ the geometry-approximation error to close with the real profile.
    **exit swirl** are already ~comparable (loss-insensitive).
 
 See memory `centrifugal-validation-dataset`, `model-readiness`.
+
+## Krain second impeller — ADDED 2026-07-17 (`KrainImpeller`)
+
+Geometry grounded from the primaries via the Test Cases notebook (the
+1989 paper's Cartesian blade-coordinate table): r1h 45.0 / r1t 112.7 mm
+(LE), D2 ≈ 400 mm (U2 470 m/s @ 22 363 rpm), b2 ≈ 14.7 mm (TE hub-tip),
+**24 full blades no splitters**, backsweep **30° from radial**, axial
+length ≈ 119.1 mm; design 4.0 kg/s; design rotor PR_tt 4.7; measured
+maxima: stage PR_tt ≈ 4.5, impeller η_polytropic 0.95 (≈ η_is 0.938),
+stage η_is 0.84. Tip clearance NOT published → 0.5 mm recorded
+assumption. Case = `EckardtO` subclass (same quarter-ellipse frame).
+
+**Measured (2026-07-17, `test_krain_second_impeller_measured_agreement`):**
+Tier 1 AND Tier 2 converge, validity 1.0, agreeing to 0.2% (impeller-exit
+PR 5.00, internal η 0.972). Stage chain: **PR_stage 4.714 vs measured
+stage max 4.5 (+4.8%)** — the PR side generalizes; **η_stage 0.905 vs
+0.84 (+6.5 pt)** — the loss set that closes at Eckardt's PR 2.1 reads
+LIGHT at PR 4.7 (≈3.4 pt internal at high loading, recirculation floors
+to exactly 0 at design backsweep, clearance assumed). The two-point trend
+is the finding: loss magnitudes calibrate adequately at moderate loading
+and under-read at high loading — the quantified target for the next
+centrifugal-loss calibration pass. A cot(β₂ᵦ) wiring bug in
+`parasitic_breakdown` (hard-coded radial) was found and fixed by this
+case — Eckardt unchanged (cot 0), Krain recirculation was reading
+36.6 kJ/kg spuriously.

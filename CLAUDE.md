@@ -955,6 +955,25 @@ These are not suggestions; violating them is a bug even if tests pass.
   estimates (β_th ≈ β1, L_B = chord, disk gap 0.02) — pinned so drift is
   visible. Design point PR_stage 3.172 vs 3.0 (+5.7%), η 0.824.
 
+- **Krain second impeller (2026-07-17, `KrainImpeller` in
+  `v7_eckardt.py`).** The second centrifugal validation point (Krain
+  1988 / Krain-Hoffmann 1989 via the Test Cases notebook; geometry from
+  the 1989 Cartesian blade-coordinate table: r1h 45 / r1t 112.7 mm,
+  D2 ≈ 400 mm, b2 14.7 mm, 24 blades no splitters, 30° backsweep,
+  22 363 rpm / 4.0 kg/s; clearance not published → 0.5 mm recorded).
+  `EckardtO` subclass, zero new mechanics. **Measured:** Tier 1 + Tier 2
+  converge (validity 1.0, 0.2% agreement, impeller PR 5.00/η 0.972);
+  stage chain **PR_stage 4.714 vs measured stage max 4.5 (+4.8%)** — the
+  PR side generalizes to twice Eckardt's loading; **η_stage 0.905 vs
+  0.84 (+6.5 pt)** — the two-point trend finding: the loss set that
+  CLOSES at PR 2.1 reads LIGHT at PR 4.7 (≈3.4 pt internal at high
+  loading; recirculation floors to exactly 0 at design backsweep;
+  clearance assumed) — the quantified target for the next
+  centrifugal-loss calibration pass, recorded not tuned. A cot(β₂ᵦ)
+  wiring bug in `parasitic_breakdown` (hard-coded radial → spurious
+  36.6 kJ/kg Krain recirculation) was found and fixed; Eckardt bit-
+  unchanged. Pinned: `test_krain_second_impeller_measured_agreement`.
+
 ## Commands
 
 ```bash
