@@ -137,3 +137,24 @@ blockage schedule (report design values / AGARD); an MCA/transonic deviation
 correction (the `MEASURED_BE_4182` deviation profile above is the target);
 extending the loss validity window / transonic loss level vs the measured
 per-span loss coefficients; stator + stage comparison; 50–90% speedlines.
+
+## Rotor 38 — the high-AR sibling (ADDED 2026-07-17, `v5_rotor38.py`)
+
+NASA TP-2001 (NTRS 19820014395; in the Test Cases notebook): same
+annulus/speed/flow family (17 188.7 rpm, 20.188 kg/s, hub/tip 0.70) with
+**48 short-chord blades** (AR 1.63 vs 1.19) — design rotor PR 2.105 /
+η 0.878. Measured 100% line (Table IV(a), six readings): the rig
+**stalled before design flow** (peak η 0.849 at PR 1.969 at the minimum
+flow; never reached design PR — the documented high-AR shortfall).
+Transcribed via the `TABLES` hook (Rotor 37 machinery unchanged).
+
+**Measured (2026-07-17, `test_v5_rotor38.py`):** both tiers converge;
+η level generalizes (T1 +1.1 / T2 +0.5 pt); **PR does NOT track the
+high-AR shortfall** — T2 matched-flow +6.6% vs Rotor 37's +0.2%: the
+measured Stage 37→38 degradation (early stall / endwall sensitivity at
+high AR; no part-span damper mentioned) is not carried by the
+correlation set (Howell's s/h term even moves slightly the wrong way
+with the 48-blade pitch). **The axial two-point trend finding** —
+the AR-sensitivity gap is the quantified axial calibration target,
+recorded not tuned (differential +0.2% vs +6.6% is the frame-robust
+statement; both measured lines sit near the vertical characteristic).

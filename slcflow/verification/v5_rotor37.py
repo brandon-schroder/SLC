@@ -126,18 +126,28 @@ MEASURED_BE_4182 = {
 }
 
 
-def _resample_hub_to_tip(values, n=21):
+def _resample_hub_to_tip(values, n=21, pct_span=None):
     """Table order is tip->hub at non-uniform percent span; the section 4.1
     contract wants uniform span nodes from wall_0 (hub) to wall_1 (tip).
     PCHIP through the report nodes, sampled uniformly (C1 preserved)."""
-    y_nodes = (1.0 - _PCT_SPAN / 100.0)[::-1]   # hub-first span fractions
+    pct = _PCT_SPAN if pct_span is None else pct_span
+    y_nodes = (1.0 - pct / 100.0)[::-1]         # hub-first span fractions
     p = PchipInterpolator(y_nodes, np.asarray(values)[::-1])
     return p(np.linspace(0.0, 1.0, n))
 
 
 @dataclass(frozen=True)
 class Rotor37:
-    """Geometry-faithful NASA Rotor 37 (section 9.5, point-by-point V5)."""
+    """Geometry-faithful NASA Rotor 37 (section 9.5, point-by-point V5).
+
+    The TP-1659-family report tables are exposed through the ``TABLES``
+    class attribute (all [cm]/[deg], tip-first at ``pct_span``) so sibling
+    rotors of the same four-stage family (Rotor 38, TP-2001) subclass with
+    their own transcription and inherit the machinery unchanged.
+    """
+
+    TABLES = None          # None -> the module-level Rotor 37 arrays
+    BLADES = 36
 
     mdot: float = 20.74          # kg/s — the measured peak-eta reading
     rpm: float = 17188.7
@@ -191,13 +201,24 @@ class Rotor37:
         return self.rpm * 2.0 * np.pi / 60.0
 
     # ------------------------------------------------------------------
+    def _tables(self):
+        t = self.TABLES
+        if t is None:
+            t = {"pct": _PCT_SPAN, "ri": _RI_CM, "ro": _RO_CM,
+                 "kic": _KIC_DEG, "koc": _KOC_DEG, "tm": _TM_CM,
+                 "chord": _CHORD_CM, "sol": _SOLIDITY,
+                 "set": _SETTING_DEG, "zi": _ZI_CM, "zo": _ZO_CM}
+        return t
+
     def _walls(self):
         """Hub/casing polylines [m]: constant-radius duct extensions +
         linear taper across the swept rotor (see module docstring)."""
-        zi_hub, zo_hub = _ZI_CM[-1] / 100.0, _ZO_CM[-1] / 100.0
-        zi_tip, zo_tip = _ZI_CM[0] / 100.0, _ZO_CM[0] / 100.0
-        r_hub_le, r_hub_te = _RI_CM[-1] / 100.0, _RO_CM[-1] / 100.0
-        r_tip_le, r_tip_te = _RI_CM[0] / 100.0, _RO_CM[0] / 100.0
+        t = self._tables()
+        _ZI, _ZO, _RI, _RO = t["zi"], t["zo"], t["ri"], t["ro"]
+        zi_hub, zo_hub = _ZI[-1] / 100.0, _ZO[-1] / 100.0
+        zi_tip, zo_tip = _ZI[0] / 100.0, _ZO[0] / 100.0
+        r_hub_le, r_hub_te = _RI[-1] / 100.0, _RO[-1] / 100.0
+        r_tip_le, r_tip_te = _RI[0] / 100.0, _RO[0] / 100.0
         z_in, z_out = -0.06, 0.10
         hub = [(z_in, r_hub_le), (zi_hub, r_hub_le),
                (zo_hub, r_hub_te), (z_out, r_hub_te)]
@@ -223,10 +244,11 @@ class Rotor37:
         hub, tip = self._walls()
         w0 = WallCurve.from_points(np.asarray(hub))
         w1 = WallCurve.from_points(np.asarray(tip))
-        f_le0 = self._frac(hub, _ZI_CM[-1] / 100.0)
-        f_le1 = self._frac(tip, _ZI_CM[0] / 100.0)
-        f_te0 = self._frac(hub, _ZO_CM[-1] / 100.0)
-        f_te1 = self._frac(tip, _ZO_CM[0] / 100.0)
+        t = self._tables()
+        f_le0 = self._frac(hub, t["zi"][-1] / 100.0)
+        f_le1 = self._frac(tip, t["zi"][0] / 100.0)
+        f_te0 = self._frac(hub, t["zo"][-1] / 100.0)
+        f_te1 = self._frac(tip, t["zo"][0] / 100.0)
         stations = [
             StationDef(StationType.DUCT, 0.0, 0.0),
             StationDef(StationType.EDGE_LE, f_le0, f_le1, row_id="r37"),
@@ -237,24 +259,28 @@ class Rotor37:
 
     def _geometry(self) -> ParamRowGeometry:
         n = self.n_span_nodes
+        t = self._tables()
+
+        def rs(v):
+            return _resample_hub_to_tip(v, n, pct_span=t["pct"])
         # Throat estimate for the section 6.6 row-throat capacity check:
         # supersonic unique-incidence gauging o = s cos(KIC) at the LE
-        # radius (TP-1659 gives no throat table). MEASURED 2026-07-16:
-        # this throat does NOT bind (~27 kg/s in the rotor-relative frame
-        # vs the ~22 kg/s annulus limit) — a supersonic-inlet rotor chokes
-        # at its inlet swallowing limit, not the internal throat; the
-        # check is kept ON as the recorded (inert) documentation of that.
-        kic = _resample_hub_to_tip(_KIC_DEG, n) * _DEG
-        r_le = _resample_hub_to_tip(_RI_CM, n) / 100.0
-        throat = np.cos(kic) * (2.0 * np.pi * r_le / 36.0)
+        # radius (the reports give no throat table). MEASURED on Rotor 37
+        # (2026-07-16): this throat does NOT bind (~24.6 kg/s in the
+        # rotor-relative frame vs the ~22 kg/s annulus limit) — a
+        # supersonic-inlet rotor chokes at its inlet swallowing limit;
+        # the check is kept ON as the recorded (inert) documentation.
+        kic = rs(t["kic"]) * _DEG
+        r_le = rs(t["ri"]) / 100.0
+        throat = np.cos(kic) * (2.0 * np.pi * r_le / self.BLADES)
         return ParamRowGeometry(
-            blade_count=36,
+            blade_count=self.BLADES,
             beta1=-kic,
-            beta2=-_resample_hub_to_tip(_KOC_DEG, n) * _DEG,
-            chord_len=_resample_hub_to_tip(_CHORD_CM, n) / 100.0,
-            solidity_val=_resample_hub_to_tip(_SOLIDITY, n),
-            thickness=_resample_hub_to_tip(_TM_CM / _CHORD_CM, n),
-            stagger_val=-_resample_hub_to_tip(_SETTING_DEG, n) * _DEG,
+            beta2=-rs(t["koc"]) * _DEG,
+            chord_len=rs(t["chord"]) / 100.0,
+            solidity_val=rs(t["sol"]),
+            thickness=rs(np.asarray(t["tm"]) / np.asarray(t["chord"])),
+            stagger_val=-rs(t["set"]) * _DEG,
             throat_val=throat,
             clearance=self.tip_clearance_m)
 
@@ -269,7 +295,7 @@ class Rotor37:
                             blade_family="mca")
         row = RowSpec(row_id="r37", omega=self.omega,
                       swirl=swirl, loss=loss,
-                      blade_count=36, geometry=self._geometry())
+                      blade_count=self.BLADES, geometry=self._geometry())
         return Machine(self._flowpath(), self.gas,
                        InletCondition(h0=h0, s=0.0, rvt=0.0), rows=[row],
                        blockage=self.blockage)
