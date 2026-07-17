@@ -70,6 +70,40 @@ def test_recirculation_floor_and_formula():
     assert got == pytest.approx(want, rel=1e-12)
 
 
+def test_vaneless_diffuser_closed_form():
+    # Coppage/Stanitz via Whitfield & Baines Eq [30] (CENT-LOSS.md):
+    # delta_q = cf r_x (1-(r_x/r_y)^1.5)(C_x/U_T)^2 / (1.5 b_x cos a_x),
+    # returned as delta_q * U_T^2; alpha from tangent (cos = Cu/C).
+    from slcflow.closures.centrifugal.parasitic import vaneless_diffuser_loss
+    cf, r_in, r_out, b, u = 0.005, 0.2, 0.4, 0.026, 293.2
+    cu, cm = 257.0, 85.0
+    c = (cu * cu + cm * cm) ** 0.5
+    dq = cf * r_in * (1.0 - 0.5 ** 1.5) * (c / u) ** 2 \
+        / (1.5 * b * (cu / c))
+    want = dq * u ** 2
+    got = vaneless_diffuser_loss(cf, r_in, r_out, b, c, cu, u)
+    assert got == pytest.approx(want, rel=1e-12)
+    # No swirl -> negligible-path guard returns 0:
+    assert vaneless_diffuser_loss(cf, r_in, r_out, b, 100.0, 0.0, u) == 0.0
+
+
+def test_eckardt_stage_performance_with_diffuser():
+    # The full stage chain at the R/R2 = 2 measurement plane (ECKARDT.md):
+    # internal 0.969 -> +parasitics 0.9265 -> +vaneless diffuser 0.9074 vs
+    # measured stage 0.88 (+2.7 pt remaining: lambda tip-distortion, the
+    # closed-form-vs-marching diffuser, cf level — recorded). PR_stage
+    # 2.167 vs measured 2.1 (+3.2%, from +4.7% at the impeller exit).
+    from slcflow.verification.v7_eckardt import EckardtO
+    case = EckardtO()
+    r = case.evaluate(n_sl=1)
+    sp = case.stage_performance(r)
+    assert sp["dh_vld"] == pytest.approx(1356.0, abs=150.0)
+    assert sp["pr_stage"] == pytest.approx(2.167, abs=0.03)
+    assert sp["eta_stage"] == pytest.approx(0.9074, abs=0.01)
+    assert sp["eta_stage"] > 0.88          # the remaining gap stays positive
+    assert sp["pr_stage"] < r.pressure_ratio
+
+
 def test_eckardt_stage_efficiency_with_parasitics():
     # Integration (gate #3, ECKARDT.md): at the laser point the parasitic
     # set debits eta 0.969 -> 0.9265 (DF 370 + leakage 765 + recirculation

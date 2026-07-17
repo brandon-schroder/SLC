@@ -220,11 +220,46 @@ class EckardtO:
                          mdot: float = None) -> float:
         """Total-to-total efficiency with the parasitic works debited from
         the shaft side: ``eta = dh_ideal(PR) / (dh0_flow + sum dh_par)``.
-        Still excludes the vaneless-diffuser p0 loss (the measured 'stage'
-        plane sits at R/R2 = 2) — the recorded remaining gap."""
+        Excludes the vaneless-diffuser p0 loss — see
+        :meth:`stage_performance` for the R/R2 = 2 stage plane."""
         par = sum(self.parasitic_breakdown(result, mdot).values())
         cp = self.gas.gamma * self.gas.R / (self.gas.gamma - 1.0)
         kappa = (self.gas.gamma - 1.0) / self.gas.gamma
         dh_id = cp * self.T0_in * (result.pressure_ratio ** kappa - 1.0)
         dh0 = dh_id / result.efficiency
         return float(dh_id / (dh0 + par))
+
+    def stage_performance(self, result: PerformanceResult,
+                          mdot: float = None, cf: float = 0.005) -> dict:
+        """Stage totals at the rig's R/R2 = 2 measurement plane: the
+        impeller-exit result plus the vaneless-diffuser skin-friction p0
+        loss (Coppage/Stanitz closed form, ``vaneless_diffuser_loss``;
+        the paper: constant flow area to R/R2 = 2) and the parasitic
+        shaft-work debits. ``cf = 0.005`` is the Braembussche-typical
+        skin-friction coefficient the internal loss set already uses.
+        Returns ``{"pr_stage", "eta_stage", "dh_vld"}``."""
+        from ..closures.centrifugal.parasitic import vaneless_diffuser_loss
+        res = result.result
+        f, tr = res.fields, res.frozen.transported
+        j_te = 2 + self.n_inblade
+        r2 = float(np.mean(f.metrics.r[:, j_te]))
+        cu2 = float(np.mean(tr.rvt[:, j_te])) / r2
+        cm2 = float(np.mean(f.vm[:, j_te]))
+        c2 = float(np.hypot(cm2, cu2))
+        T2 = (float(np.mean(tr.h0[:, j_te])) - 0.5 * c2 * c2) / self.gas.cp
+        u2 = self.omega * self.r2
+        dh_vld = vaneless_diffuser_loss(cf, self.r2, 2.0 * self.r2,
+                                        self.b2, c2, cu2, u2)
+        # Loss -> entropy at the diffuser-inlet static state -> p0 debit.
+        ds = dh_vld / T2
+        p0_fac = float(np.exp(-ds / self.gas.R))
+        pr_stage = result.pressure_ratio * p0_fac
+        par = sum(self.parasitic_breakdown(result, mdot).values())
+        cp = self.gas.cp
+        kappa = (self.gas.gamma - 1.0) / self.gas.gamma
+        dh_id_stage = cp * self.T0_in * (pr_stage ** kappa - 1.0)
+        dh_id_imp = cp * self.T0_in * (result.pressure_ratio ** kappa - 1.0)
+        dh0 = dh_id_imp / result.efficiency
+        return {"pr_stage": float(pr_stage),
+                "eta_stage": float(dh_id_stage / (dh0 + par)),
+                "dh_vld": float(dh_vld)}

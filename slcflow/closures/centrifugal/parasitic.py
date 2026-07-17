@@ -32,7 +32,8 @@ per-streamtube LossModel components (the recorded M7 deferral).
 """
 from __future__ import annotations
 
-__all__ = ["disk_friction_work", "leakage_work", "recirculation_work"]
+__all__ = ["disk_friction_work", "leakage_work", "recirculation_work",
+           "vaneless_diffuser_loss"]
 
 _TWO_PI = 6.283185307179586
 
@@ -75,6 +76,34 @@ def leakage_work(mdot, rho2, u2, r1, r2, b1, b2, cu1, cu2, blade_count,
     u_cl = 0.816 * (2.0 * dp_cl / rho2) ** 0.5
     mdot_cl = rho2 * blade_count * clearance * blade_length * u_cl
     return mdot_cl * u_cl * u2 / (2.0 * mdot)
+
+
+def vaneless_diffuser_loss(cf, r_in, r_out, b_in, c_in, cu_in, u_ref):
+    """Vaneless-diffuser skin-friction loss [J/kg] — an INTERNAL (p0) loss,
+    included here as the stage-level post-solve companion of the parasitic
+    set (same accounting seam: evaluated on the converged impeller-exit
+    state, never inside the solve).
+
+    Closed-form Coppage et al. (1956)/Stanitz (1952) simplification as
+    quoted by Whitfield & Baines (1990) Eq. [30] (extracted verbatim via
+    the theory notebook, 2026-07-17 — docs/references/CENT-LOSS.md):
+
+        delta_q = cf r_x (1 - (r_x/r_y)^1.5) (C_x/U_T)^2
+                  / (1.5 b_x cos(alpha_x))
+
+    a loss in work-coefficient units (returned here times ``u_ref**2``).
+    ``alpha_x`` is the flow angle from TANGENT (cos = Cu/C). Aungier's own
+    treatment is the full 5-45/5-46 radial marching integration — recorded
+    as the refinement; the closed form assumes a log-spiral path at the
+    inlet flow angle with constant width, adequate for a constant-area
+    vaneless space (the Eckardt configuration).
+    """
+    if c_in <= 0.0 or cu_in <= 0.0:
+        return 0.0                       # no swirl path, negligible loss
+    cos_alpha = cu_in / c_in
+    dq = cf * r_in * (1.0 - (r_in / r_out) ** 1.5) * (c_in / u_ref) ** 2 \
+        / (1.5 * b_in * cos_alpha)
+    return dq * u_ref ** 2
 
 
 def recirculation_work(u2, w1, w2, cm2, wu2, cot_beta2_blade, r1cu1, r2cu2,

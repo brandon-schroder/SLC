@@ -929,7 +929,19 @@ These are not suggestions; violating them is a bug even if tests pass.
   tests pin each formula against hand-computed chains
   (`test_parasitic_reference.py`) + the Eckardt integration levels.
   Recorded assumptions: disk backface gap s/r2 = 0.02, μ = 1.81e-5,
-  blade length = the case chord.
+  blade length = the case chord. **Vaneless-diffuser loss added next day
+  (2026-07-17):** the Coppage/Stanitz closed form (Whitfield & Baines Eq
+  [30], verbatim via the theory notebook; Aungier's 5-45/5-46 marching =
+  recorded refinement) as `parasitic.vaneless_diffuser_loss`, applied as
+  a post-solve entropy/p0 debit in `EckardtO.stage_performance` to the
+  rig's R/R₂=2 plane (cf = 0.005, the set's Braembussche-typical value).
+  **The Eckardt stage comparison is now assembled end-to-end:** laser
+  point η 0.969 (internal) → 0.9265 (+parasitics) → **0.9074 (+diffuser)
+  vs measured stage 0.88 (+2.7 pt)**; PR_stage 2.167 vs 2.1 (+3.2%, from
+  +4.7% impeller-exit); design PR_stage 3.308 vs 3.0, η 0.859.
+  Remaining-gap candidates (recorded): λ tip-distortion internal loss,
+  closed-form-vs-marching diffuser, cf level, η-definition subtleties.
+  Pinned in `test_parasitic_reference.py`.
 
 ## Commands
 

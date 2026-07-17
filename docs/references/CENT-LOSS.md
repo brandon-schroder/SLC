@@ -138,3 +138,26 @@ components — the recorded M7 deferral, now discharged). Recorded
 assumptions: disk backface gap `s/r2 = 0.02`, `μ = 1.81e-5`, blade length
 = the case friction-length chord. Aungier's internal clearance effect
 (the λ tip-distortion factor, Eq 5-36) is a separate recorded refinement.
+
+## Vaneless-diffuser loss — ADDED 2026-07-17 (the stage-plane companion)
+
+`parasitic.vaneless_diffuser_loss`: the Coppage et al. (1956)/Stanitz
+(1952) closed form as quoted by **Whitfield & Baines (1990) Eq. [30]**
+(theory notebook, verbatim):
+
+    delta_q = cf·r_x·(1−(r_x/r_y)^1.5)·(C_x/U_T)² / (1.5·b_x·cos α_x)
+
+(work-coefficient units × U_T²; α from tangent). An INTERNAL p0 loss at
+the stage level — applied post-solve as an entropy debit
+`p0_factor = exp(−Δh/(T2·R))` in `EckardtO.stage_performance` (the rig's
+constant-area vaneless space to R/R₂ = 2). `cf = 0.005` default (the
+Braembussche-typical value the internal set already uses). Aungier's full
+radial-marching treatment (Eqs 5-45/5-46 + his pipe-friction cf model,
+also extracted) is the recorded refinement.
+
+**Measured (Eckardt O laser point):** Δh_vld ≈ 1356 J/kg → stage chain
+η 0.969 (internal) → 0.9265 (+parasitics) → **0.9074 (+diffuser)** vs
+measured stage 0.88; PR_stage 2.167 vs 2.1 (+3.2%, from +4.7% at the
+impeller exit). Design point: PR_stage 3.308 vs 3.0 (+10.3%), η 0.859.
+Remaining +2.7 pt candidates: λ tip-distortion internal loss, closed-form
+vs marching diffuser, cf level, η-definition subtleties.

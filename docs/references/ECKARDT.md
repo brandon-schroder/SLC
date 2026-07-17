@@ -36,6 +36,15 @@ impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort.
 > λ tip-distortion internal clearance effect) — the recorded next
 > refinements for a full stage-η comparison. Assumptions recorded: disk
 > backface gap s/r2 = 0.02, blade length = the friction-length chord.
+>
+> **VANELESS DIFFUSER ADDED (2026-07-17,
+> `EckardtO.stage_performance`):** the Coppage/Stanitz closed form
+> (Whitfield [30], CENT-LOSS.md) closes the chain to the rig's R/R₂ = 2
+> plane: laser point Δh_vld ≈ 1.36 kJ/kg → **η 0.9074 vs measured 0.88
+> (+2.7 pt)**, **PR_stage 2.167 vs 2.1 (+3.2%)**; design PR_stage 3.308
+> vs 3.0 (+10.3%), η 0.859. The full stage comparison is now assembled
+> end-to-end (internal → +parasitics → +diffuser); remaining-gap
+> candidates: λ tip-distortion, marching-vs-closed-form diffuser, cf.
 
 Historical context (2026-07-12, pre-primary-paper) below.
 
