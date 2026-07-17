@@ -1019,6 +1019,24 @@ These are not suggestions; violating them is a bug even if tests pass.
   centrifugal stage validation now reads: PR ±2%, η ±2 pt at both
   loadings with one calibrated constant.**
 
+- **Rotor 38 — the second transonic axial rotor (2026-07-17,
+  `v5_rotor38.py`).** The axial counterpart of the Krain generalization
+  check: TP-2001's high-AR sibling of Rotor 37 (same annulus/speed/flow
+  family, 48 short-chord blades, AR 1.63; design rotor PR 2.105/η 0.878;
+  the rig's own summary records the shortfall — **stalled before design
+  flow**, peak η 0.849 at PR 1.969). Implemented via a `TABLES` class
+  hook on Rotor 37 (behavior-preserving refactor, all Rotor 37 pins
+  unchanged). **Measured:** both tiers converge; the η level generalizes
+  (T1 +1.1 / T2 +0.5 pt); **PR does NOT track the measured high-AR
+  shortfall** — T2 matched-flow +6.6% vs Rotor 37's +0.2%: the measured
+  Stage 37→38 degradation (early stall / endwall sensitivity at high AR;
+  no part-span damper in TP-2001) is not carried by the correlation set
+  (Howell's s/h term even moves slightly the wrong way with the 48-blade
+  pitch). **The axial two-point trend finding** (the AR-sensitivity gap
+  = the quantified axial calibration target); the sibling differential
+  is the frame-robust statement. Pinned: `test_v5_rotor38.py`;
+  ROTOR37.md "Rotor 38" section.
+
 ## Commands
 
 ```bash
