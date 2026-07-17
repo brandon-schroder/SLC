@@ -112,34 +112,33 @@ def test_lambda_tip_distortion_chain():
 
 def test_high_loading_calibration_dispositions():
     # The 2026-07-17 high-loading calibration pass, dispositioned by
-    # measurement (CENT-LOSS.md "high-loading" section). Diagnosis: both
-    # rigs read light on impeller-INTERNAL loss vs measured impeller eta;
-    # Eckardt's stage closes because the stage-side stack compensates,
-    # Krain's (+6.5 pt) does not. Three grounded mechanisms measured:
+    # measurement (CENT-LOSS.md "high-loading" section) and RESOLVED by
+    # the diffuser recalibration: the Krain "+6.5 pt gap" was largely the
+    # DIFFUSER WIDTH-LAW mismatch — both rigs' papers specify a
+    # CONSTANT-AREA vaneless space, which the constant-width closed form
+    # badly understates. With the Aungier 5-45/46 marching (area law) and
+    # the single joint cf_diffuser = 0.003, BOTH rigs land within ~2 pt
+    # (Eckardt -1.9 / Krain +1.7) — the pins below. Also dispositioned:
     #  (1) Oh-native accounting (Jansen clearance + Johnston-Dean mixing,
-    #      replacing Aungier lambda): swings only ~2.5 kJ/kg — cannot
-    #      close Krain's ~11 kJ/kg gap and OVERSHOOTS Eckardt to -3.8 pt
-    #      -> NOT adopted (lambda stays the default accounting).
+    #      MERIDIONAL velocity only) — max joint error worse than lambda
+    #      (Eckardt -3.8 pt) -> lambda stays the default accounting.
     #  (2) Aungier supercritical Mach loss (Eqs 5-41/42): INERT at both
     #      rigs' 1-D mean inlet at design (the loaded W_max raises M'_cr
     #      above M1'); a tip-resolved variant is the recorded follow-up.
-    #  (3) The Krain gap stands RECORDED (~5-6% of work at PR 4.7);
-    #      remaining suspects: measured-plane/eta definition, assumed
-    #      clearance, tip-resolved supercritical, loading-grown wake.
     from slcflow.verification.v7_eckardt import EckardtO, KrainImpeller
     eck = EckardtO()
     r_e = eck.evaluate(n_sl=1)
     sp_l = eck.stage_performance(r_e)                      # default: lambda
     sp_o = eck.stage_performance(r_e, accounting="oh_native")
-    assert sp_l["eta_stage"] == pytest.approx(0.8796, abs=0.012)
-    assert sp_o["eta_stage"] == pytest.approx(0.8417, abs=0.012)
+    assert sp_l["eta_stage"] == pytest.approx(0.8611, abs=0.012)
+    assert sp_o["eta_stage"] == pytest.approx(0.8234, abs=0.012)
     assert sp_l["dh_supercritical"] == 0.0                 # subcritical
     kr = KrainImpeller()
     r_k = kr.evaluate(n_sl=1)
     sp_kl = kr.stage_performance(r_k)
     sp_ko = kr.stage_performance(r_k, accounting="oh_native")
-    assert sp_kl["eta_stage"] == pytest.approx(0.9049, abs=0.012)
-    assert sp_ko["eta_stage"] == pytest.approx(0.8903, abs=0.012)
+    assert sp_kl["eta_stage"] == pytest.approx(0.8574, abs=0.012)
+    assert sp_ko["eta_stage"] == pytest.approx(0.8431, abs=0.012)
     assert sp_kl["dh_supercritical"] == 0.0                # 1-D mean inert
     # Oh-native components individually sane (guards the verbatim forms):
     from slcflow.closures.centrifugal.parasitic import (
@@ -179,16 +178,16 @@ def test_eckardt_stage_performance_full_chain():
     case = EckardtO()
     r = case.evaluate(n_sl=1)
     sp = case.stage_performance(r)
-    assert sp["dh_vld"] == pytest.approx(1356.0, abs=150.0)
+    assert sp["dh_vld"] == pytest.approx(2684.0, abs=300.0)
     assert sp["dh_lambda"] == pytest.approx(1996.0, abs=250.0)
-    assert sp["pr_stage"] == pytest.approx(2.121, abs=0.03)
-    assert sp["eta_stage"] == pytest.approx(0.8796, abs=0.012)
+    assert sp["pr_stage"] == pytest.approx(2.091, abs=0.03)
+    assert sp["eta_stage"] == pytest.approx(0.8611, abs=0.012)
     assert sp["pr_stage"] < r.pressure_ratio
     # Design point: recirculation + lambda grow with loading.
     c18 = EckardtO(rpm=18000.0, mdot=7.16)
     sp18 = c18.stage_performance(c18.evaluate(n_sl=1))
-    assert sp18["pr_stage"] == pytest.approx(3.172, abs=0.05)
-    assert sp18["eta_stage"] == pytest.approx(0.824, abs=0.015)
+    assert sp18["pr_stage"] == pytest.approx(3.093, abs=0.05)
+    assert sp18["eta_stage"] == pytest.approx(0.803, abs=0.015)
 
 
 def test_eckardt_stage_efficiency_with_parasitics():

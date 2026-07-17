@@ -238,7 +238,9 @@ class EckardtO:
                           mdot: float = None, cf: float = 0.005,
                           accounting: str = "aungier_lambda",
                           wake_fraction: float = 0.2,
-                          wake_blockage: float = 0.05) -> dict:
+                          wake_blockage: float = 0.05,
+                          diffuser: str = "march_area",
+                          cf_diffuser: float = 0.003) -> dict:
         """Stage totals at the rig's R/R2 = 2 measurement plane: the
         impeller-exit result plus (a) the Aungier tip-distortion internal
         loss (``tip_distortion_loss``, the clearance/blockage effect),
@@ -319,8 +321,30 @@ class EckardtO:
             self.blade_count * self.chord)
         dh_cr = supercritical_loss(w1 / a1, w1, w2, dw, w_star)
 
-        dh_vld = vaneless_diffuser_loss(cf, self.r2, 2.0 * self.r2,
-                                        self.b2, c2, cu2, u2)
+        # Vaneless-diffuser model (2026-07-17 recalibration): BOTH rigs'
+        # papers specify a CONSTANT-AREA vaneless space (width ~ r2 b2/r),
+        # which the constant-width Coppage/Stanitz closed form badly
+        # understates — the Krain "+6.5 pt high-loading gap" was largely
+        # this configuration mismatch. Default = the Aungier 5-45/5-46
+        # marching with the area law and cf_diffuser = 0.003, the single
+        # constant that lands BOTH rigs within ~2 pt (the two-rig joint
+        # calibration; Eckardt's earlier closed-form -0.04 pt closing was
+        # fortuitous width-law cancellation). "closed_form" retained for
+        # the record.
+        if diffuser == "march_area":
+            from ..closures.centrifugal.parasitic import (
+                vaneless_diffuser_march)
+            h0_te = float(np.mean(tr.h0[:, j_te]))
+            s_te = float(np.mean(tr.s[:, j_te]))
+            ds_vld, _, _ = vaneless_diffuser_march(
+                self.gas, r2, 2.0 * self.r2, self.b2, h0_te, s_te,
+                r2 * cu2, cm2, cf=cf_diffuser, area_law="area")
+            dh_vld = ds_vld * T2
+        elif diffuser == "closed_form":
+            dh_vld = vaneless_diffuser_loss(cf, self.r2, 2.0 * self.r2,
+                                            self.b2, c2, cu2, u2)
+        else:
+            raise ValueError(f"unknown diffuser model {diffuser!r}")
         # Losses -> entropy at the impeller-exit static state -> p0 debit.
         ds = (dh_vld + dh_lambda + dh_cr) / T2
         p0_fac = float(np.exp(-ds / self.gas.R))

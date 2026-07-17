@@ -212,3 +212,30 @@ Three grounded mechanisms implemented + measured, none adopted:
    Measurement-narrowed suspects: the Krain stage measurement
    plane/η definition, the assumed 0.5 mm clearance, tip-resolved
    supercritical, loading-grown wake fraction.
+
+## High-loading gap RESOLVED — the diffuser width law (2026-07-17, same day)
+
+The Krain measurement-plane query closed the loop: **both rigs' papers
+specify a vaneless CONSTANT-AREA diffuser** (Eckardt: "constant flow area
+up to R/R₂ = 2"; Krain: "vaneless constant area diffuser", stage plane =
+its exit, η 0.84 total-total incl. diffuser; impeller 0.95 polytropic at
+the discharge tappings, zero-blockage derivation). The constant-WIDTH
+Coppage/Stanitz closed form badly understates a constant-area space
+(velocity stays high as the width shrinks). Implemented the recorded
+refinement: `parasitic.vaneless_diffuser_march` — the Aungier Eq 5-45
+angular-momentum decay + wall-dissipation entropy ODE pair, RK2-marched
+radially, width law selectable ("width"/"area"), consistent τ = cf·½ρC²
+two-wall convention (5-45 cross-checked exactly).
+
+**Measured** (marching, area law, R/R₂ = 2): the diffuser loss vs cf —
+Eckardt 1.8/2.7/4.3 kJ/kg and Krain 8.4/11.8/17.3 kJ/kg at cf
+0.002/0.003/0.005. **A single cf_diffuser = 0.003 lands BOTH rigs within
+~2 pt** (Eckardt η_stage 0.8611 vs 0.88; Krain 0.8574 vs 0.84) and both
+PR_stage within ±2% (2.091 vs 2.1; 4.412 vs 4.5); the Eckardt design
+point improves too (3.093 vs 3.0). Adopted as the `stage_performance`
+default (`diffuser="march_area"`, `cf_diffuser=0.003` — the one
+locally-calibrated constant, a two-rig joint fit inside the plausible
+skin-friction range; the closed form is retained as an option and its
+earlier Eckardt −0.04 pt "closing" is re-classified as fortuitous
+width-law cancellation). Krain's diffuser radius ratio is not printed —
+R/R₂ = 2 recorded assumption for both.

@@ -996,6 +996,29 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_high_loading_calibration_dispositions` (2×2 stage levels +
   verbatim-form guards + onset semantics). CENT-LOSS.md "high-loading".
 
+- **High-loading gap RESOLVED — the diffuser width law (2026-07-17, the
+  calibration pass's conclusion).** The Krain measurement-plane query
+  closed the loop: **both rigs' papers specify CONSTANT-AREA vaneless
+  diffusers** (stage η measured at the diffuser exit, total-total), which
+  the constant-WIDTH Coppage/Stanitz closed form badly understates.
+  Implemented the recorded refinement `parasitic.vaneless_diffuser_march`
+  (Aungier Eq 5-45 swirl-decay + wall-dissipation entropy ODE pair, RK2
+  radial marching, selectable width law, τ-convention cross-checked
+  against 5-45 exactly) and measured the cf grid on both rigs: **a
+  single cf_diffuser = 0.003 lands BOTH rigs within ~2 pt η and ±2% PR**
+  (Eckardt 0.8611/2.091 vs 0.88/2.1; Krain 0.8574/4.412 vs 0.84/4.5;
+  Eckardt design 3.093 vs 3.0) — the "+6.5 pt Krain gap" was largely the
+  width-law mismatch, and Eckardt's earlier closed-form −0.04 pt closing
+  is re-classified as fortuitous cancellation. Adopted as the
+  `stage_performance` default (`diffuser="march_area"`,
+  `cf_diffuser=0.003` — the one locally-calibrated constant, a two-rig
+  joint fit inside the plausible skin-friction range; closed form
+  retained as an option); Krain's diffuser radius ratio unprinted →
+  R/R₂=2 recorded assumption. All stage pins re-set deliberately
+  (`test_parasitic_reference.py`, `test_v7_eckardt.py`). **The two-rig
+  centrifugal stage validation now reads: PR ±2%, η ±2 pt at both
+  loadings with one calibrated constant.**
+
 ## Commands
 
 ```bash

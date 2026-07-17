@@ -84,14 +84,12 @@ def test_krain_second_impeller_measured_agreement():
     # set. MEASURED (2026-07-17, docs/references/ECKARDT.md "Krain"):
     #   * Tier-1 AND Tier-2 converge with validity 1.0, agreeing to 0.2%
     #     (impeller-exit PR ~5.00, internal eta 0.972).
-    #   * Stage chain: PR_stage 4.714 vs the measured stage max ~4.5
-    #     (+4.8%; design rotor PR_tt 4.7) — the PR side holds up.
-    #   * eta_stage 0.905 vs measured stage 0.84: +6.5 pt — the loss set
-    #     that CLOSES at Eckardt's PR 2.1 reads LIGHT at PR 4.7 (measured
-    #     impeller eta_poly 0.95 ~ eta_is 0.938 vs internal 0.972, so
-    #     ~3.4 pt of it is internal-loss level at high loading; the
-    #     recirculation term floors to exactly 0 at design backsweep;
-    #     clearance is an assumption). RECORDED trend finding, not tuned.
+    #   * Stage chain (2026-07-17 diffuser recalibration — the rigs'
+    #     own CONSTANT-AREA vaneless space, Aungier 5-45/46 marching,
+    #     joint cf_diffuser 0.003): PR_stage 4.412 vs measured stage max
+    #     ~4.5 (-2.0%), eta_stage 0.8574 vs 0.84 (+1.7 pt). The earlier
+    #     "+6.5 pt high-loading gap" was largely the width-law mismatch
+    #     of the constant-width closed form.
     from slcflow.machine import FidelityConfig
     from slcflow.verification.v7_eckardt import KRAIN_DESIGN, KrainImpeller
     case = KrainImpeller()
@@ -102,10 +100,13 @@ def test_krain_second_impeller_measured_agreement():
     assert r2.converged
     assert r2.pressure_ratio == pytest.approx(r1.pressure_ratio, rel=0.02)
     sp = case.stage_performance(r1)
-    assert sp["pr_stage"] == pytest.approx(4.714, abs=0.1)
-    assert sp["pr_stage"] >= KRAIN_DESIGN["stage_pr_max"]  # +4.8% recorded
-    assert sp["eta_stage"] == pytest.approx(0.905, abs=0.015)
-    assert sp["eta_stage"] > KRAIN_DESIGN["stage_eta_max"]  # +6.5 pt gap
+    # 2026-07-17 diffuser recalibration (march-area, joint cf 0.003):
+    # PR_stage -2.0% and eta_stage +1.7 pt vs measured -- the "+6.5 pt
+    # high-loading gap" resolved as the diffuser width-law mismatch.
+    assert sp["pr_stage"] == pytest.approx(4.412, abs=0.1)
+    assert abs(sp["pr_stage"] - KRAIN_DESIGN["stage_pr_max"]) < 0.15
+    assert sp["eta_stage"] == pytest.approx(0.8574, abs=0.015)
+    assert abs(sp["eta_stage"] - KRAIN_DESIGN["stage_eta_max"]) < 0.03
     # Design-backsweep recirculation floors to zero (the -2 cot term):
     assert case.parasitic_breakdown(r1)["recirculation"] == 0.0
 

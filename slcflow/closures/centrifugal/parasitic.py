@@ -108,6 +108,61 @@ def vaneless_diffuser_loss(cf, r_in, r_out, b_in, c_in, cu_in, u_ref):
     return dq * u_ref ** 2
 
 
+def vaneless_diffuser_march(fluid, r_in, r_out, b_in, h0, s_in, rcu_in,
+                            cm_in, cf=0.005, area_law="width", n=200):
+    """One-dimensional vaneless-diffuser radial marching (Aungier Eqs
+    5-45/5-46 family; theory notebook 2026-07-17) — the refinement of the
+    Coppage/Stanitz closed form, needed because the width law matters:
+    Eckardt's space is constant-WIDTH (b = b2) while Krain's is
+    constant-AREA (r b = r2 b2 — the papers' own attribution for the
+    0.95 impeller -> 0.84 stage efficiency drop).
+
+        d(r Cu)/dr = - cf r C Cu / (b Cm)          (Eq 5-45, dm = dr)
+        T ds/dr    =   cf C^3 / (b Cm)             (wall dissipation)
+        Cm         =   mdot / (rho 2 pi r b),  rho = rho(h0 - C^2/2, s)
+
+    marched RK2 from ``r_in`` to ``r_out``; ``area_law`` selects
+    ``b(r) = b_in`` ("width") or ``b(r) = b_in r_in/r`` ("area").
+    Returns ``(delta_s, rcu_out, cm_out)`` — the entropy rise is the p0
+    debit (``exp(-ds/R)``), swirl decays per 5-45. Post-solve scalar
+    marching at the case level (never on the solve path); the plain
+    Python loop is the ARCH-4.2-sanctioned driver-style iteration.
+    """
+    mdot_per = None                      # rho2 Cm 2 pi r b, set at inlet
+    r = r_in
+    b = b_in
+    rho = float(fluid.rho(h0 - 0.5 * (cm_in ** 2 + (rcu_in / r_in) ** 2),
+                          s_in))
+    mdot_per = rho * cm_in * r_in * b_in
+    rcu, s = float(rcu_in), float(s_in)
+    dr = (r_out - r_in) / n
+
+    def rates(r, rcu, s):
+        b = b_in if area_law == "width" else b_in * r_in / r
+        cu = rcu / r
+        # meridional velocity from continuity at the local state
+        # (one fixed-point pass on rho suffices at these Mach numbers)
+        cm = cm_in
+        for _ in range(3):
+            c2 = cm * cm + cu * cu
+            rho = float(fluid.rho(h0 - 0.5 * c2, s))
+            cm = mdot_per / (rho * r * b)
+        c = (cm * cm + cu * cu) ** 0.5
+        T = float(fluid.T(h0 - 0.5 * c * c, s))
+        drcu = -cf * r * c * cu / (b * cm)
+        ds = cf * c ** 3 / (b * cm * T)
+        return drcu, ds, cm
+
+    for _ in range(n):
+        k1_rcu, k1_s, _ = rates(r, rcu, s)
+        k2_rcu, k2_s, _ = rates(r + dr, rcu + dr * k1_rcu, s + dr * k1_s)
+        rcu += 0.5 * dr * (k1_rcu + k2_rcu)
+        s += 0.5 * dr * (k1_s + k2_s)
+        r += dr
+    _, _, cm_out = rates(r_out, rcu, s)
+    return s - float(s_in), rcu, cm_out
+
+
 def supercritical_loss(m1_rel, w1, w2, dw_loading, w_star):
     """Aungier supercritical Mach-number INTERNAL loss [J/kg] (shock /
     shock-induced separation once the suction-surface peak goes sonic;
