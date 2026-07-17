@@ -186,3 +186,29 @@ LE), L_B = the case chord.
 locally fitted constants. (Agreement partly fortuitous given the
 recorded geometric estimates; component magnitudes each plausible.)
 Design point: PR_stage 3.172 vs 3.0 (+5.7%), η 0.824.
+
+## High-loading calibration pass — DISPOSITIONED 2026-07-17
+
+Diagnosis (loss-budget probe, Eckardt control vs Krain): both rigs read
+LIGHT on impeller-internal loss vs measured impeller η (Eckardt implied
+~6.8 vs closure 2.3 kJ/kg; Krain ~10.8 vs 4.8); Eckardt's stage closes
+because the stage-side stack compensates, Krain's (+6.5 pt) does not.
+Three grounded mechanisms implemented + measured, none adopted:
+
+1. **Oh-native accounting** (`jansen_clearance_loss` — verbatim Jansen
+   1967 via Whitfield; `johnston_dean_mixing_loss` — J&D 1966 with the
+   MERIDIONAL velocity only, Aungier quoted verbatim on why; ε_w
+   0.15–0.25 / b* 0.02–0.12 typical ranges, defaults 0.2/0.05),
+   selectable via `stage_performance(accounting="oh_native")`, mutually
+   exclusive with the λ chain (same physics family). Measured 2×2:
+   swings only ~2.5 kJ/kg — cannot close Krain's ~11 kJ/kg gap and
+   overshoots Eckardt to −3.8 pt → **λ stays the default accounting**.
+2. **Aungier supercritical Mach loss** (`supercritical_loss`, Eqs
+   5-41/42 verbatim; onset = suction-surface peak sonic, W_max > W*):
+   **inert at both rigs' 1-D mean inlet at design** — not the mechanism
+   at this fidelity; a tip-resolved variant is the recorded follow-up
+   (Krain M1t′ ≈ 0.85).
+3. **The Krain +6.5 pt stands recorded** (~5–6% of work at PR 4.7).
+   Measurement-narrowed suspects: the Krain stage measurement
+   plane/η definition, the assumed 0.5 mm clearance, tip-resolved
+   supercritical, loading-grown wake fraction.

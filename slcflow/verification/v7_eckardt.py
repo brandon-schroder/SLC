@@ -235,7 +235,10 @@ class EckardtO:
         return float(dh_id / (dh0 + par))
 
     def stage_performance(self, result: PerformanceResult,
-                          mdot: float = None, cf: float = 0.005) -> dict:
+                          mdot: float = None, cf: float = 0.005,
+                          accounting: str = "aungier_lambda",
+                          wake_fraction: float = 0.2,
+                          wake_blockage: float = 0.05) -> dict:
         """Stage totals at the rig's R/R2 = 2 measurement plane: the
         impeller-exit result plus (a) the Aungier tip-distortion internal
         loss (``tip_distortion_loss``, the clearance/blockage effect),
@@ -280,14 +283,46 @@ class EckardtO:
         area_ratio = a2 / (a1 * np.sin(beta1_tan))
         omega_sf = 2.0 * cf * (self.chord / d_hyd) * (1.0 + (w2 / w1) ** 2)
         pv1, pv2 = rho1 * w1 * w1, rho2 * w2 * w2
-        dh_lambda = tip_distortion_loss(
-            omega_sf, pv1, pv2, w1, w2, cm2, d_hyd, self.b2, self.chord,
-            area_ratio, rho1, rho2, self.clearance)
+        # Clearance/wake-mixing accounting: the two grounded families model
+        # the SAME physics and are mutually exclusive (CENT-LOSS.md):
+        #   "aungier_lambda" — the Eq 4-12/120/5-36 distortion chain;
+        #   "oh_native"      — Jansen clearance + Johnston-Dean mixing
+        #                      (the Oh-1997 optimum-set components).
+        if accounting == "aungier_lambda":
+            dh_lambda = tip_distortion_loss(
+                omega_sf, pv1, pv2, w1, w2, cm2, d_hyd, self.b2, self.chord,
+                area_ratio, rho1, rho2, self.clearance)
+        elif accounting == "oh_native":
+            from ..closures.centrifugal.parasitic import (
+                jansen_clearance_loss, johnston_dean_mixing_loss)
+            dh_lambda = (jansen_clearance_loss(
+                self.clearance, self.b2, cu2, vm1, self.r1h, self.r1t,
+                self.r2, rho1, rho2, self.blade_count)
+                + johnston_dean_mixing_loss(cm2, wake_fraction,
+                                            wake_blockage))
+        else:
+            raise ValueError(f"unknown accounting {accounting!r}")
+
+        # Aungier supercritical Mach loss (Eqs 5-41/42; 1-D convention:
+        # mean-inlet values). Inert when the suction-surface peak stays
+        # subsonic — the mechanism separating Krain (M1'~0.85 tip) from
+        # Eckardt (M1'~0.67).
+        from ..closures.centrifugal.parasitic import supercritical_loss
+        T1 = (float(np.mean(tr.h0[:, j_le]))
+              - 0.5 * (vm1 ** 2 + cu1 ** 2)) / self.gas.cp
+        a1 = float(np.sqrt(self.gas.gamma * self.gas.R * T1))
+        T0rel1 = T1 + 0.5 * w1 * w1 / self.gas.cp
+        w_star = float(np.sqrt(2.0 * self.gas.gamma
+                               / (self.gas.gamma + 1.0)
+                               * self.gas.R * T0rel1))
+        dw = 4.0 * np.pi * (self.r2 * cu2 - r1 * cu1) / (
+            self.blade_count * self.chord)
+        dh_cr = supercritical_loss(w1 / a1, w1, w2, dw, w_star)
 
         dh_vld = vaneless_diffuser_loss(cf, self.r2, 2.0 * self.r2,
                                         self.b2, c2, cu2, u2)
         # Losses -> entropy at the impeller-exit static state -> p0 debit.
-        ds = (dh_vld + dh_lambda) / T2
+        ds = (dh_vld + dh_lambda + dh_cr) / T2
         p0_fac = float(np.exp(-ds / self.gas.R))
         pr_stage = result.pressure_ratio * p0_fac
         par = sum(self.parasitic_breakdown(result, mdot).values())
@@ -298,7 +333,8 @@ class EckardtO:
         dh0 = dh_id_imp / result.efficiency
         return {"pr_stage": float(pr_stage),
                 "eta_stage": float(dh_id_stage / (dh0 + par)),
-                "dh_vld": float(dh_vld), "dh_lambda": float(dh_lambda)}
+                "dh_vld": float(dh_vld), "dh_lambda": float(dh_lambda),
+                "dh_supercritical": float(dh_cr)}
 
 
 # Krain design/measured anchors (Krain 1988 + Krain & Hoffmann 1989, via

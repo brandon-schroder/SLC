@@ -110,6 +110,62 @@ def test_lambda_tip_distortion_chain():
         ((lam_cap - 1.0) * cm2 / w2) ** 2 * 0.5 * w1 * w1, rel=1e-9)
 
 
+def test_high_loading_calibration_dispositions():
+    # The 2026-07-17 high-loading calibration pass, dispositioned by
+    # measurement (CENT-LOSS.md "high-loading" section). Diagnosis: both
+    # rigs read light on impeller-INTERNAL loss vs measured impeller eta;
+    # Eckardt's stage closes because the stage-side stack compensates,
+    # Krain's (+6.5 pt) does not. Three grounded mechanisms measured:
+    #  (1) Oh-native accounting (Jansen clearance + Johnston-Dean mixing,
+    #      replacing Aungier lambda): swings only ~2.5 kJ/kg — cannot
+    #      close Krain's ~11 kJ/kg gap and OVERSHOOTS Eckardt to -3.8 pt
+    #      -> NOT adopted (lambda stays the default accounting).
+    #  (2) Aungier supercritical Mach loss (Eqs 5-41/42): INERT at both
+    #      rigs' 1-D mean inlet at design (the loaded W_max raises M'_cr
+    #      above M1'); a tip-resolved variant is the recorded follow-up.
+    #  (3) The Krain gap stands RECORDED (~5-6% of work at PR 4.7);
+    #      remaining suspects: measured-plane/eta definition, assumed
+    #      clearance, tip-resolved supercritical, loading-grown wake.
+    from slcflow.verification.v7_eckardt import EckardtO, KrainImpeller
+    eck = EckardtO()
+    r_e = eck.evaluate(n_sl=1)
+    sp_l = eck.stage_performance(r_e)                      # default: lambda
+    sp_o = eck.stage_performance(r_e, accounting="oh_native")
+    assert sp_l["eta_stage"] == pytest.approx(0.8796, abs=0.012)
+    assert sp_o["eta_stage"] == pytest.approx(0.8417, abs=0.012)
+    assert sp_l["dh_supercritical"] == 0.0                 # subcritical
+    kr = KrainImpeller()
+    r_k = kr.evaluate(n_sl=1)
+    sp_kl = kr.stage_performance(r_k)
+    sp_ko = kr.stage_performance(r_k, accounting="oh_native")
+    assert sp_kl["eta_stage"] == pytest.approx(0.9049, abs=0.012)
+    assert sp_ko["eta_stage"] == pytest.approx(0.8903, abs=0.012)
+    assert sp_kl["dh_supercritical"] == 0.0                # 1-D mean inert
+    # Oh-native components individually sane (guards the verbatim forms):
+    from slcflow.closures.centrifugal.parasitic import (
+        jansen_clearance_loss, johnston_dean_mixing_loss,
+        supercritical_loss)
+    jc = jansen_clearance_loss(7e-4, 0.026, 257.0, 90.0, 0.045, 0.14,
+                               0.2, 1.16, 1.9, 20)
+    want = 0.6 * (7e-4 / 0.026) * 257.0 * (
+        (4 * 3.141592653589793 / (0.026 * 20))
+        * (0.14 ** 2 - 0.045 ** 2) / ((0.2 - 0.14) * (1 + 1.9 / 1.16))
+        * 257.0 * 90.0) ** 0.5
+    assert jc == pytest.approx(want, rel=1e-12)
+    jd = johnston_dean_mixing_loss(85.5, 0.2, 0.05)
+    assert jd == pytest.approx(
+        (1 / 1.2) * ((0.75 / 0.8) ** 2) * 0.5 * 85.5 ** 2, rel=1e-12)
+    # Supercritical: fires above onset, exactly Eq 5-42:
+    sc = supercritical_loss(0.9, 280.0, 110.0, 250.0, 310.0)
+    w_max = 0.5 * (280.0 + 110.0 + 250.0)
+    dm = 0.9 - 0.9 * 310.0 / w_max
+    assert sc == pytest.approx(0.4 * (dm * w_max / 280.0) ** 2
+                               * 0.5 * 280.0 ** 2, rel=1e-12)
+    # Subcritical (W_max < W*: the suction-surface peak stays subsonic —
+    # the actual Eq 5-41 onset condition) -> exactly zero:
+    assert supercritical_loss(0.5, 280.0, 110.0, 100.0, 310.0) == 0.0
+
+
 def test_eckardt_stage_performance_full_chain():
     # The COMPLETE stage chain at the R/R2 = 2 measurement plane
     # (ECKARDT.md): internal 0.969 -> +parasitics 0.9265 -> +vaneless

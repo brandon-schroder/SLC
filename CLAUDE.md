@@ -974,6 +974,28 @@ These are not suggestions; violating them is a bug even if tests pass.
   36.6 kJ/kg Krain recirculation) was found and fixed; Eckardt bit-
   unchanged. Pinned: `test_krain_second_impeller_measured_agreement`.
 
+- **High-loading centrifugal calibration pass (2026-07-17) — three
+  mechanisms dispositioned by measurement, Krain gap stands recorded.**
+  Diagnosis first (loss-budget probe): BOTH rigs read light on
+  impeller-internal loss vs measured impeller η; Eckardt's stage closes
+  because the stage-side stack compensates, Krain's (+6.5 pt) doesn't.
+  Implemented + measured: (1) the **Oh-native accounting**
+  (`jansen_clearance_loss` verbatim Jansen-1967 + `johnston_dean_mixing_
+  loss` J&D-1966 with the MERIDIONAL velocity only — Aungier quoted
+  verbatim on why; `stage_performance(accounting="oh_native")`, mutually
+  exclusive with the λ chain) — swings only ~2.5 kJ/kg, cannot close
+  Krain's ~11 kJ/kg gap, overshoots Eckardt to −3.8 pt → **λ stays the
+  default**; (2) **Aungier supercritical Mach loss**
+  (`supercritical_loss`, Eqs 5-41/42 verbatim, onset = W_max > W*) —
+  INERT at both rigs' 1-D mean inlet at design → not the mechanism at
+  this fidelity (tip-resolved variant = recorded follow-up, Krain
+  M1t′≈0.85); (3) the Krain +6.5 pt stands RECORDED (~5–6% of work at
+  PR 4.7; suspects narrowed to: Krain measurement plane/η definition,
+  the assumed 0.5 mm clearance, tip-resolved supercritical,
+  loading-grown wake fraction). All pinned:
+  `test_high_loading_calibration_dispositions` (2×2 stage levels +
+  verbatim-form guards + onset semantics). CENT-LOSS.md "high-loading".
+
 ## Commands
 
 ```bash

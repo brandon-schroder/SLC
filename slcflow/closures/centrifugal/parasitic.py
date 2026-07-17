@@ -33,7 +33,9 @@ per-streamtube LossModel components (the recorded M7 deferral).
 from __future__ import annotations
 
 __all__ = ["disk_friction_work", "leakage_work", "recirculation_work",
-           "vaneless_diffuser_loss", "tip_distortion_loss"]
+           "vaneless_diffuser_loss", "tip_distortion_loss",
+           "jansen_clearance_loss", "johnston_dean_mixing_loss",
+           "supercritical_loss"]
 
 _TWO_PI = 6.283185307179586
 
@@ -104,6 +106,73 @@ def vaneless_diffuser_loss(cf, r_in, r_out, b_in, c_in, cu_in, u_ref):
     dq = cf * r_in * (1.0 - (r_in / r_out) ** 1.5) * (c_in / u_ref) ** 2 \
         / (1.5 * b_in * cos_alpha)
     return dq * u_ref ** 2
+
+
+def supercritical_loss(m1_rel, w1, w2, dw_loading, w_star):
+    """Aungier supercritical Mach-number INTERNAL loss [J/kg] (shock /
+    shock-induced separation once the suction-surface peak goes sonic;
+    theory notebook 2026-07-17, verbatim):
+
+        W_max  = (W1 + W2 + dW)/2                (Eq 4-41, dW = loading)
+        M'_cr  = M1' W*/W_max                    (Eq 5-41)
+        omega_bar_cr = 0.4 [ (M1' - M'_cr) W_max/W1 ]^2   (Eq 5-42)
+
+    active only for ``M1' > M'_cr`` (floored otherwise); returned on the
+    ch.-5 inlet-relative reference (x 1/2 W1^2). ``w_star`` is the local
+    sonic velocity at the relative total conditions. The loading dW is
+    the Eq 4-42 blade-loading velocity difference the recirculation term
+    already uses. The mechanism that discriminates the Krain (M1'~0.85)
+    from the Eckardt (M1'~0.67) inducer."""
+    w_max = 0.5 * (w1 + w2 + dw_loading)
+    m_cr = m1_rel * w_star / w_max
+    dm = m1_rel - m_cr
+    if dm <= 0.0:
+        return 0.0
+    return 0.4 * (dm * w_max / w1) ** 2 * 0.5 * w1 * w1
+
+
+def jansen_clearance_loss(clearance, b2, cu2, cm1, r1h, r1t, r2,
+                          rho1, rho2, blade_count):
+    """Jansen (1967) tip-clearance INTERNAL loss [J/kg] — the Oh-native
+    clearance component (sudden contraction/expansion through the gap),
+    verbatim as quoted by Whitfield & Baines (theory notebook, 2026-07-17;
+    docs/references/CENT-LOSS.md "Oh-native" section):
+
+        dh_cl = 0.6 (s/b2) Cu2 sqrt( (4 pi/(b2 Z))
+                * (r1t^2 - r1h^2)/((r2 - r1t)(1 + rho2/rho1))
+                * Cu2 Cm1 )
+
+    Mutually exclusive with the Aungier lambda tip-distortion accounting
+    (same physics family) — the caller selects one (see the case's
+    ``accounting`` option)."""
+    if cu2 <= 0.0 or cm1 <= 0.0:
+        return 0.0
+    inner = (4.0 * 3.141592653589793 / (b2 * blade_count)
+             * (r1t ** 2 - r1h ** 2)
+             / ((r2 - r1t) * (1.0 + rho2 / rho1)) * cu2 * cm1)
+    if inner <= 0.0:
+        return 0.0
+    return 0.6 * (clearance / b2) * cu2 * inner ** 0.5
+
+
+def johnston_dean_mixing_loss(cm2, wake_fraction=0.2, blockage=0.05):
+    """Johnston & Dean (1966) wake MIXING internal loss [J/kg] — the
+    Oh-native mixing component (sudden expansion of the jet-wake pattern),
+    involving ONLY the meridional velocity (Aungier, quoted verbatim:
+    "the tangential velocity is controlled by conservation of angular
+    momentum ... the wake mixing loss involves only the meridional
+    component"; theory notebook 2026-07-17):
+
+        dh_mix = 1/(1 + eps_w) * ((1 - eps_w - b*)/(1 - eps_w))^2
+                 * Cm2^2 / 2
+
+    ``wake_fraction`` (eps_w) typical 0.15-0.25 for high-performance
+    impellers; ``blockage`` (b*) typical 0.02-0.12 — both documented
+    ranges, defaults at the customary mid-values. Mutually exclusive with
+    the Aungier lambda accounting (same physics family)."""
+    e, b = wake_fraction, blockage
+    return (1.0 / (1.0 + e)) * ((1.0 - e - b) / (1.0 - e)) ** 2 \
+        * 0.5 * cm2 * cm2
 
 
 def tip_distortion_loss(omega_sf, pv1, pv2, w1, w2, cm2, d_hyd, b2, l_b,
