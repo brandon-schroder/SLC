@@ -33,7 +33,7 @@ per-streamtube LossModel components (the recorded M7 deferral).
 from __future__ import annotations
 
 __all__ = ["disk_friction_work", "leakage_work", "recirculation_work",
-           "vaneless_diffuser_loss"]
+           "vaneless_diffuser_loss", "tip_distortion_loss"]
 
 _TWO_PI = 6.283185307179586
 
@@ -104,6 +104,45 @@ def vaneless_diffuser_loss(cf, r_in, r_out, b_in, c_in, cu_in, u_ref):
     dq = cf * r_in * (1.0 - (r_in / r_out) ** 1.5) * (c_in / u_ref) ** 2 \
         / (1.5 * b_in * cos_alpha)
     return dq * u_ref ** 2
+
+
+def tip_distortion_loss(omega_sf, pv1, pv2, w1, w2, cm2, d_hyd, b2, l_b,
+                        area_ratio, rho1, rho2, clearance):
+    """Aungier tip-distortion (wake-mixing) INTERNAL loss [J/kg] — the
+    stage-level companion for the clearance/blockage effect Aungier folds
+    into the impeller tip distortion factor rather than a separate
+    clearance-loss coefficient.
+
+    Verbatim chain (theory notebook, 2026-07-17 —
+    docs/references/CENT-LOSS.md):
+
+        B2 = omega_SF (pv1/pv2) sqrt(W1 d_H/(W2 b2))
+             + [0.3 + (b2/L_B)^2] A_R^2 rho2 b2/(rho1 L_B)
+             + s_CL/(2 b2)                                     (Eq 4-12)
+        lambda = 1/(1 - B2)                                    (Eq 120)
+        omega_bar_lambda = [(lambda - 1) C_m2/W2]^2            (Eq 5-36)
+
+    with the mean hydraulic diameter d_H = (d_H1 + d_H2)/2,
+    ``d_Hi = 2 b_i w_i/(b_i + w_i)``, blade-to-blade width
+    ``w = 2 pi r sin(beta)/Z`` (beta from tangent; Eqs 111/113), and the
+    passage area ratio ``A_R = A2 sin(beta2)/(A1 sin(beta_th))``
+    (Eq 4-13) — the caller supplies those geometric composites.
+    ``omega_SF`` is the impeller skin-friction loss coefficient on the
+    inlet relative velocity pressure (the internal set's own convention);
+    ``pv1/pv2`` the inlet/exit relative velocity-pressure ratio. Returned
+    as ``omega_bar * 0.5 W1^2`` (the ch.-5 inlet-relative reference).
+    ``B2`` is guarded below the lambda pole (0.9 ceiling — far outside
+    the correlation's range; post-solve scalar guard, ARCH-4.2). NOTE:
+    lambda's second role in Aungier's method (distorting the work-input
+    exit triangle) belongs to his full analysis — recorded refinement.
+    """
+    b2_blk = (omega_sf * (pv1 / pv2) * (w1 * d_hyd / (w2 * b2)) ** 0.5
+              + (0.3 + (b2 / l_b) ** 2) * area_ratio ** 2 * rho2 * b2
+              / (rho1 * l_b)
+              + clearance / (2.0 * b2))
+    b2_blk = min(b2_blk, 0.9)
+    lam = 1.0 / (1.0 - b2_blk)
+    return ((lam - 1.0) * cm2 / w2) ** 2 * 0.5 * w1 * w1
 
 
 def recirculation_work(u2, w1, w2, cm2, wu2, cot_beta2_blade, r1cu1, r2cu2,

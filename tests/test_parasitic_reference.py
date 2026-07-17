@@ -87,21 +87,52 @@ def test_vaneless_diffuser_closed_form():
     assert vaneless_diffuser_loss(cf, r_in, r_out, b, 100.0, 0.0, u) == 0.0
 
 
-def test_eckardt_stage_performance_with_diffuser():
-    # The full stage chain at the R/R2 = 2 measurement plane (ECKARDT.md):
-    # internal 0.969 -> +parasitics 0.9265 -> +vaneless diffuser 0.9074 vs
-    # measured stage 0.88 (+2.7 pt remaining: lambda tip-distortion, the
-    # closed-form-vs-marching diffuser, cf level — recorded). PR_stage
-    # 2.167 vs measured 2.1 (+3.2%, from +4.7% at the impeller exit).
+def test_lambda_tip_distortion_chain():
+    # Aungier Eq 4-12 -> Eq 120 -> Eq 5-36 chain, hand reference
+    # (CENT-LOSS.md "lambda" section):
+    from slcflow.closures.centrifugal.parasitic import tip_distortion_loss
+    omega_sf, pv1, pv2 = 0.07, 35000.0, 16000.0
+    w1, w2, cm2, d_h, b2, l_b = 168.0, 92.0, 85.0, 0.0326, 0.026, 0.18
+    ar, rho1, rho2, s = 1.03, 1.25, 1.9, 7e-4
+    b2_blk = (omega_sf * (pv1 / pv2) * (w1 * d_h / (w2 * b2)) ** 0.5
+              + (0.3 + (b2 / l_b) ** 2) * ar ** 2 * rho2 * b2 / (rho1 * l_b)
+              + s / (2 * b2))
+    lam = 1.0 / (1.0 - b2_blk)
+    want = ((lam - 1.0) * cm2 / w2) ** 2 * 0.5 * w1 * w1
+    got = tip_distortion_loss(omega_sf, pv1, pv2, w1, w2, cm2, d_h, b2,
+                              l_b, ar, rho1, rho2, s)
+    assert got == pytest.approx(want, rel=1e-12)
+    # Lambda-pole guard: absurd blockage saturates instead of exploding.
+    huge = tip_distortion_loss(5.0, pv1, pv2, w1, w2, cm2, d_h, b2,
+                               l_b, ar, rho1, rho2, s)
+    lam_cap = 1.0 / (1.0 - 0.9)
+    assert huge == pytest.approx(
+        ((lam_cap - 1.0) * cm2 / w2) ** 2 * 0.5 * w1 * w1, rel=1e-9)
+
+
+def test_eckardt_stage_performance_full_chain():
+    # The COMPLETE stage chain at the R/R2 = 2 measurement plane
+    # (ECKARDT.md): internal 0.969 -> +parasitics 0.9265 -> +vaneless
+    # diffuser + lambda tip-distortion -> eta_stage 0.8796 vs measured
+    # 0.88 (-0.04 pt) and PR_stage 2.121 vs measured 2.1 (+1.0%) — every
+    # component grounded verbatim, no locally fitted constant. The level
+    # of agreement is partly fortuitous given the recorded geometric
+    # estimates (beta_th ~ beta1, L_B = chord, disk gap 0.02); the pins
+    # hold the assembled levels so drift is visible.
     from slcflow.verification.v7_eckardt import EckardtO
     case = EckardtO()
     r = case.evaluate(n_sl=1)
     sp = case.stage_performance(r)
     assert sp["dh_vld"] == pytest.approx(1356.0, abs=150.0)
-    assert sp["pr_stage"] == pytest.approx(2.167, abs=0.03)
-    assert sp["eta_stage"] == pytest.approx(0.9074, abs=0.01)
-    assert sp["eta_stage"] > 0.88          # the remaining gap stays positive
+    assert sp["dh_lambda"] == pytest.approx(1996.0, abs=250.0)
+    assert sp["pr_stage"] == pytest.approx(2.121, abs=0.03)
+    assert sp["eta_stage"] == pytest.approx(0.8796, abs=0.012)
     assert sp["pr_stage"] < r.pressure_ratio
+    # Design point: recirculation + lambda grow with loading.
+    c18 = EckardtO(rpm=18000.0, mdot=7.16)
+    sp18 = c18.stage_performance(c18.evaluate(n_sl=1))
+    assert sp18["pr_stage"] == pytest.approx(3.172, abs=0.05)
+    assert sp18["eta_stage"] == pytest.approx(0.824, abs=0.015)
 
 
 def test_eckardt_stage_efficiency_with_parasitics():

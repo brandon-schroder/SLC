@@ -941,7 +941,19 @@ These are not suggestions; violating them is a bug even if tests pass.
   +4.7% impeller-exit); design PR_stage 3.308 vs 3.0, η 0.859.
   Remaining-gap candidates (recorded): λ tip-distortion internal loss,
   closed-form-vs-marching diffuser, cf level, η-definition subtleties.
-  Pinned in `test_parasitic_reference.py`.
+  Pinned in `test_parasitic_reference.py`. **λ tip-distortion added same
+  day — the Eckardt laser-point STAGE validation closes:**
+  `parasitic.tip_distortion_loss` (Aungier Eq 4-12 blockage B₂ with its
+  three verbatim terms → λ = 1/(1−B₂) Eq 120 → ω̄_λ = [(λ−1)Cm2/W2]²
+  Eq 5-36; d_H/A_R per Aungier Eqs 111/113/4-13; B₂ guarded below the λ
+  pole; λ's work-input role = recorded refinement). Measured:
+  Δh_λ ≈ 2.0 kJ/kg at the laser point → **PR_stage 2.121 vs measured 2.1
+  (+1.0%), η_stage 0.8796 vs 0.88 (−0.04 pt)** — the complete chain
+  (internal 0.969 → +parasitics 0.9265 → +diffuser+λ → 0.8796) with
+  every component grounded verbatim and zero locally fitted constants;
+  the agreement level is partly fortuitous given the recorded geometric
+  estimates (β_th ≈ β1, L_B = chord, disk gap 0.02) — pinned so drift is
+  visible. Design point PR_stage 3.172 vs 3.0 (+5.7%), η 0.824.
 
 ## Commands
 

@@ -161,3 +161,28 @@ measured stage 0.88; PR_stage 2.167 vs 2.1 (+3.2%, from +4.7% at the
 impeller exit). Design point: PR_stage 3.308 vs 3.0 (+10.3%), η 0.859.
 Remaining +2.7 pt candidates: λ tip-distortion internal loss, closed-form
 vs marching diffuser, cf level, η-definition subtleties.
+
+## λ tip-distortion loss — ADDED 2026-07-17 (the chain closes)
+
+`parasitic.tip_distortion_loss`: Aungier's clearance/blockage internal
+loss, verbatim (theory notebook):
+
+    B2 = ω̄_SF(pv1/pv2)√(W1 d_H/(W2 b2))
+         + [0.3+(b2/L_B)²]A_R²ρ2 b2/(ρ1 L_B) + s_CL/(2b2)      (Eq 4-12)
+    λ = 1/(1−B2)  (Eq 120);   ω̄_λ = [(λ−1)C_m2/W2]²           (Eq 5-36)
+
+with d_H = mean of 2b·w/(b+w) at inlet/exit, blade-to-blade
+w = 2πr·sinβ/Z (β from tangent; Eqs 111/113) and
+A_R = A2 sinβ2/(A1 sinβ_th) (Eq 4-13). Returned on the ch.-5
+inlet-relative reference (×½W1²); B2 guarded below the λ pole (0.9).
+λ's second role (distorting the work-input triangle) = Aungier's full
+analysis, recorded refinement. Recorded estimates: β_th ≈ β1 (throat ~
+LE), L_B = the case chord.
+
+**Measured — the Eckardt laser-point STAGE validation closes:**
+Δh_λ ≈ 1996 J/kg → **PR_stage 2.121 vs measured 2.1 (+1.0%), η_stage
+0.8796 vs 0.88 (−0.04 pt)** — chain: internal 0.969 → +parasitics
+0.9265 → +diffuser+λ → 0.8796, every component grounded verbatim, zero
+locally fitted constants. (Agreement partly fortuitous given the
+recorded geometric estimates; component magnitudes each plausible.)
+Design point: PR_stage 3.172 vs 3.0 (+5.7%), η 0.824.

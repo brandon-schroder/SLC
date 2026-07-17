@@ -37,14 +37,20 @@ impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort.
 > refinements for a full stage-η comparison. Assumptions recorded: disk
 > backface gap s/r2 = 0.02, blade length = the friction-length chord.
 >
-> **VANELESS DIFFUSER ADDED (2026-07-17,
-> `EckardtO.stage_performance`):** the Coppage/Stanitz closed form
-> (Whitfield [30], CENT-LOSS.md) closes the chain to the rig's R/R₂ = 2
-> plane: laser point Δh_vld ≈ 1.36 kJ/kg → **η 0.9074 vs measured 0.88
-> (+2.7 pt)**, **PR_stage 2.167 vs 2.1 (+3.2%)**; design PR_stage 3.308
-> vs 3.0 (+10.3%), η 0.859. The full stage comparison is now assembled
-> end-to-end (internal → +parasitics → +diffuser); remaining-gap
-> candidates: λ tip-distortion, marching-vs-closed-form diffuser, cf.
+> **VANELESS DIFFUSER + λ TIP-DISTORTION ADDED (2026-07-17,
+> `EckardtO.stage_performance`) — the laser-point STAGE validation
+> CLOSES:** the Coppage/Stanitz diffuser closed form (Whitfield [30])
+> plus Aungier's λ tip-distortion internal loss (Eqs 4-12/120/5-36; all
+> in CENT-LOSS.md) carry the comparison to the rig's R/R₂ = 2 plane:
+> **PR_stage 2.121 vs measured 2.1 (+1.0%), η_stage 0.8796 vs 0.88
+> (−0.04 pt)** — chain η 0.969 (internal) → 0.9265 (+parasitics) →
+> 0.8796 (+diffuser 1.36 kJ/kg + λ 2.0 kJ/kg), every component grounded
+> verbatim, zero locally fitted constants (agreement partly fortuitous
+> given the recorded geometric estimates — β_th ≈ β1, L_B = chord, disk
+> gap 0.02; each magnitude individually plausible). Design point:
+> PR_stage 3.172 vs 3.0 (+5.7%), η 0.824. Remaining refinements: the
+> full Aungier marching diffuser + λ work-input role, Oh-1997 map
+> digitization for off-design points, Krain second impeller.
 
 Historical context (2026-07-12, pre-primary-paper) below.
 

@@ -232,26 +232,57 @@ class EckardtO:
     def stage_performance(self, result: PerformanceResult,
                           mdot: float = None, cf: float = 0.005) -> dict:
         """Stage totals at the rig's R/R2 = 2 measurement plane: the
-        impeller-exit result plus the vaneless-diffuser skin-friction p0
-        loss (Coppage/Stanitz closed form, ``vaneless_diffuser_loss``;
-        the paper: constant flow area to R/R2 = 2) and the parasitic
-        shaft-work debits. ``cf = 0.005`` is the Braembussche-typical
-        skin-friction coefficient the internal loss set already uses.
-        Returns ``{"pr_stage", "eta_stage", "dh_vld"}``."""
-        from ..closures.centrifugal.parasitic import vaneless_diffuser_loss
+        impeller-exit result plus (a) the Aungier tip-distortion internal
+        loss (``tip_distortion_loss``, the clearance/blockage effect),
+        (b) the vaneless-diffuser skin-friction p0 loss
+        (``vaneless_diffuser_loss``; the paper: constant flow area to
+        R/R2 = 2), and (c) the parasitic shaft-work debits. ``cf = 0.005``
+        is the Braembussche-typical value the internal set already uses.
+        Geometric composites per Aungier's own definitions (Eqs 111/113,
+        4-13; beta_th taken at the inlet — throat ~ LE for this inducer).
+        Returns ``{"pr_stage", "eta_stage", "dh_vld", "dh_lambda"}``."""
+        from ..closures.centrifugal.parasitic import (
+            tip_distortion_loss, vaneless_diffuser_loss)
         res = result.result
         f, tr = res.fields, res.frozen.transported
-        j_te = 2 + self.n_inblade
+        j_le, j_te = 1, 2 + self.n_inblade
+        r1 = float(np.mean(f.metrics.r[:, j_le]))
         r2 = float(np.mean(f.metrics.r[:, j_te]))
+        cu1 = float(np.mean(tr.rvt[:, j_le])) / r1
         cu2 = float(np.mean(tr.rvt[:, j_te])) / r2
+        vm1 = float(np.mean(f.vm[:, j_le]))
         cm2 = float(np.mean(f.vm[:, j_te]))
+        rho1 = float(np.mean(f.rho[:, j_le]))
+        rho2 = float(np.mean(f.rho[:, j_te]))
+        u1, u2 = self.omega * r1, self.omega * self.r2
+        w1 = float(np.hypot(vm1, u1 - cu1))
+        w2 = float(np.hypot(cm2, u2 - cu2))
         c2 = float(np.hypot(cm2, cu2))
         T2 = (float(np.mean(tr.h0[:, j_te])) - 0.5 * c2 * c2) / self.gas.cp
-        u2 = self.omega * self.r2
+
+        # Aungier geometric composites (Eqs 111/113, 4-13): beta from
+        # TANGENT = pi/2 - |beta_from_meridional|; radial exit -> sin = 1.
+        b1_pass = self.r1t - self.r1h
+        beta1_tan = 0.5 * np.pi - abs(float(
+            self._geometry().beta1_blade(0.5)))
+        w_bb1 = 2.0 * np.pi * r1 * np.sin(beta1_tan) / self.blade_count
+        w_bb2 = 2.0 * np.pi * self.r2 / self.blade_count
+        dh1 = 2.0 * b1_pass * w_bb1 / (b1_pass + w_bb1)
+        dh2 = 2.0 * self.b2 * w_bb2 / (self.b2 + w_bb2)
+        d_hyd = 0.5 * (dh1 + dh2)
+        a1 = 2.0 * np.pi * r1 * b1_pass
+        a2 = 2.0 * np.pi * self.r2 * self.b2
+        area_ratio = a2 / (a1 * np.sin(beta1_tan))
+        omega_sf = 2.0 * cf * (self.chord / d_hyd) * (1.0 + (w2 / w1) ** 2)
+        pv1, pv2 = rho1 * w1 * w1, rho2 * w2 * w2
+        dh_lambda = tip_distortion_loss(
+            omega_sf, pv1, pv2, w1, w2, cm2, d_hyd, self.b2, self.chord,
+            area_ratio, rho1, rho2, self.clearance)
+
         dh_vld = vaneless_diffuser_loss(cf, self.r2, 2.0 * self.r2,
                                         self.b2, c2, cu2, u2)
-        # Loss -> entropy at the diffuser-inlet static state -> p0 debit.
-        ds = dh_vld / T2
+        # Losses -> entropy at the impeller-exit static state -> p0 debit.
+        ds = (dh_vld + dh_lambda) / T2
         p0_fac = float(np.exp(-ds / self.gas.R))
         pr_stage = result.pressure_ratio * p0_fac
         par = sum(self.parasitic_breakdown(result, mdot).values())
@@ -262,4 +293,4 @@ class EckardtO:
         dh0 = dh_id_imp / result.efficiency
         return {"pr_stage": float(pr_stage),
                 "eta_stage": float(dh_id_stage / (dh0 + par)),
-                "dh_vld": float(dh_vld)}
+                "dh_vld": float(dh_vld), "dh_lambda": float(dh_lambda)}
