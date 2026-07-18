@@ -1060,6 +1060,28 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **K-O TE curve calibration → DISPOSITION, not a change (2026-07-18,
+  gate #2).** Investigated the LS-89 +35% total-loss gap ("the TE curve
+  carries most of it"). Grounded via the loss-models notebook (KO82,
+  Zhu-Sjolander 2005, Liu et al. 2022, Denton 1993): (1) the `t_TE/o`
+  convention is CONFIRMED correct (t_TE = 2·r_TE full thickness / throat
+  opening); (2) the K-O TE curve is faithful to Fig. 14 (already
+  validated); (3) **the +35% is PROFILE-led, not TE-led** — decomposed at
+  M2is=1 (energy-ζ): profile 0.018 vs measured 0.010 (excess +0.008) >
+  TE 0.013 vs 0.0075 (excess +0.0053), plus the missing exit-shock 0.005;
+  this **corrects the earlier "TE carries most of it" claim** and matches
+  Zhu-Sjolander (2005), who document K-O over-predicting the PROFILE loss
+  for axial-entry nozzles (β1=0)/large s/c/large thickness. No grounded
+  scoped TE recalibration exists: Liu 2022's dominant near-sonic `K_M` is
+  not in the library and its `K_p·f_Re` part perturbs the ~1%-validated
+  TN D-6967 (×0.87 at moderate M2) for ~0 at LS-89's M2=1 (×0.978);
+  Denton 1993 needs a base-pressure `C_Pb` absent from the §4.1 contract.
+  Local single-point tuning is declined (discipline; and TE isn't the
+  dominant term). **Constants unchanged.** Recorded systematic next lever:
+  adopt the Zhu-Sjolander (2005) profile+TE recalibration as an opt-in
+  CorrelationSet variant. Pinned:
+  `test_v6_ls89.py::test_overprediction_is_profile_led_not_te_led`;
+  LS89.md "Calibration disposition".
 - **Tip diffusion factor predicts the sibling stall differential
   (2026-07-18, gate #5 follow-on).** The grounded loading criterion the
   operability disposition called for. Lieblein/NACA RM E53D01 tip

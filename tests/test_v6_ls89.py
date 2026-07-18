@@ -27,6 +27,17 @@ MEASURED AGREEMENT (2026-07-15): predicted energy-zeta ~ 0.031 vs measured
 calibrated on 1950s-70s hardware and targets +/-1.5% efficiency at the
 STAGE level, where secondary/TE dominate); the exit-angle rule is exact by
 construction here. Pinned as bands so drift is visible.
+
+CALIBRATION DISPOSITION (2026-07-18, "K-O TE curve calibration"): grounded
+via the loss-models notebook, the outcome is a DISPOSITION not a curve
+change — the t_TE/o convention is CONFIRMED correct, the K-O TE curve is
+faithful to Fig. 14, and the +35% is PROFILE-led not TE-led (profile excess
++0.008 > TE excess +0.0053; Zhu & Sjolander 2005 document exactly this for
+axial-entry nozzles). No grounded scoped TE recalibration exists (Liu 2022's
+K_M is not in the library and its K_p*f_Re part perturbs validated turbines;
+Denton 1993 needs a base-pressure coefficient); the systematic fix is the
+Zhu-Sjolander profile+TE model, recorded as a future opt-in variant.
+Constants unchanged. See docs/references/LS89.md "Calibration disposition".
 """
 import numpy as np
 import pytest
@@ -112,3 +123,40 @@ def test_te_component_vs_measured_te_breakdown():
     # component must stay the right order, below the TOTAL measured x2.
     zeta_te, _ = trailing_edge_zeta(ALPHA1, 74.95, _te_o_ratio())
     assert 0.25 * 0.0075 < float(zeta_te) < 2.0 * MEASURED_ZETA2
+
+
+def _component_zetas():
+    """Profile-only and TE-only energy-zeta, mirroring predicted_total_y."""
+    alpha2, _ = throat_exit_angle(O_S)
+    yp_am, _ = profile_loss_am(S_C, ALPHA1, float(alpha2), 0.20)
+    kp = mach_profile_correction(M1, M2IS)
+    env = 0.914 * float(reynolds_correction(RE2))
+    y_profile = env * (2.0 / 3.0) * float(yp_am) * float(kp)
+    zeta_te, _ = trailing_edge_zeta(ALPHA1, float(alpha2), _te_o_ratio())
+    y_te = float(zeta_te) / (1.0 - float(zeta_te))
+    return y_to_energy_zeta(y_profile), y_to_energy_zeta(y_te)
+
+
+def test_overprediction_is_profile_led_not_te_led():
+    # CALIBRATION DISPOSITION (2026-07-18, K-O TE curve): the +35% total gap
+    # is NOT dominated by the trailing edge. Decomposed as energy-zeta at
+    # M2is = 1.0 vs the paper's measured shares (1.0% boundary-layer/profile,
+    # 0.75% TE, 0.5% exit shock the method does not carry):
+    #
+    #   profile-only  ~0.018 vs measured 0.010  -> EXCESS ~+0.008
+    #   TE-only       ~0.013 vs measured 0.0075 -> excess ~+0.0053
+    #
+    # i.e. the PROFILE excess exceeds the TE excess — correcting the earlier
+    # "the TE curve carries most of it" reading. This matches Zhu & Sjolander
+    # (2005), who find K-O over-predicts the PROFILE loss for axial-entry
+    # nozzles (beta1=0), large s/c, and large max thickness — a profile-loss
+    # recalibration, not a TE-curve tweak. A grounded, scoped TE fix is not
+    # available (t_TE/o convention CONFIRMED correct; the K-O TE curve is
+    # faithful to Fig. 14; Liu et al. 2022's K_M near-sonic factor is not in
+    # the library and its K_p*f_Re part perturbs validated turbines for ~0 at
+    # M2=1; Denton 1993 needs a base-pressure coefficient). NOT tuned — see
+    # docs/references/LS89.md "Calibration disposition".
+    z_profile, z_te = _component_zetas()
+    assert (z_profile - 0.010) > (z_te - 0.0075)      # profile-led excess
+    assert 0.015 < z_profile < 0.022                   # ~0.018, documented
+    assert 0.010 < z_te < 0.016                        # ~0.013, documented
