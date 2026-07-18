@@ -1019,6 +1019,20 @@ These are not suggestions; violating them is a bug even if tests pass.
   centrifugal stage validation now reads: PR ±2%, η ±2 pt at both
   loadings with one calibrated constant.**
 
+- **TN D-6967 multi-speed map (2026-07-17, Fig. 17(a) digitized →
+  `MEASURED_MAP`).** The two-stage overall map digitized from a 300-dpi
+  render (tick-grid calibrated; the plotted design dot reproduces its
+  published (3.22e3, 84.9) exactly — the control). Four speed-line ∩
+  PR-contour points (90%/3.4, 90%/3.0, 70%/2.6, 50%/2.2) compared in the
+  matched-PR frame by interpolating the warm-chained classical
+  characteristic (the BP-secant from a far ṁ=1.9 seed measurably fails —
+  near-choke matched-PR needs an adjacent seed, consistent with the §6.3
+  branch-guard findings): **work within ±2.2% and flow within ~+1% across
+  50–100% speed and PR 2.2–3.765 — the design-point ~1% agreement holds
+  across the map.** The rig's choked-flow structure reproduces including
+  the trend (map flow rises ~1.5% from 100→50% speed, 2.00→2.03; model
+  2.02→2.055). Pinned: `test_v6_tnd6967.py::test_multispeed_map_matched_pr`
+  (90% + 50% extremes); TND6967.md "Multi-speed map".
 - **Rotor 38 — the second transonic axial rotor (2026-07-17,
   `v5_rotor38.py`).** The axial counterpart of the Krain generalization
   check: TP-2001's high-AR sibling of Rotor 37 (same annulus/speed/flow

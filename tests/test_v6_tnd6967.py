@@ -178,3 +178,62 @@ def test_pr_and_work_bounded_capacity_gap_recorded(result):
     # drift beyond the understood effect turns this red.
     inv_pr = 1.0 / result.pressure_ratio
     assert 2.8 < inv_pr < DESIGN_EQ["pr_tt"] * 1.02
+
+
+def test_multispeed_map_matched_pr():
+    # Figure 17(a) multi-speed map (MEASURED_MAP; digitized 2026-07-17,
+    # calibration control = the plotted design dot at (3.22e3, 84.9)).
+    # MEASURED AGREEMENT in the matched-PR frame, read by interpolating
+    # the model's warm-chained classical characteristic to each map PR_tt
+    # (work(PR) is smooth even where mdot(PR) is near-vertical):
+    #
+    #   90% PR 3.4: work 78.0 vs map 79.0 (-1.3%)   flow 2.018 vs 2.00
+    #   90% PR 3.0: work 71.4 vs map 71.0 (+0.5%)   flow 2.011 vs 1.99
+    #   70% PR 2.6: work 61.1 vs map 62.5 (-2.2%)   flow 2.030 vs 2.01
+    #   50% PR 2.2: work 47.8 vs map 46.9 (+1.9%)   flow 2.054 vs 2.03
+    #
+    # i.e. work within +-2.2% and flow within ~+1% (the known ~1% capacity
+    # offset) across 50-100% speed and PR 2.2-3.765 - the design-point ~1%
+    # agreement HOLDS ACROSS THE MAP. The rig's choked-flow structure is
+    # reproduced including its trend: map flow rises ~1.5% from 100% to
+    # 50% speed (2.00 -> 2.03); the model's rises the same way
+    # (2.02 -> 2.055). Pinned at 90% and 50% (the speed-span extremes;
+    # 70% is recorded in MEASURED_MAP + the reference note).
+    import numpy as np
+
+    from slcflow.drivers.classical import ClassicalConfig, solve_classical
+    from slcflow.grid.core import GridTopology
+    from slcflow.types import FidelityConfig, MassFlowSpec
+
+    from slcflow.verification.v6_tnd6967 import MEASURED_MAP
+
+    def characteristic(pct, mdots):
+        case = TND6967Turbine(rpm=DESIGN_EQ["rpm"] * pct / 100.0)
+        m = case.machine()
+        topo = GridTopology(m.flowpath, n_sl=1)
+        inlet = m.inlet.fields(topo.psi)
+        fid = FidelityConfig.tier1()
+        warm, pts = None, []
+        for md in mdots:
+            r = solve_classical(topo, case.gas, fid, MassFlowSpec(md),
+                                inlet, rows=m.rows, warm_start=warm,
+                                config=ClassicalConfig(max_outer=800))
+            assert r.converged, f"{pct}% mdot {md}: {r.status.name}"
+            warm = r
+            tr = r.frozen.transported
+            pr = float(case.gas.p(tr.h0[0, 0], tr.s[0, 0])
+                       / case.gas.p(tr.h0[0, -1], tr.s[0, -1]))
+            pts.append((md, pr, float(tr.h0[0, 0] - tr.h0[0, -1]) / 1e3))
+        return np.asarray(pts)
+
+    for pct, pr_map, w_map, md_map, mdots in (
+            (90.0, 3.4, 79.0, 2.00, (2.00, 2.01, 2.02)),
+            (50.0, 2.2, 46.9, 2.03, (2.02, 2.04, 2.06))):
+        pts = characteristic(pct, mdots)
+        assert pts[0, 1] < pr_map < pts[-1, 1]      # bracketed, not extrap
+        w = float(np.interp(pr_map, pts[:, 1], pts[:, 2]))
+        md = float(np.interp(pr_map, pts[:, 1], pts[:, 0]))
+        # work within map digitization +-1.5 J/g plus interp slack:
+        assert abs(w - w_map) < 2.5, (pct, w, w_map)
+        # matched-PR flow within 2% of the map (known ~+1% capacity read):
+        assert abs(md - md_map) / md_map < 0.02, (pct, md, md_map)

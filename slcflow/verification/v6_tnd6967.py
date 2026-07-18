@@ -63,7 +63,7 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["TND6967Turbine", "MEASURED_EQ", "DESIGN_EQ"]
+__all__ = ["TND6967Turbine", "MEASURED_EQ", "DESIGN_EQ", "MEASURED_MAP"]
 
 _DEG = np.pi / 180.0
 
@@ -71,6 +71,21 @@ _DEG = np.pi / 180.0
 DESIGN_EQ = {"mdot": 1.989, "rpm": 15336.0, "pr_tt": 3.765,
              "eta_tt": 0.88, "work_J_per_g": 80.41}
 MEASURED_EQ = {"mdot": 2.004, "eta_tt": 0.93, "work_J_per_g": 84.90}
+
+# Figure 17(a) multi-speed map points (digitized 2026-07-17 from a 300-dpi
+# page render, calibrated on the axis ticks; the plotted equivalent-design
+# dot reproduces its published coordinates (3.22e3, 84.9) exactly — the
+# calibration control). Each entry: percent equivalent design speed, the
+# PR_tt contour value, equivalent specific work [J/g] (read +-1.5), and the
+# equivalent mass flow recovered from the map abscissa (x / omega_eq; the
+# near-vertical speed lines make this the rig's CHOKED flow, ~2.0 kg/s at
+# every speed — rising ~1.5 percent from 100 to 50 percent speed).
+MEASURED_MAP = {
+    "speed_pct": np.array([90.0, 90.0, 70.0, 50.0]),
+    "pr_tt": np.array([3.4, 3.0, 2.6, 2.2]),
+    "work_J_per_g": np.array([79.0, 71.0, 62.5, 46.9]),
+    "mdot": np.array([2.00, 1.99, 2.01, 2.03]),
+}
 
 _R_MEAN = 0.1016                    # constant mean radius [m]
 
