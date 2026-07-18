@@ -152,9 +152,27 @@ criterion fires anywhere near the measured stall** (19.60 kg/s):
 **Honest disposition:** the operability machinery works on a real
 transonic rotor, but the stall *line* is not predicted by
 solver/validity signatures — it needs a grounded aerodynamic loading
-criterion (the Lieblein/NACA **D-factor ≈ 0.6 tip limit** is the library
-candidate), recorded as the follow-up. Choke side already dispositioned
-(capacity/knee section above).
+criterion. Choke side already dispositioned (capacity/knee section
+above).
+
+**Follow-on MEASURED-VALIDATED (2026-07-18): the tip diffusion factor is
+that criterion.** Characterizing the Lieblein/NACA RM E53D01 tip
+`D = 1 − W₂/W₁ + |ΔV_θ|/(2σW₁)` (see LIEB59.md) along the measured lines
+of both transonic siblings (Tier 2, `tip_diffusion_factor`): each
+rotor's **measured stall sits at tip `D ≈ 0.6`** (R37 0.63 at 19.60; R38
+0.595 at 20.44) — above the tip *design* limit 0.45 (η=0.90), at the
+2-D-cascade sharp-loss value. A `D_tip = 0.60` stall threshold predicts
+R37 within +3.0% and R38 within −0.6% of measured stall flow **and
+orders the siblings the way the loss set cannot** — the high-AR R38
+reaches the loading limit at higher flow → stalls earlier (measured
+20.44 > 19.60), the AR-sensitivity differential the correlation set
+misses (Rotor 38 section; loss reads PR +6.6% vs +0.2%). **Loading, not
+loss, is the right variable for the stall line.** Zero tuning. Pinned:
+`test_v5_rotor38.py::test_tip_diffusion_factor_predicts_the_sibling_stall_differential`.
+Recorded next step (a feature, not this characterization): graduate `D`
+to a C¹-safe closure-layer quantity and wire a `D_tip`-threshold
+`StallFlag` criterion into `solve_speedline` — that turns gate #5
+predictive.
 
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation

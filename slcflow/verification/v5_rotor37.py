@@ -63,9 +63,43 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["Rotor37", "MEASURED_100", "MEASURED_BE_4182", "DESIGN"]
+__all__ = ["Rotor37", "MEASURED_100", "MEASURED_BE_4182", "DESIGN",
+           "tip_diffusion_factor"]
 
 _DEG = np.pi / 180.0
+
+
+def tip_diffusion_factor(case, res):
+    """Lieblein diffusion factor at the rotor **tip** streamline (the
+    outermost q=const line at the LE), for the rotor-only rows-1 layout
+    (stations: 0 duct, 1 EDGE_LE, 2 EDGE_TE, 3 duct).
+
+    ``D = 1 - W2/W1 + |Vtheta1 - Vtheta2| / (2 sigma W1)`` in the ROTOR
+    RELATIVE frame — the blade-loading measure of Lieblein, Schwenk &
+    Broderick, NACA RM E53D01 (1953; the basis of NASA SP-36). Their
+    limits: hub/mean design ``D <~ 0.6``, rotor-TIP design ``D <~ 0.45``
+    for eta = 0.90 (tip loss rises from D as low as 0.30); the 2-D
+    cascade sharp-loss-rise value is ~0.6. This is a POST-SOLVE
+    diagnostic on the verification side (raw NumPy is fine here; a
+    C1-safe closure-layer graduation is the path if it ever becomes a
+    live ``solve_speedline`` stall criterion). ``res`` is a
+    ``ClassicalResult`` (``PerformanceResult.result``).
+    """
+    fz, f = res.frozen, res.fields
+    r = f.metrics.r
+    sl = int(np.argmax(r[:, 1]))                 # outermost LE streamline
+    r1, r2 = float(r[sl, 1]), float(r[sl, 2])
+    vm1, vm2 = float(f.vm[sl, 1]), float(f.vm[sl, 2])
+    vt1 = float(fz.transported.rvt[sl, 1]) / r1
+    vt2 = float(fz.transported.rvt[sl, 2]) / r2
+    om = case.omega
+    wt1, wt2 = vt1 - om * r1, vt2 - om * r2
+    w1 = float(np.hypot(vm1, wt1))
+    w2 = float(np.hypot(vm2, wt2))
+    span = ((r1 - r[:, 1].min()) / (r[:, 1].max() - r[:, 1].min())
+            if r.shape[0] > 1 else 0.5)
+    sigma = float(case._geometry().solidity(span))
+    return 1.0 - w2 / w1 + abs(wt1 - wt2) / (2.0 * sigma * w1)
 
 # --- NASA TP-1659 Table III(a), rotor 37, tip -> hub (percent span from tip)
 _PCT_SPAN = np.array([0., 5., 10., 15., 30., 50., 70., 85., 90., 95., 100.])

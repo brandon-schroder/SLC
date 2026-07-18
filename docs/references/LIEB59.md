@@ -124,6 +124,41 @@ labelled "EQUATION [8] WITH k_s = 1.17 AND ε = 0.004"** — i.e. the coded
   `e^(1/1.17) = 2.351`; the ceiling at 2.2 sits safely at the data edge. Pinned:
   `test_wake_momentum_thickness_diverges_at_lieblein_2p35_limit`.
 
+## Diffusion factor `D` and the tip stall limit — NACA RM E53D01
+## (grounded 2026-07-18, staging-loss-models notebook)
+
+Distinct from the 1959 `D_eq` above: the *original* blade-loading measure of
+**Lieblein, Schwenk & Broderick, "Diffusion Factor for Estimating Losses and
+Limiting Blade Loadings in Axial-Flow Compressor Blade Elements," NACA RM
+E53D01 (1953)** (the basis of NASA SP-36), in the relative frame
+
+    D = 1 − W₂/W₁ + |ΔV_θ| / (2 σ W₁).
+
+Limiting values (NotebookLM, loss-models notebook, RM E53D01 "Summary of
+Results"):
+
+- **2-D cascade** (NACA 65-series, design α): loss rises only slightly with
+  `D` up to ≈ **0.6**, then a sharp rise.
+- **Rotor hub / mean**: minimum-loss coefficient roughly flat to `D ≈
+  0.55–0.6`.
+- **Rotor TIP — more severe**: "marked and practically linear" loss rise from
+  `D` as low as **0.30**; to hold blade-element η = 0.90 the tip design limit
+  is `D ≲ **0.45**` (RM E54A28 quotes a tip design `D ≈ 0.4` for stage
+  η = 0.90).
+
+**Used as a post-solve stall diagnostic** (verification layer,
+`v5_rotor37.tip_diffusion_factor`; not a live closure). Measured on the two
+transonic siblings (Rotor 37/38, gate #5 follow-on, 2026-07-18): each rotor's
+**measured stall sits at tip `D ≈ 0.6`** (R37 0.63 at 19.60 kg/s; R38 0.595 at
+20.44) — ~0.15 above the tip *design* limit 0.45, i.e. the rigs run past design
+loading to stall, landing at the cascade sharp-loss value. A `D_tip = 0.60`
+stall threshold predicts both measured stalls within ~3% and, unlike the loss
+set, **orders the siblings correctly** (the high-AR R38 reaches the limit at
+higher flow → earlier stall). Pinned:
+`test_v5_rotor38.py::test_tip_diffusion_factor_predicts_the_sibling_stall_differential`.
+The graduation path to a live `solve_speedline` criterion (C¹-safe closure-layer
+`D`) is recorded in the ROTOR37 gate #5 disposition.
+
 ## Residual
 
 Constants confirmed; the ω̄ inversion (fixed), the off-design model (resolved,

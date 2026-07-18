@@ -1060,6 +1060,25 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **Tip diffusion factor predicts the sibling stall differential
+  (2026-07-18, gate #5 follow-on).** The grounded loading criterion the
+  operability disposition called for. Lieblein/NACA RM E53D01 tip
+  `D = 1 − W₂/W₁ + |ΔV_θ|/(2σW₁)` (grounded via the loss-models notebook;
+  hub/mean design limit ≈0.6, rotor-TIP design ≈0.45 for η=0.90, tip loss
+  rising from D≈0.30 — LIEB59.md), computed as a post-solve verification
+  diagnostic (`v5_rotor37.tip_diffusion_factor`). Measured on both
+  transonic siblings at Tier 2: **each rotor's measured stall sits at tip
+  D≈0.6** (R37 0.63 at 19.60 kg/s; R38 0.595 at 20.44) — ~0.15 past the
+  tip design limit, at the 2-D-cascade sharp-loss value (rigs run past
+  design loading to stall). A `D_tip=0.60` threshold predicts R37 +3.0%
+  and R38 −0.6% of measured stall flow, and **orders the siblings the way
+  the loss set cannot** (high-AR R38 hits the limit at higher flow →
+  earlier stall, reproducing measured 20.44 > 19.60 — the AR-sensitivity
+  differential the correlation set misses). Loading, not loss, is the
+  stall-line variable; zero tuning. Pinned:
+  `test_v5_rotor38.py::test_tip_diffusion_factor_predicts_the_sibling_stall_differential`.
+  Recorded next step (a feature): graduate D to a C¹ closure quantity +
+  wire a `D_tip` `StallFlag` into `solve_speedline` → gate #5 predictive.
 - **Rotor 38 — the second transonic axial rotor (2026-07-17,
   `v5_rotor38.py`).** The axial counterpart of the Krain generalization
   check: TP-2001's high-AR sibling of Rotor 37 (same annulus/speed/flow

@@ -82,3 +82,74 @@ def test_design_record(case):
     # The rig never reached design PR at 100% (stall-truncated line):
     assert float(np.max(MEASURED_100_R38["rotor_pr"])) < DESIGN_R38[
         "rotor_pr"]
+
+
+def test_tip_diffusion_factor_predicts_the_sibling_stall_differential():
+    # GATE #5 FOLLOW-ON (2026-07-18): the Lieblein tip diffusion factor
+    # (NACA RM E53D01) is the grounded loading criterion the operability
+    # disposition called for. Characterized at Tier 2 (n_sl=5) across the
+    # measured lines of BOTH transonic siblings.
+    #
+    # MEASURED: the tip D-factor at each rotor's measured stall flow is
+    # ~0.6 (R37 0.63 at 19.60; R38 0.595 at 20.44) - ABOVE the report's
+    # tip DESIGN limit 0.45 (eta=0.90) but at the 2-D-cascade
+    # sharp-loss-rise value, i.e. the rigs run past design loading to
+    # stall. A D_tip = 0.60 stall threshold crosses within ~3% of each
+    # measured stall (R37 ~20.2, +3.0%; R38 ~20.3, -0.6%) AND ORDERS THE
+    # SIBLINGS CORRECTLY: the high-AR R38 reaches the loading limit at
+    # HIGHER flow -> stalls earlier, reproducing the measured differential
+    # (20.44 > 19.60) that the LOSS set does NOT carry (test_tier2_and_the
+    # _high_ar_differential: model PR +6.6% vs +0.2%). Loading, not loss,
+    # is the right variable for the stall LINE. Zero tuning.
+    import numpy as np
+
+    from slcflow.drivers.classical import ClassicalConfig, solve_classical
+    from slcflow.grid.core import GridTopology
+    from slcflow.machine import FidelityConfig, MassFlowSpec
+    from slcflow.verification.v5_rotor37 import (Rotor37, MEASURED_100,
+                                                 tip_diffusion_factor)
+    from slcflow.verification.v5_rotor38 import Rotor38, MEASURED_100_R38
+
+    def d_tip_curve(case_cls):
+        case = case_cls()
+        m = case.machine()
+        topo = GridTopology(m.flowpath, n_sl=5)
+        inlet = m.inlet.fields(topo.psi)
+        warm, rows = None, []
+        for md in np.arange(21.0, 19.39, -0.2):
+            r = solve_classical(topo, case.gas, FidelityConfig.tier2(),
+                                MassFlowSpec(md), inlet, rows=m.rows,
+                                warm_start=warm,
+                                config=ClassicalConfig(max_outer=800))
+            if not r.converged:
+                continue
+            warm = r
+            rows.append((float(md), tip_diffusion_factor(case, r)))
+        a = np.array(rows)
+        return a[np.argsort(a[:, 1])]      # ascending in D for np.interp
+
+    def cross06(a):
+        return float(np.interp(0.60, a[:, 1], a[:, 0]))
+
+    def d_at(a, md):
+        b = a[np.argsort(a[:, 0])]
+        return float(np.interp(md, b[:, 0], b[:, 1]))
+
+    c37 = d_tip_curve(Rotor37)
+    c38 = d_tip_curve(Rotor38)
+    stall37 = float(np.min(MEASURED_100["mdot"]))          # 19.60
+    stall38 = float(np.min(MEASURED_100_R38["mdot"]))      # 20.44
+
+    # D_tip at each measured stall sits at the ~0.6 sharp-loss value:
+    assert 0.60 <= d_at(c37, stall37) <= 0.68
+    assert 0.56 <= d_at(c38, stall38) <= 0.62
+
+    # a D_tip=0.60 threshold predicts each measured stall within ~4%:
+    x37, x38 = cross06(c37), cross06(c38)
+    assert abs(x37 - stall37) / stall37 < 0.04
+    assert abs(x38 - stall38) / stall38 < 0.04
+
+    # and ORDERS the siblings the way the loss set could not: R38 (early
+    # stall) reaches the loading limit at higher flow than R37:
+    assert x38 > x37
+    assert stall38 > stall37       # the measured differential it tracks
