@@ -385,3 +385,56 @@ def test_speedline_tier2_validity_flag_is_the_endwall_window_artifact(case):
     assert res.stall is not None
     assert res.stall.criterion == "validity_saturated"
     assert res.stall.mdot == 21.0
+
+
+def test_blade_loading_stall_criterion_is_opt_in_and_fires(case):
+    # GATE #5 PREDICTIVE (2026-07-18): the opt-in D-factor stall criterion
+    # wired into solve_speedline (the feature the D-factor characterization
+    # teed up). DEFAULT-OFF is non-breaking; when armed it flags a
+    # blade_loading stall at the NACA RM E53D01 loading limit.
+    #
+    # MEASURED at Tier 1 (clean traversal; the Tier-2 tip-accurate variant
+    # awaits the recorded spanwise-traversal robustness): with
+    # d_factor_max=0.60 the traversal flags blade_loading at ~20.5 kg/s
+    # (mean-D crossing), +4.6% vs measured stall 19.60 - vs the control
+    # run (no criterion) that sails past to mdot_min. The Tier-2 TIP
+    # D-factor lands the same limit within ~3% (test_v5_rotor38.py::
+    # test_tip_diffusion_factor_predicts_the_sibling_stall_differential),
+    # the accuracy this driver hook inherits once Tier-2 traverses.
+    from slcflow.drivers.classical import ClassicalConfig
+    from slcflow.drivers.continuation import SpeedlineConfig, solve_speedline
+    from slcflow.grid.core import GridTopology
+    from slcflow.machine import FidelityConfig
+
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=1)
+    inlet = m.inlet.fields(topo.psi)
+    kw = dict(mdot_start=21.0, mdot_min=18.0, mdot_step=0.25, rows=m.rows)
+    cc = ClassicalConfig(max_outer=800)
+
+    # opt-in: default (no d_factor_max) never flags blade_loading:
+    ctrl = solve_speedline(topo, case.gas, FidelityConfig.tier1(), inlet,
+                           config=SpeedlineConfig(classical=cc), **kw)
+    assert ctrl.stall is None                      # ran to mdot_min
+    assert len(ctrl.points) > 8
+
+    # armed: flags blade_loading at the loading limit, well above mdot_min:
+    res = solve_speedline(
+        topo, case.gas, FidelityConfig.tier1(), inlet,
+        config=SpeedlineConfig(d_factor_max=0.60, classical=cc), **kw)
+    assert res.stall is not None
+    assert res.stall.criterion == "blade_loading"
+    assert "E53D01" in res.stall.detail
+    assert 20.0 < res.stall.mdot < 21.0            # ~20.5, near measured stall
+    assert len(res.points) < len(ctrl.points)      # stopped early
+
+
+def test_blade_loading_config_validation():
+    from slcflow.drivers.continuation import SpeedlineConfig
+    from slcflow.errors import ConfigError
+
+    SpeedlineConfig(d_factor_max=0.6)              # ok
+    with pytest.raises(ConfigError):
+        SpeedlineConfig(d_factor_max=0.0)
+    with pytest.raises(ConfigError):
+        SpeedlineConfig(d_factor_max=-0.5)

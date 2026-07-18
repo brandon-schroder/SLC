@@ -36,7 +36,8 @@ from ..errors import ConfigError
 from ..grid.core import MetricsConfig
 from ..transport.streamwise import TransportFields
 from ..types import BackPressureSpec, FidelityConfig, MassFlowSpec
-from .classical import ClassicalConfig, ClassicalResult, solve_classical
+from .classical import (ClassicalConfig, ClassicalResult, _resolve_rows,
+                        solve_classical)
 from .newton import NewtonConfig, solve_newton
 
 __all__ = ["SpeedlineConfig", "BCSwitchConfig", "MapPoint", "StallFlag",
@@ -107,6 +108,17 @@ class SpeedlineConfig:
         still-rising characteristic never false-flags (criterion (b)).
     escalate : try the Newton driver (warm-started) on a point the classical
         driver fails, before cutting the step (section 6.7 escalation).
+    d_factor_max : opt-in blade-loading stall criterion (default ``None`` =
+        off). When set, a converged point whose maximum ROTOR-tip Lieblein
+        diffusion factor (NACA RM E53D01) reaches this value flags a
+        ``blade_loading`` stall — the grounded loading limit for the stall
+        LINE (measured on Rotor 37/38 to predict stall within ~3% at 0.60;
+        see docs/references/ROTOR37.md gate #5). Checked BEFORE the
+        validity/turnover criteria: blade loading is the physical stall
+        signal and takes precedence over the closure-window validity gate
+        (which, for the transonic-rotor endwall family, saturates as a
+        bookkeeping artifact well before real stall — pair ``d_factor_max``
+        with a low ``validity_min`` there).
     bc_switch : hysteretic choke<->normal BC-switch policy (section 6.6). When
         ``None`` (default) the traversal stays in mass-flow mode and a lost
         mdot root ends it with a stall flag; when set, choke-proximal points
@@ -120,6 +132,7 @@ class SpeedlineConfig:
     validity_min: float = 0.1
     pr_rise_min: float = 1e-3
     escalate: bool = True
+    d_factor_max: float = None
     bc_switch: BCSwitchConfig = None
     max_points: int = 200
     classical: ClassicalConfig = field(default_factory=ClassicalConfig)
@@ -130,6 +143,8 @@ class SpeedlineConfig:
             raise ConfigError(f"cutback must be in (0, 1), got {self.cutback}")
         if self.step_grow < 1.0:
             raise ConfigError("step_grow must be >= 1")
+        if self.d_factor_max is not None and self.d_factor_max <= 0.0:
+            raise ConfigError("d_factor_max must be > 0 when set")
 
 
 @dataclass(frozen=True)
@@ -157,18 +172,61 @@ class StallFlag:
     detail: str = ""
 
 
-def _classify_stall(out_mdot, pr, prev_pr, validity, armed, peak_mdot, config):
+def _tip_diffusion_factor(result: ClassicalResult, resolved_rows):
+    """Maximum ROTOR-tip Lieblein diffusion factor over a converged point's
+    rotor rows (NACA RM E53D01; section 6.7 blade-loading diagnostic).
+
+    ``D = 1 - W2/W1 + |Vtheta1 - Vtheta2| / (2 sigma W1)`` in the relative
+    frame, at the outermost (tip) q-o streamline of each row's EDGE_LE..TE.
+    Only rows with ``omega != 0`` (rotors) contribute; returns ``None`` when
+    there are none. Driver-layer reduction (post-solve, off the residual
+    path — plain arithmetic is fine, cf. ``row_throat_capacity``)."""
+    f, fz = result.fields, result.frozen
+    r = f.metrics.r
+    tr = fz.transported
+    n_sl = r.shape[0]
+    best = None
+    for spec, j_le, j_te, _t in resolved_rows:
+        if spec.omega == 0.0:
+            continue
+        sl = int(np.argmax(r[:, j_le]))            # tip streamline
+        r1, r2 = float(r[sl, j_le]), float(r[sl, j_te])
+        vm1, vm2 = float(f.vm[sl, j_le]), float(f.vm[sl, j_te])
+        wt1 = float(tr.rvt[sl, j_le]) / r1 - spec.omega * r1
+        wt2 = float(tr.rvt[sl, j_te]) / r2 - spec.omega * r2
+        w1 = float(np.hypot(vm1, wt1))
+        w2 = float(np.hypot(vm2, wt2))
+        col = r[:, j_le]
+        span = ((r1 - col.min()) / (col.max() - col.min())
+                if n_sl > 1 and col.max() > col.min() else 0.5)
+        sigma = float(spec.geometry.solidity(span))
+        d = 1.0 - w2 / w1 + abs(wt1 - wt2) / (2.0 * sigma * w1)
+        best = d if best is None else max(best, d)
+    return best
+
+
+def _classify_stall(out_mdot, pr, prev_pr, validity, armed, peak_mdot, config,
+                    d_factor=None):
     """Section 6.7 stall-onset classification for one converged point (pure).
 
-    Order is normative: **validity saturation is checked before PR turnover**.
-    For a compressor whose loss/deviation correlation loses validity as
-    incidence climbs toward stall (e.g. Lieblein), validity collapses to 0 at
-    the high-incidence end *before* the (correct) loss turns the PR over — so
-    that family flags ``validity_saturated``. ``pr_turnover`` fires only when a
-    point on an ARMED (already-risen) characteristic actually falls below its
-    predecessor while validity is still admissible. Returns a
-    :class:`StallFlag` or ``None``.
+    Order is normative: the opt-in **blade-loading** criterion
+    (``d_factor_max``) is checked first — it is the physical stall signal and
+    takes precedence over the closure-window validity gate (which saturates as
+    a bookkeeping artifact for the transonic-rotor endwall family). Then
+    **validity saturation before PR turnover**: for a compressor whose
+    loss/deviation correlation loses validity as incidence climbs toward stall
+    (e.g. Lieblein), validity collapses to 0 at the high-incidence end *before*
+    the (correct) loss turns the PR over — so that family flags
+    ``validity_saturated``. ``pr_turnover`` fires only when a point on an ARMED
+    (already-risen) characteristic actually falls below its predecessor while
+    validity is still admissible. Returns a :class:`StallFlag` or ``None``.
     """
+    if (config.d_factor_max is not None and d_factor is not None
+            and d_factor >= config.d_factor_max):
+        return StallFlag(
+            mdot=out_mdot, criterion="blade_loading",
+            detail=f"rotor-tip diffusion factor {d_factor:.3g} "
+                   f">= {config.d_factor_max:.3g} (NACA RM E53D01)")
     if validity < config.validity_min:
         return StallFlag(mdot=out_mdot, criterion="validity_saturated",
                          detail=f"closure validity {validity:.3g} "
@@ -327,6 +385,8 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
     bc = config.bc_switch
     station = topology.n_qo - 1
     step_min = config.step_min_frac * mdot_start
+    resolved_rows = (_resolve_rows(topology, rows)
+                     if rows and config.d_factor_max is not None else [])
     solve_kw = dict(topology=topology, fluid=fluid, fidelity=fidelity,
                     inlet=inlet, rows=rows, steps=steps, blockage=blockage,
                     metrics_config=metrics_config, config=config)
@@ -380,8 +440,10 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
         c = _choke_margin(result)
 
         peak_mdot = points[-1].mdot if points else out_mdot
+        d_factor = (_tip_diffusion_factor(result, resolved_rows)
+                    if config.d_factor_max is not None else None)
         stall = _classify_stall(out_mdot, pr, prev_pr, validity, armed,
-                                peak_mdot, config)
+                                peak_mdot, config, d_factor)
         if stall is not None:
             break
 

@@ -169,10 +169,22 @@ reaches the loading limit at higher flow → stalls earlier (measured
 misses (Rotor 38 section; loss reads PR +6.6% vs +0.2%). **Loading, not
 loss, is the right variable for the stall line.** Zero tuning. Pinned:
 `test_v5_rotor38.py::test_tip_diffusion_factor_predicts_the_sibling_stall_differential`.
-Recorded next step (a feature, not this characterization): graduate `D`
-to a C¹-safe closure-layer quantity and wire a `D_tip`-threshold
-`StallFlag` criterion into `solve_speedline` — that turns gate #5
-predictive.
+**LIVE CRITERION WIRED (2026-07-18):** `SpeedlineConfig.d_factor_max`
+(opt-in, default `None` = off — non-breaking) now flags a `blade_loading`
+stall when a converged point's max rotor-tip `D` reaches the threshold,
+checked *before* the validity/turnover criteria (blade loading is the
+physical signal; it takes precedence over the endwall-window validity
+artifact). Demonstrated at Tier 1: with `d_factor_max = 0.60` the
+traversal flags `blade_loading` at ~20.5 kg/s (mean-D crossing, +4.6% vs
+measured 19.60) where the control run sails to `mdot_min`; the Tier-2
+tip-D accuracy (+3%) is inherited once the Tier-2 spanwise traversal is
+robust (the classical solve returns intermittent `CHOKE_LIMITED` across
+this rotor's spanwise range — the recorded multi-streamtube robustness
+item, which stops a clean Tier-2 speedline today). Pinned:
+`test_v5_rotor37.py::test_blade_loading_stall_criterion_is_opt_in_and_fires`.
+Remaining refinement: a C¹-safe closure-layer `D` if it ever needs to
+enter the residual path (it does not today — it is a post-solve
+diagnostic like the row-throat check).
 
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation

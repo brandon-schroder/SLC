@@ -1077,8 +1077,21 @@ These are not suggestions; violating them is a bug even if tests pass.
   differential the correlation set misses). Loading, not loss, is the
   stall-line variable; zero tuning. Pinned:
   `test_v5_rotor38.py::test_tip_diffusion_factor_predicts_the_sibling_stall_differential`.
-  Recorded next step (a feature): graduate D to a C¹ closure quantity +
-  wire a `D_tip` `StallFlag` into `solve_speedline` → gate #5 predictive.
+- **D-factor stall criterion wired into `solve_speedline` (2026-07-18,
+  gate #5 predictive).** Opt-in `SpeedlineConfig.d_factor_max` (default
+  `None` = off, non-breaking): a converged point whose max rotor-tip `D`
+  (`_tip_diffusion_factor`, driver-layer post-solve reduction over the
+  resolved rotor rows) reaches the threshold flags a `blade_loading`
+  stall, checked BEFORE validity/turnover (blade loading is the physical
+  signal; precedence over the endwall-window validity artifact).
+  Demonstrated at Tier 1: `d_factor_max=0.60` flags `blade_loading` at
+  ~20.5 kg/s (+4.6% vs measured 19.60) where the control sails to
+  `mdot_min`; the Tier-2 tip-D +3% accuracy is inherited once the Tier-2
+  spanwise traversal is robust (classical returns intermittent
+  `CHOKE_LIMITED` across this rotor's spanwise range — the recorded
+  multi-streamtube item). Pinned:
+  `test_v5_rotor37.py::test_blade_loading_stall_criterion_is_opt_in_and_fires`
+  + `..._config_validation`.
 - **Rotor 38 — the second transonic axial rotor (2026-07-17,
   `v5_rotor38.py`).** The axial counterpart of the Krain generalization
   check: TP-2001's high-AR sibling of Rotor 37 (same annulus/speed/flow
