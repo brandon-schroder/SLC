@@ -137,26 +137,49 @@ def _component_zetas():
     return y_to_energy_zeta(y_profile), y_to_energy_zeta(y_te)
 
 
-def test_overprediction_is_profile_led_not_te_led():
+def test_component_decomposition_is_not_te_dominated():
     # CALIBRATION DISPOSITION (2026-07-18, K-O TE curve): the +35% total gap
     # is NOT dominated by the trailing edge. Decomposed as energy-zeta at
-    # M2is = 1.0 vs the paper's measured shares (1.0% boundary-layer/profile,
-    # 0.75% TE, 0.5% exit shock the method does not carry):
+    # M2is = 1.0 (the robust, apples-to-apples statement is the TOTAL +35%;
+    # this component split is INFORMATIVE but not clean — K-O's profile bucket
+    # is surface BL + wake, which the paper distributes across its 1.0% BL and
+    # part of the 0.75% TE):
     #
-    #   profile-only  ~0.018 vs measured 0.010  -> EXCESS ~+0.008
-    #   TE-only       ~0.013 vs measured 0.0075 -> excess ~+0.0053
+    #   profile-only  ~0.018   TE-only  ~0.013   (measured shares 1.0% / 0.75%)
     #
-    # i.e. the PROFILE excess exceeds the TE excess — correcting the earlier
-    # "the TE curve carries most of it" reading. This matches Zhu & Sjolander
-    # (2005), who find K-O over-predicts the PROFILE loss for axial-entry
-    # nozzles (beta1=0), large s/c, and large max thickness — a profile-loss
-    # recalibration, not a TE-curve tweak. A grounded, scoped TE fix is not
-    # available (t_TE/o convention CONFIRMED correct; the K-O TE curve is
-    # faithful to Fig. 14; Liu et al. 2022's K_M near-sonic factor is not in
-    # the library and its K_p*f_Re part perturbs validated turbines for ~0 at
-    # M2=1; Denton 1993 needs a base-pressure coefficient). NOT tuned — see
-    # docs/references/LS89.md "Calibration disposition".
+    # The K-O TE component (~1.3%) is not the majority of the ~0.030 predicted
+    # total, so a TE-curve tweak cannot close the gap — the earlier "the TE
+    # curve carries most of it" reading is corrected. The t_TE/o convention is
+    # CONFIRMED correct and the K-O TE curve is faithful to Fig. 14; the +35%
+    # is documented K-O conservatism on a modern high-efficiency vane, with NO
+    # grounded correlation fix available (see docs/references/LS89.md
+    # "Calibration disposition": Liu 2022's K_M is ungrounded and its K_p*f_Re
+    # part perturbs validated turbines; Denton 1993 needs a base-pressure
+    # coefficient; Zhu-Sjolander 2005 REFUTED below). NOT tuned.
     z_profile, z_te = _component_zetas()
-    assert (z_profile - 0.010) > (z_te - 0.0075)      # profile-led excess
+    assert z_te < 0.5 * (z_profile + z_te)             # TE is not the majority
     assert 0.015 < z_profile < 0.022                   # ~0.018, documented
     assert 0.010 < z_te < 0.016                        # ~0.013, documented
+
+
+def test_zhu_sjolander_would_not_fix_ls89():
+    # ZHU-SJOLANDER (2005) REFUTED as the LS-89 fix (2026-07-18, grounded via
+    # the loss-models notebook, GT2005-69077). ZS Eq. 13/12: same master form
+    # as K-O, using the SAME Ainley-Mathieson reference curves (their Fig. 1)
+    # and K-O's TE loss UNCHANGED. Its profile changes are k_in (2/3 reaction
+    # -> 0.825 axial-entry nozzle), a K_m=+-1 thickness exponent, and a low-Re
+    # K_R=-0.575 (inert at LS-89's Re=1e6). For an axial-entry nozzle like
+    # LS-89, k_in RISES (+24%) because ZS found K-O UNDER-predicts nozzles —
+    # the OPPOSITE direction to this vane's over-prediction. The only reducing
+    # lever is the thickness term (t_max/c/0.2)^K_m, ~neutral at LS-89's
+    # t/c~=0.2 (K-O zeroes it for nozzles via the b1/b2 exponent). Net ZS/K-O
+    # profile at t/c 0.2 is ~+24% (WORSE); even a thin t/c 0.15 gives only
+    # -7%, nowhere near the ~-50% needed to close +35%. So ZS is not a fix;
+    # it targets large-s/c / large-thickness / low-Re / under-predicted-nozzle
+    # regimes. Guarding the direction so the refutation is not silently lost.
+    kin_ko, kin_zs = 2.0 / 3.0, 0.825
+    for tc in (0.15, 0.20, 0.25):
+        Km = 1.0 if tc <= 0.20 else -1.0
+        net = (kin_zs * (tc / 0.20) ** Km) / kin_ko   # same AM curve & kp
+        assert net > 0.90                             # never the ~0.5x needed
+    assert kin_zs > kin_ko                            # ZS raises nozzle loss

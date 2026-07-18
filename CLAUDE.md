@@ -1077,11 +1077,27 @@ These are not suggestions; violating them is a bug even if tests pass.
   TN D-6967 (×0.87 at moderate M2) for ~0 at LS-89's M2=1 (×0.978);
   Denton 1993 needs a base-pressure `C_Pb` absent from the §4.1 contract.
   Local single-point tuning is declined (discipline; and TE isn't the
-  dominant term). **Constants unchanged.** Recorded systematic next lever:
-  adopt the Zhu-Sjolander (2005) profile+TE recalibration as an opt-in
-  CorrelationSet variant. Pinned:
-  `test_v6_ls89.py::test_overprediction_is_profile_led_not_te_led`;
+  dominant term). **Constants unchanged.** Pinned:
+  `test_v6_ls89.py::test_component_decomposition_is_not_te_dominated`;
   LS89.md "Calibration disposition".
+- **Zhu-Sjolander (2005) opt-in set → REFUTED by grounding, NOT built
+  (2026-07-18).** Investigated ZS as the recorded "systematic fix" for the
+  LS-89 over-prediction; grounding it verbatim (loss-models notebook,
+  GT2005-69077) overturns the premise. ZS Eq. 13/12 use the **same
+  Ainley-Mathieson reference curves** we already have (their Fig. 1 = our
+  `yp1`/`yp2`) and leave **K-O's TE loss unchanged**; the profile changes are
+  `k_in` (2/3 reaction → **0.825 axial-entry nozzle**, i.e. +24% — ZS found
+  K-O *under*-predicts nozzles, OPPOSITE to LS-89's over-prediction), a
+  `K_m=±1` thickness exponent (~neutral at LS-89's t/c≈0.2), and a low-Re
+  `K_R=−0.575` (inert at Re=1e6). Net ZS/K-O profile at LS-89 is ~+24%
+  (worse), −7% even at a thin t/c 0.15 — never the ~−50% needed. So ZS is
+  the wrong regime/direction for LS-89 (it targets large-s/c / large-thickness
+  / low-Re / under-predicted nozzles); **not built** — no case in the set
+  needs it, and it doesn't fix the one that motivated it. The +35% stands as
+  accepted documented K-O conservatism with no grounded correlation fix
+  (Liu/Denton/ZS all dispositioned). ZS equations captured in LS89.md for a
+  future large-s/c case. Pinned:
+  `test_v6_ls89.py::test_zhu_sjolander_would_not_fix_ls89`.
 - **Tip diffusion factor predicts the sibling stall differential
   (2026-07-18, gate #5 follow-on).** The grounded loading criterion the
   operability disposition called for. Lieblein/NACA RM E53D01 tip
