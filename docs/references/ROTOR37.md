@@ -132,6 +132,30 @@ profiles).
   measurement; the remaining levers are the throat/capacity station and
   a `BackPressureSpec` comparison for the vertical-characteristic points.
 
+## Operability disposition — gate #5 (2026-07-18;
+## `test_speedline_operability_criteria_measured_disposition`)
+
+One §6.7 `solve_speedline` traversal at Tier 1 across and past the
+measured 100% line: **mechanically robust** (every point converges
+classical, no escalation/cut-backs, PR monotone rising), but **no stall
+criterion fires anywhere near the measured stall** (19.60 kg/s):
+
+- criterion (b) `pr_turnover` *cannot* fire on this machine — the rig's
+  own measured line is stall-truncated while PR still rises (1.785→2.196);
+- criterion (c) `validity_saturated` fires at ~15.5 kg/s, **21% below**
+  the measured stall (Çetin-corrected Tier-1 validity stays 0.6–0.9 over
+  the measured range); at Tier 2 the same criterion instead fires at the
+  *first* point (endwall D_eq out-of-window at all flows — the recorded
+  spanwise validity limitation, not stall physics);
+- criterion (a) `solver_failure` never triggers.
+
+**Honest disposition:** the operability machinery works on a real
+transonic rotor, but the stall *line* is not predicted by
+solver/validity signatures — it needs a grounded aerodynamic loading
+criterion (the Lieblein/NACA **D-factor ≈ 0.6 tip limit** is the library
+candidate), recorded as the follow-up. Choke side already dispositioned
+(capacity/knee section above).
+
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation
 correction (the `MEASURED_BE_4182` deviation profile above is the target);

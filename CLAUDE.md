@@ -1046,6 +1046,20 @@ These are not suggestions; violating them is a bug even if tests pass.
   the model sits with the rig, not the design assumption). Same ~+1%
   capacity read (shared stator-1 governs choke in both builds). Pinned:
   `test_v6_tnd6967.py::test_first_stage_configuration_matched_pr`.
+- **Gate #5 operability disposition on Rotor 37 (2026-07-18).** One §6.7
+  `solve_speedline` traversal across and past the measured 100% line:
+  mechanically robust (all points converge classical, PR monotone), but
+  **no stall criterion fires near the measured stall 19.60 kg/s** —
+  `pr_turnover` cannot fire (the rig's line is stall-truncated while PR
+  still rises, 1.785→2.196), `validity_saturated` fires 21% late at
+  Tier 1 (~15.5) and trivially early at Tier 2 (first point; the endwall
+  D_eq window artifact), `solver_failure` never. Honest disposition: the
+  operability machinery works on a real transonic rotor but the stall
+  LINE needs a grounded loading criterion (Lieblein/NACA D-factor ≈ 0.6
+  tip limit = the library candidate, recorded follow-up). Pinned:
+  `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
+  + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
+  "Operability disposition".
 - **Rotor 38 — the second transonic axial rotor (2026-07-17,
   `v5_rotor38.py`).** The axial counterpart of the Krain generalization
   check: TP-2001's high-AR sibling of Rotor 37 (same annulus/speed/flow

@@ -308,3 +308,80 @@ def test_design_intent_record_matches_report(case):
     assert DESIGN["mdot"] == 20.188
     assert MEASURED_100["rotor_pr"][2] == 2.056
     assert MEASURED_100["rotor_eta"][2] == 0.876
+
+
+def test_speedline_operability_criteria_measured_disposition(case):
+    # GATE #5 OPERABILITY on the measured rotor (2026-07-18): one Tier-1
+    # section 6.7 traversal across and past the measured 100% line
+    # (choke 20.93 -> stall 19.60, TP-1659 Table IV(a)). MEASURED:
+    #
+    #   * The traversal is mechanically robust: every point converges
+    #     classical (no escalation, no cut-backs) and PR rises monotonely
+    #     as flow falls, through and far past the measured stall flow.
+    #   * NO stall criterion fires anywhere near the measured stall
+    #     (19.60): criterion (b) pr_turnover CANNOT fire on this machine
+    #     - the rig's own line is stall-truncated while PR still rises
+    #     (1.785 -> 2.196, asserted below) - and criterion (c)
+    #     validity_saturated fires only at ~15.5 kg/s, 21% BELOW the
+    #     measured stall (the Cetin-corrected Tier-1 validity stays
+    #     0.6-0.9 over the measured range and collapses only at much
+    #     higher incidence). At Tier 2 the same criterion instead fires
+    #     at the FIRST point (endwall D_eq out-of-window at all flows -
+    #     the recorded spanwise validity limitation, not stall physics).
+    #
+    # HONEST DISPOSITION: the operability machinery works on a real
+    # transonic rotor, but the stall LINE is not predicted by solver/
+    # validity signatures - it needs a grounded aerodynamic loading
+    # criterion (the Lieblein/NACA D-factor ~0.6 tip limit is the
+    # library candidate), recorded as the follow-up.
+    import numpy as np
+
+    from slcflow.drivers.continuation import solve_speedline
+    from slcflow.grid.core import GridTopology
+    from slcflow.machine import FidelityConfig
+
+    # The rig's line rises to its stall end - turnover unfireable (b):
+    order = np.argsort(MEASURED_100["mdot"])
+    assert np.all(np.diff(MEASURED_100["rotor_pr"][order][::-1]) > 0)
+
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=1)
+    inlet = m.inlet.fields(topo.psi)
+    res = solve_speedline(topo, case.gas, FidelityConfig.tier1(), inlet,
+                          mdot_start=21.0, mdot_min=15.0, mdot_step=0.5,
+                          rows=m.rows)
+    mdots = np.array([p.mdot for p in res.points])
+    prs = np.array([p.pressure_ratio for p in res.points])
+    assert np.all(np.diff(prs) > 0)             # monotone rise, no turnover
+    assert all(p.driver == "classical" for p in res.points)
+    # in-window over the measured flow range:
+    meas = mdots >= float(np.min(MEASURED_100["mdot"])) - 0.1
+    assert np.min([p.validity for p, keep in zip(res.points, meas)
+                   if keep]) > 0.5
+    # the only flag: validity saturation, ~21% below measured stall:
+    assert res.stall is not None
+    assert res.stall.criterion == "validity_saturated"
+    assert 15.0 <= res.stall.mdot <= 16.5
+    assert res.stall.mdot < float(np.min(MEASURED_100["mdot"])) * 0.85
+
+
+def test_speedline_tier2_validity_flag_is_the_endwall_window_artifact(case):
+    # The Tier-2 counterpart of the disposition above: the spanwise
+    # traversal flags validity_saturated at the FIRST point (endwall
+    # streamtube D_eq above the SP-36 window at ALL flows - the recorded
+    # Rotor-37 spanwise validity limitation), so at Tier 2 criterion (c)
+    # carries the closure-window boundary, not stall physics.
+    from slcflow.drivers.continuation import solve_speedline
+    from slcflow.grid.core import GridTopology
+    from slcflow.machine import FidelityConfig
+
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=5)
+    inlet = m.inlet.fields(topo.psi)
+    res = solve_speedline(topo, case.gas, FidelityConfig.tier2(), inlet,
+                          mdot_start=21.0, mdot_min=20.0, mdot_step=0.5,
+                          rows=m.rows)
+    assert len(res.points) == 0
+    assert res.stall is not None
+    assert res.stall.criterion == "validity_saturated"
+    assert res.stall.mdot == 21.0
