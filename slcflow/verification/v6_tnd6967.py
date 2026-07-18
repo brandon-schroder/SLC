@@ -63,7 +63,8 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["TND6967Turbine", "MEASURED_EQ", "DESIGN_EQ", "MEASURED_MAP"]
+__all__ = ["TND6967Turbine", "TND6967FirstStage", "MEASURED_EQ",
+           "DESIGN_EQ", "MEASURED_MAP", "MEASURED_EQ_S1", "DESIGN_EQ_S1"]
 
 _DEG = np.pi / 180.0
 
@@ -86,6 +87,16 @@ MEASURED_MAP = {
     "work_J_per_g": np.array([79.0, 71.0, 62.5, 46.9]),
     "mdot": np.array([2.00, 1.99, 2.01, 2.03]),
 }
+
+# FIRST-STAGE-ONLY operation (Table IV first-stage columns + report text
+# p. 16/18: equivalent design-inlet to rotor-exit PR_tt 2.018, PR_ts
+# 2.298; the rig removed stage 2 and installed fairing pieces for a
+# smooth first-stage exit). The isentropic back-check from the design
+# column (work 45.83 / eta 0.870) reproduces PR_tt 2.020 — transcription
+# control.
+DESIGN_EQ_S1 = {"mdot": 1.989, "pr_tt": 2.018, "eta_tt": 0.870,
+                "work_J_per_g": 45.83}
+MEASURED_EQ_S1 = {"mdot": 2.005, "eta_tt": 0.93, "work_J_per_g": 49.28}
 
 _R_MEAN = 0.1016                    # constant mean radius [m]
 
@@ -115,6 +126,10 @@ class TND6967Turbine:
     """Geometry-faithful two-stage TN D-6967 turbine (section 9.6),
     at the air-equivalent operating point."""
 
+    # Rows included in this configuration (class hook, cf. Rotor37.TABLES;
+    # the first-stage-only rig build subclasses with ("s1", "r1")).
+    ROW_IDS = ("s1", "r1", "s2", "r2")
+
     mdot: float = MEASURED_EQ["mdot"]
     rpm: float = DESIGN_EQ["rpm"]
     T0_in: float = 288.15
@@ -131,15 +146,18 @@ class TND6967Turbine:
     # ------------------------------------------------------------------
     def _axial_layout(self):
         """Axial extents: rows at fixed z with small gaps; heights linear
-        between the transcribed station heights (constant mean radius)."""
-        z = {"in": -0.03, "s1": (0.000, 0.020), "r1": (0.028, 0.048),
-             "s2": (0.056, 0.076), "r2": (0.084, 0.104), "out": 0.14}
-        heights = [(z["in"], _H_INLET), (z["s1"][0], _H_INLET),
-                   (z["s1"][1], _ROWS["s1"]["h_exit"]),
-                   (z["r1"][1], _ROWS["r1"]["h_exit"]),
-                   (z["s2"][1], _ROWS["s2"]["h_exit"]),
-                   (z["r2"][1], _ROWS["r2"]["h_exit"]),
-                   (z["out"], _ROWS["r2"]["h_exit"])]
+        between the transcribed station heights (constant mean radius).
+        Only ``ROW_IDS`` rows are laid out; the exit duct sits one
+        inter-row-gap + margin past the last TE at its exit height (the
+        first-stage rig's fairing pieces = a smooth constant exit)."""
+        zrow = {"s1": (0.000, 0.020), "r1": (0.028, 0.048),
+                "s2": (0.056, 0.076), "r2": (0.084, 0.104)}
+        last = self.ROW_IDS[-1]
+        z = {"in": -0.03, "out": zrow[last][1] + 0.036}
+        z.update({rid: zrow[rid] for rid in self.ROW_IDS})
+        heights = [(z["in"], _H_INLET), (z["s1"][0], _H_INLET)]
+        heights += [(z[rid][1], _ROWS[rid]["h_exit"]) for rid in self.ROW_IDS]
+        heights.append((z["out"], _ROWS[last]["h_exit"]))
         return z, heights
 
     def _flowpath(self) -> FlowPath:
@@ -160,7 +178,7 @@ class TND6967Turbine:
             return float((cum[k] + t * seg[k]) / cum[-1])
 
         stations = [StationDef(StationType.DUCT, 0.0, 0.0)]
-        for rid in ("s1", "r1", "s2", "r2"):
+        for rid in self.ROW_IDS:
             for stype, zq in zip((StationType.EDGE_LE, StationType.EDGE_TE),
                                  zpos[rid]):
                 stations.append(StationDef(
@@ -170,7 +188,8 @@ class TND6967Turbine:
 
     def _row_specs(self):
         specs = []
-        for rid, d in _ROWS.items():
+        for rid in self.ROW_IDS:
+            d = _ROWS[rid]
             r_ex = _R_MEAN + np.array([-0.5, 0.0, 0.5]) * d["h_exit"]
             pitch = 2.0 * np.pi * r_ex / d["z"]
             throat = np.cos(np.abs(np.array(d["te"])) * _DEG) * pitch
@@ -209,3 +228,15 @@ class TND6967Turbine:
         target = self.mdot if mdot is None else mdot
         return self.machine().evaluate(MassFlowSpec(target), fidelity,
                                        n_sl=n_sl, config=config)
+
+
+@dataclass(frozen=True)
+class TND6967FirstStage(TND6967Turbine):
+    """First-stage-only rig build (report Procedure section: stage 2
+    removed, fairing pieces installed for a smooth first-stage exit).
+    Measured anchors in :data:`MEASURED_EQ_S1`; the equivalent design
+    point is PR_tt 2.018 (PR_ts 2.298) at 15 336 rpm."""
+
+    ROW_IDS = ("s1", "r1")
+
+    mdot: float = MEASURED_EQ_S1["mdot"]

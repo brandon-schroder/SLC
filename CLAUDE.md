@@ -1033,6 +1033,19 @@ These are not suggestions; violating them is a bug even if tests pass.
   the trend (map flow rises ~1.5% from 100→50% speed, 2.00→2.03; model
   2.02→2.055). Pinned: `test_v6_tnd6967.py::test_multispeed_map_matched_pr`
   (90% + 50% extremes); TND6967.md "Multi-speed map".
+- **TN D-6967 first-stage-only configuration (2026-07-18,
+  `TND6967FirstStage`).** The rig's second test build (stage 2 removed,
+  exit faired) modelled as rows s1+r1 via a `ROW_IDS` class hook
+  (behavior-preserving for the two-stage machine). Anchors: Table IV
+  first-stage columns + text PR_tt,eq 2.018/PR_ts 2.298 (isentropic
+  back-check from the design column reproduces 2.020 — transcription
+  control). Matched-PR (characteristic interpolation): **flow +0.6%,
+  work −1.7%, η_tt 0.921 vs 0.93 (−0.9 pt)** — the two-stage ~1%
+  agreement class on half the row chain, and the model reproduces the
+  report's headline (the rig beat its conservative design η by 6 pt;
+  the model sits with the rig, not the design assumption). Same ~+1%
+  capacity read (shared stator-1 governs choke in both builds). Pinned:
+  `test_v6_tnd6967.py::test_first_stage_configuration_matched_pr`.
 - **Rotor 38 — the second transonic axial rotor (2026-07-17,
   `v5_rotor38.py`).** The axial counterpart of the Krain generalization
   check: TP-2001's high-AR sibling of Rotor 37 (same annulus/speed/flow

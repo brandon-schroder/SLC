@@ -237,3 +237,62 @@ def test_multispeed_map_matched_pr():
         assert abs(w - w_map) < 2.5, (pct, w, w_map)
         # matched-PR flow within 2% of the map (known ~+1% capacity read):
         assert abs(md - md_map) / md_map < 0.02, (pct, md, md_map)
+
+
+def test_first_stage_configuration_matched_pr():
+    # FIRST-STAGE-ONLY rig build (Table IV first-stage columns; report
+    # text PR_tt,eq 2.018 / PR_ts 2.298; stage 2 removed + exit fairing).
+    # MEASURED AGREEMENT (2026-07-18), matched-PR frame via the
+    # warm-chained classical characteristic interpolated to PR 2.018:
+    #
+    #   flow  2.017 vs measured 2.005 (+0.6%)
+    #   work  48.45 vs measured 49.28 J/g (-1.7%)
+    #   eta_tt 0.921 vs measured 0.93 (-0.9 pt)
+    #
+    # Same ~1% agreement class as the two-stage machine, on HALF the row
+    # chain - and the model sits with the RIG (0.93), far from the
+    # conservative design intent (0.870): the report's own finding (the
+    # rig beat its design by 6 pt) is reproduced, not assumed. The model
+    # chokes at ~2.025-2.03 vs the rig's ~2.005-2.01 near design PR
+    # (Fig. 11), the same ~+1% capacity read as the two-stage build.
+    import numpy as np
+
+    from slcflow.drivers.classical import ClassicalConfig, solve_classical
+    from slcflow.grid.core import GridTopology
+    from slcflow.types import FidelityConfig, MassFlowSpec
+
+    from slcflow.verification.v6_tnd6967 import (DESIGN_EQ_S1,
+                                                 MEASURED_EQ_S1,
+                                                 TND6967FirstStage)
+
+    case = TND6967FirstStage()
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=1)
+    inlet = m.inlet.fields(topo.psi)
+    fid = FidelityConfig.tier1()
+    warm, pts = None, []
+    for md in (2.00, 2.01, 2.02):
+        r = solve_classical(topo, case.gas, fid, MassFlowSpec(md), inlet,
+                            rows=m.rows, warm_start=warm,
+                            config=ClassicalConfig(max_outer=800))
+        assert r.converged, f"mdot {md}: {r.status.name}"
+        warm = r
+        tr = r.frozen.transported
+        pr = float(case.gas.p(tr.h0[0, 0], tr.s[0, 0])
+                   / case.gas.p(tr.h0[0, -1], tr.s[0, -1]))
+        pts.append((md, pr, float(tr.h0[0, 0] - tr.h0[0, -1]) / 1e3))
+    pts = np.asarray(pts)
+    pr_t = DESIGN_EQ_S1["pr_tt"]
+    assert pts[0, 1] < pr_t < pts[-1, 1]        # bracketed, not extrap
+    md = float(np.interp(pr_t, pts[:, 1], pts[:, 0]))
+    w = float(np.interp(pr_t, pts[:, 1], pts[:, 2]))
+    cp = case.gas.gamma * case.gas.R / (case.gas.gamma - 1.0)
+    w_ideal = cp * case.T0_in * (
+        1.0 - pr_t ** (-(case.gas.gamma - 1.0) / case.gas.gamma)) / 1e3
+    eta_tt = w / w_ideal
+    assert abs(md - MEASURED_EQ_S1["mdot"]) / MEASURED_EQ_S1["mdot"] < 0.015
+    assert abs(w - MEASURED_EQ_S1["work_J_per_g"]) < 1.5
+    assert abs(eta_tt - MEASURED_EQ_S1["eta_tt"]) < 0.015
+    # The rig BEAT its design eta by 6 pt; the model reproduces the rig
+    # level, not the design assumption:
+    assert eta_tt > DESIGN_EQ_S1["eta_tt"] + 0.03
