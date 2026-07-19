@@ -60,8 +60,8 @@ from ..geometry.bladerow import ParamRowGeometry
 from ..machine import (FidelityConfig, InletCondition, Machine, MassFlowSpec,
                        PerformanceResult, RowSpec)
 
-__all__ = ["EckardtO", "KrainImpeller", "LASER_POINT", "DESIGN_POINT",
-           "KRAIN_DESIGN"]
+__all__ = ["EckardtO", "KrainImpeller", "CC3Impeller", "LASER_POINT",
+           "DESIGN_POINT", "KRAIN_DESIGN", "CC3_DESIGN"]
 
 _DEG = np.pi / 180.0
 
@@ -414,3 +414,59 @@ class KrainImpeller(EckardtO):
     rpm_design: float = 22363.0
     chord: float = 0.16              # meridional blade-length representative
     clearance: float = 5.0e-4        # [VERIFY] not published; assumption
+
+
+# NASA CC3 (Allison/McKain-Holbrook 4:1 stage) design anchors, grounded from
+# Skoch, "Experimental Investigation of Centrifugal Compressor Stabilization
+# Techniques", J. Turbomach. 125 (2003), 704 (Drive skoch_experimental_2003;
+# DOI 10.1115/1.1624846): the impeller "was designed to produce a pressure
+# ratio of 4:1 at the design mass flow", tested at design speed 21 789 rpm /
+# 4.54 kg/s (scaled from the 1.66 kg/s Allison original), exit tip speed
+# 492 m/s, inlet relative Mach 0.9 tip / 0.45 hub, 15 main + 15 splitter
+# blades, 50 deg backsweep, tip clearance 2.4% of b2. NOTE: CC3 uses a
+# VANE-ISLAND diffuser (24 passages), NOT the vaneless space of Eckardt/
+# Krain, so the vaneless-diffuser stage chain does NOT apply — the measured
+# anchor here is the STAGE PR 4:1 vs the IMPELLER-exit PR the solver reports
+# (impeller exit sits a few % above the stage plane, as for Eckardt).
+CC3_DESIGN = {"rpm": 21789.0, "mdot": 4.54, "stage_pr": 4.0, "u2": 492.0,
+              "m1t_rel": 0.9, "blades_main": 15, "blades_splitter": 15,
+              "backsweep_deg": 50.0}
+
+
+@dataclass(frozen=True)
+class CC3Impeller(EckardtO):
+    """NASA CC3 (Allison / McKain-Holbrook) 4:1 centrifugal impeller
+    (section 9.7) — the THIRD centrifugal validation point: a modern
+    transonic-inducer, high-backsweep, splittered design, distinct from the
+    radial Eckardt O and the 30-deg Krain.
+
+    Geometry grounded from Skoch 2003 (see ``CC3_DESIGN``): inlet tip radius
+    105 mm (dia 210), inlet blade height 64 mm (r1h = 41 mm), exit radius
+    215.5 mm (dia 431), exit width b2 = 17 mm; 15 main + 15 splitter blades,
+    50 deg backsweep, tip clearance 2.4% b2 = 0.41 mm.
+    ``blade_count = 30`` is the exit-effective count (main + splitter both
+    present at discharge, the count the Wiesner slip sees); the inducer sees
+    only the 15 main blades (a secondary effect). The impeller axial length,
+    meridional chord, and blade solidity are NOT in Skoch (they live in the
+    McKain-Holbrook coordinate report) — recorded representative estimates,
+    like Krain's clearance. Same modelling frame as EckardtO (quarter-ellipse
+    walls through the grounded endpoints; U2 = 491.7 m/s reproduces Skoch's
+    492 exactly). Measured anchor: STAGE PR 4:1 (design intent, tested at
+    design speed); design efficiency ~0.86-class (Skoch Fig. 15, not a
+    tabulated number) — recorded, not tightly pinned.
+    """
+
+    rpm: float = 21789.0
+    mdot: float = 4.54
+    r1h: float = 0.041
+    r1t: float = 0.105
+    r2: float = 0.2155
+    b2: float = 0.017
+    z_len: float = 0.12              # axial length — estimate (not in Skoch)
+    blade_count: int = 30            # 15 main + 15 splitter, exit-effective
+    beta2_blade_deg: float = -50.0   # 50 deg backsweep, from radial
+    vm1_design: float = 137.0        # 1-D compressible continuity at design
+    rpm_design: float = 21789.0
+    chord: float = 0.15              # meridional blade-length — estimate
+    solidity: float = 3.0            # splittered high-solidity — estimate
+    clearance: float = 4.08e-4       # 2.4% of b2 (Skoch)

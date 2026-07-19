@@ -157,3 +157,88 @@ def test_all_tiers_converge_and_agree_on_real_geometry(case, tier1_laser):
         assert r.validity == pytest.approx(1.0, abs=1e-6)
         assert r.pressure_ratio == pytest.approx(
             tier1_laser.pressure_ratio, rel=0.02)
+
+
+def test_cc3_third_centrifugal_point():
+    # CC3 (NASA/Allison 4:1) THIRD centrifugal validation point (2026-07-19),
+    # grounded from Skoch 2003 (CC3_DESIGN). A modern transonic-inducer,
+    # 50-deg-backswept, splittered impeller - distinct from radial Eckardt O
+    # and 30-deg Krain. MEASURED anchor: stage PR 4:1 at 21789 rpm/4.54 kg/s,
+    # U2 = 492 m/s. Structural + geometry validation (the point-by-point
+    # stage match is [VERIFY] - CC3 uses a VANE-ISLAND diffuser, not the
+    # vaneless model, and its design eta is a Fig.15 curve, not tabulated):
+    import numpy as np
+
+    from slcflow.machine import FidelityConfig
+    from slcflow.verification.v7_eckardt import CC3_DESIGN, CC3Impeller
+
+    case = CC3Impeller()
+    r1 = case.evaluate(n_sl=1)
+    assert r1.converged and r1.validity == pytest.approx(1.0, abs=1e-6)
+    # Geometry check: U2 reproduces Skoch's 492 m/s exactly.
+    assert case.omega * case.r2 == pytest.approx(CC3_DESIGN["u2"], abs=1.0)
+
+    # Impeller-exit PR sits ABOVE the measured stage 4:1 (the impeller
+    # over-compresses; the vane diffuser then recovers dynamic head with a
+    # total-pressure loss the model does not carry), in a high-PR backswept
+    # band. Point-by-point stage match [VERIFY].
+    assert 4.0 < r1.pressure_ratio < 6.5
+    tr = r1.result.frozen.transported
+    assert float(tr.h0[0, -1]) > float(tr.h0[0, 0])       # real work in
+    assert float(tr.s[0, -1]) > float(tr.s[0, 0])         # real loss
+
+    # Slipped backswept exit swirl, Wiesner-consistent at 50 deg / Z=30.
+    res = r1.result
+    j_te = 2 + case.n_inblade
+    r2 = float(np.mean(res.fields.metrics.r[:, j_te]))
+    vt2 = float(np.mean(res.frozen.transported.rvt[:, j_te])) / r2
+    u2 = case.omega * case.r2
+    assert 0.0 < vt2 < u2                                  # slip < 1
+    assert 0.70 < vt2 / u2 < 0.80                          # ~0.75, recorded
+
+    # Transonic inducer tip (Skoch: M1_rel ~0.9 tip) - CC3's distinguishing
+    # feature vs the subsonic Eckardt/Krain inducers.
+    r1h = float(res.fields.metrics.r[0, 1])   # meanline ~ single node here
+    vm1 = float(res.fields.vm[0, 1])
+    T1 = (float(res.frozen.transported.h0[0, 1]) - 0.5 * vm1 ** 2)         / case.gas.cp
+    a1 = float(np.sqrt(case.gas.gamma * case.gas.R * T1))
+    w1t = float(np.hypot(vm1, case.omega * case.r1t))     # tip blade speed
+    assert w1t / a1 > 0.75                                 # near-sonic tip
+
+    # One kernel, three tiers (AD-1): Tier 2/3 also converge.
+    r2t = case.evaluate(n_sl=7, fidelity=FidelityConfig.tier2())
+    assert r2t.converged
+    assert r2t.pressure_ratio == pytest.approx(r1.pressure_ratio, rel=0.05)
+
+
+def test_cc3_corroborates_backsweep_work_trend():
+    # CC3 as the THIRD point in the backsweep-dependent work over-prediction
+    # (the lambda work-input finding, test_lambda_work_input_role_...): the
+    # model's exit swirl / work rises above measured as backsweep grows -
+    # Eckardt 0 deg (exact), Krain 30 deg, CC3 50 deg. The measured CC3 work
+    # from stage PR 4:1 at a design eta ~0.86 (Skoch Fig.15) implies exit
+    # swirl Vtheta2/U2 ~0.68; the model gives ~0.75 -> ~+10%, the largest of
+    # the three (highest backsweep) - exactly the lambda-blockage direction
+    # (the -lambda*Cm2*tan(beta2b) term grows with backsweep). Recorded;
+    # the point-by-point stage validation stays [VERIFY].
+    import numpy as np
+
+    from slcflow.verification.v7_eckardt import CC3_DESIGN, CC3Impeller
+
+    case = CC3Impeller()
+    r = case.evaluate(n_sl=1)
+    res = r.result
+    j_te = 2 + case.n_inblade
+    r2 = float(np.mean(res.fields.metrics.r[:, j_te]))
+    vt2 = float(np.mean(res.frozen.transported.rvt[:, j_te])) / r2
+    u2 = case.omega * case.r2
+    model_swirl = vt2 / u2
+
+    # measured-implied exit swirl from stage PR 4:1 at design eta ~0.86:
+    g = case.gas.gamma
+    dT_isen = (CC3_DESIGN["stage_pr"] ** ((g - 1) / g) - 1.0) * case.T0_in
+    work_meas = case.gas.cp * dT_isen / 0.86               # actual work
+    meas_swirl = work_meas / u2 / u2
+    assert 0.64 < meas_swirl < 0.72                        # ~0.68
+    assert model_swirl > meas_swirl                        # over-predicts
+    assert 0.05 < (model_swirl - meas_swirl) / meas_swirl < 0.16  # ~+10%

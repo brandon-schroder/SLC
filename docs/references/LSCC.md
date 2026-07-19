@@ -66,3 +66,17 @@ backsweep / Z=20.
 **Recommendation:** take path 1 (Eckardt A/B) for a true third centrifugal
 *measured* point with no new acquisition; treat the real CC3 (path 3) as a
 transonic-centrifugal stretch goal pending notebook sources.
+
+## RESOLVED (2026-07-19): the real high-speed CC3 was built via Skoch 2003
+
+Path 3 turned out to be already accessible: the **real** CC3 geometry +
+design point are grounded in **Skoch (2003)** (Drive
+`skoch_experimental_2003`), not needing the McKain-Holbrook coordinate
+report. Built as `CC3Impeller` (an `EckardtO` subclass) — 15 main + 15
+splitter blades, 50° backsweep, r1t 105 / r1h 41 / r2 215.5 / b2 17 mm,
+PR 4:1 at 21 789 rpm / 4.54 kg/s, U2 = 492 m/s (reproduced exactly),
+transonic inducer. Converges all tiers; the point-by-point stage match
+stays `[VERIFY]` (vane-island diffuser + design η not tabulated), and it
+corroborates the backsweep work-over-prediction trend. See ECKARDT.md
+"CC3". This LSCC note stays as the record of the naming correction; the
+LSCC itself remains an unbuilt flow-field-only case.

@@ -1060,23 +1060,26 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
-- **CC3 third centrifugal point → data gap characterized, record corrected
-  (2026-07-19).** The recorded "CC3" source (NTRS 19940012913 in
-  validation_cases.md) is actually **NASA TM-4481, the *Low-Speed*
-  Centrifugal Compressor (LSCC)** — a different machine from the high-speed
-  4:1 CC3 (McKain-Holbrook CR-204134), which is NOT in the notebook. Verified
-  by downloading the PDF. The LSCC is a **flow-field paper**: full geometry
-  grounded (20 full blades / 55° backsweep, r2=0.762 m, b2=0.141 m,
-  r1h/r1t 0.217/0.435 m, clearance 2.54 mm, 30 kg/s / 1862 rpm, U2≈149 m/s
-  → PR≈1.1) but **no tables — no measured PR/η/slip** (all in velocity-field
-  figures). So no clean meanline validation exists from this source, and a
-  structural-only case isn't the goal (Wiesner already confirmed; model's
-  55° prediction σ≈0.907 recorded). **NOT built.** Recorded the corrected
-  record + three paths to a real third measured point (docs/references/
-  LSCC.md, validation_cases.md): **Eckardt A/B** (backswept, same 1976 paper
-  already in the notebook — cleanest, RECOMMENDED); LSCC exit-swirl
-  digitization (55° slip); or the real high-speed CC3 (McKain-Holbrook +
-  Skoch, needs notebook sources).
+- **CC3 third centrifugal point → BUILT (2026-07-19).** First characterized
+  a mislabel: the recorded "CC3" NTRS ID (19940012913) is the *Low-Speed*
+  Centrifugal Compressor (LSCC, TM-4481), a flow-field-only paper (no
+  measured PR/η/slip; geometry in LSCC.md, NOT built). Then found the **real
+  high-speed CC3** grounded in **Skoch 2003** (Drive `skoch_experimental_2003`)
+  — Allison/McKain-Holbrook 4:1 stage. Built as `CC3Impeller` (EckardtO
+  subclass): 15 main + 15 splitter blades, 50° backsweep, r1t 105/r1h 41/
+  r2 215.5/b2 17 mm, PR 4:1 at 21 789 rpm/4.54 kg/s, U2 492 m/s, transonic
+  inducer (M1t_rel≈0.9), clearance 2.4% b2. **Measured:** all three tiers
+  converge, validity 1.0, **U2=491.7 reproduces Skoch's 492 exactly**;
+  impeller-exit PR 5.28 above the measured stage 4:1 (the impeller
+  over-compresses; vane-island diffuser + the model's work over-prediction).
+  **Point-by-point stage match [VERIFY]** (vane-island diffuser not modelled;
+  design η is a Fig.15 curve). **CC3 corroborates the backsweep work
+  over-prediction** as the third point (exit swirl 0.75 vs measured-implied
+  0.68 → ~+10%, largest of Eckardt 0°/Krain 30°/CC3 50° — the λ-blockage
+  direction; strengthens the case for the λ work-input role). Recorded
+  estimates (McKain-Holbrook, not in Skoch): axial length, chord, solidity.
+  Pinned: `test_cc3_third_centrifugal_point` +
+  `test_cc3_corroborates_backsweep_work_trend`; ECKARDT.md "CC3".
 - **λ work-input role → grounded, characterized, NOT adopted (2026-07-19).**
   The recorded second role of the tip-distortion factor λ. Grounded verbatim
   (Aungier Eq 4-3, theory notebook): `C_U2∞/U2 = 1 − λ·φ2·cot(β2)` — the

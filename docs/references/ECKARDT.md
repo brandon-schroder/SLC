@@ -186,3 +186,44 @@ centrifugal-loss calibration pass. A cot(β₂ᵦ) wiring bug in
 `parasitic_breakdown` (hard-coded radial) was found and fixed by this
 case — Eckardt unchanged (cot 0), Krain recirculation was reading
 36.6 kJ/kg spuriously.
+
+## CC3 — third centrifugal point, ADDED 2026-07-19 (`CC3Impeller`)
+
+The **NASA CC3** (Allison Engine Company / McKain-Holbrook 4:1 stage) —
+the third centrifugal validation point, a modern **transonic-inducer,
+50°-backswept, splittered** design distinct from the radial Eckardt O and
+the 30° Krain. **The recorded "CC3" acquisition item was mislabeled** (its
+NTRS ID was the *Low-Speed* Centrifugal Compressor; see LSCC.md); the real
+CC3 was found grounded in **Skoch, "Experimental Investigation of
+Centrifugal Compressor Stabilization Techniques", J. Turbomach. 125 (2003)
+704** (Drive `skoch_experimental_2003`, DOI 10.1115/1.1624846).
+
+**Geometry (verbatim, Skoch 2003; `CC3_DESIGN`):** inlet tip radius 105 mm
+(dia 210), inlet blade height 64 mm (r1h = 41 mm), exit radius 215.5 mm
+(dia 431), b2 = 17 mm; **15 main + 15 splitter blades, 50° backsweep**, tip
+clearance 2.4% b2 = 0.41 mm; PR **4:1** at 21 789 rpm / 4.54 kg/s, exit tip
+speed 492 m/s, inlet relative Mach 0.9 tip / 0.45 hub. Recorded estimates
+(not in Skoch — in the McKain-Holbrook coordinate report): axial length,
+meridional chord, blade solidity. `blade_count = 30` is the exit-effective
+count (main + splitter). CC3 uses a **vane-island diffuser**, not the
+vaneless space of Eckardt/Krain, so the vaneless stage chain does not apply.
+
+**Measured (2026-07-19, `test_v7_eckardt.py`):** all three tiers converge,
+validity 1.0; **U2 = 491.7 m/s reproduces Skoch's 492 exactly** (geometry
+validated). Impeller-exit PR **5.28** — above the measured stage 4:1
+(the impeller over-compresses; the vane diffuser then recovers the large
+exit dynamic head with a total-pressure loss the model doesn't carry).
+Transonic inducer tip (W1t/a1 ≈ 0.83). **Point-by-point stage validation
+is [VERIFY]** — blocked on a vane-island-diffuser model and a grounded
+design η (Skoch Fig. 15 is a curve, not tabulated).
+
+**CC3 corroborates the backsweep-dependent work over-prediction** (the λ
+work-input finding, CENT-LOSS.md): the model's exit swirl Vθ2/U2 ≈ 0.75 vs
+the ≈0.68 implied by stage PR 4:1 at a design η ≈ 0.86 → **~+10% work, the
+largest of the three points** (Eckardt 0° exact, Krain 30°, CC3 50°) —
+exactly the direction of the λ blockage term `−λ·Cm2·tan(β2b)`, which grows
+with backsweep. So CC3 is the case that would most benefit from the λ
+work-input role, and strengthens the case for it (or an equivalent) as the
+missing high-backsweep physics — a recorded refinement (joint recalibration
+per CENT-LOSS.md). Pinned:
+`test_cc3_third_centrifugal_point` + `test_cc3_corroborates_backsweep_work_trend`.
