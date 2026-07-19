@@ -23,9 +23,17 @@ here as recorded findings:
     (measured stage eta ~0.856 here vs code impeller-internal 0.966).
   * Efficiency is NOT stage-comparable (documented): code ~0.97 is
     impeller-internal-only vs measured stage 0.88.
-  * Slip data point: the measured (PR, eta) pair implies a work input ~3%
-    ABOVE Wiesner's sigma = 1 - 1/20^0.7 = 0.877 (implied sigma ~0.90) —
-    a calibration observation for the slip closure, recorded not tuned.
+  * Slip: WIESNER 0.877 CONFIRMED for Eckardt O (2026-07-19 disposition).
+    The old "implied sigma ~0.90" was a stale (PR, eta) inversion recorded
+    2026-07-15 BEFORE the parasitic+diffuser+lambda loss stack closed the
+    stage comparison; "0.90" is the Stanitz value. Grounding (loss-models/
+    test-cases notebooks) refutes it: the Eckardt 1976 paper states NO
+    measured slip (the exit is a jet/wake, wake ~35% area/~15% mass), and
+    the literature says Wiesner (~0.877) is the BETTER match for Eckardt O
+    than Stanitz (~0.90). Measured here: the full stage PR is 2.091 (-0.4%)
+    with Wiesner vs 2.122 (+1.1%) with Stanitz - Wiesner is better, and a
+    higher slip WORSENS the closed comparison. Not recalibrated; see
+    docs/references/ECKARDT.md / WIE67.md.
 """
 import pytest
 
@@ -75,6 +83,34 @@ def test_design_point_meanline_pr_vs_measured_stage(case):
     assert r.converged
     assert DESIGN_POINT["stage_pr"] <= r.pressure_ratio \
         <= DESIGN_POINT["stage_pr"] * 1.15
+
+
+def test_wiesner_slip_is_the_better_match_for_eckardt_o(case, tier1_laser):
+    # SLIP DISPOSITION (2026-07-19): Wiesner 0.877 is CONFIRMED for Eckardt
+    # O; the recorded "implied ~0.90" (a stale pre-loss-stack PR/eta
+    # inversion = the Stanitz value) is REFUTED. Grounded (test-cases +
+    # loss-models notebooks): the Eckardt 1976 paper states no measured slip
+    # (jet/wake exit, wake ~35% area / ~15% mass), and the literature calls
+    # Wiesner (~0.877) the better Eckardt-O match than Stanitz (~0.90).
+    # MEASURED here: the closed stage PR is 2.091 (-0.4%) with Wiesner vs
+    # 2.122 (+1.1%) with Stanitz -> the higher slip WORSENS the comparison.
+    # Not recalibrated (constants unchanged). Guards the direction.
+    import numpy as np
+
+    from slcflow.closures.centrifugal.wiesner import wiesner_slip
+
+    sigma_wiesner = float(wiesner_slip(0.0, 20)[0])
+    sigma_stanitz = 1.0 - 0.63 * np.pi / 20.0
+    assert sigma_wiesner == pytest.approx(0.877, abs=0.002)
+    assert sigma_stanitz == pytest.approx(0.901, abs=0.002)
+    assert sigma_wiesner < sigma_stanitz               # Stanitz swirls more
+
+    # The closed stage PR with Wiesner sits AT/just-under measured 2.1, so
+    # the +2.7% higher Stanitz swirl (-> more Euler work -> higher PR) can
+    # only move it further above -> worse. (Measured: 2.091 -> 2.122.)
+    pr_stage = case.stage_performance(tier1_laser)["pr_stage"]
+    assert pr_stage == pytest.approx(2.091, abs=0.03)
+    assert pr_stage <= LASER_POINT["stage_pr"] * 1.005
 
 
 def test_krain_second_impeller_measured_agreement():

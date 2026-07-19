@@ -18,8 +18,9 @@ impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort.
 > vaneless-diffuser p0 loss is the right size for the gap); design-point PR
 > 3.38 vs 3.0 (+12.6%, gap grows with the deferred parasitic/clearance/
 > diffuser losses); measured (PR, η) implies slip ~0.90 vs Wiesner 0.877
-> (−3% work — a slip calibration observation). Stage η is NOT directly
-> comparable (deferred parasitic + diffuser). The first-order
+> (−3% work — a slip calibration observation, **later REFUTED — see the
+> slip disposition below**). Stage η is NOT directly comparable (deferred
+> parasitic + diffuser). The first-order
 > `tools/eckardt_anchor.py` concentric-bend study is SUPERSEDED by this
 > case. Remaining refinements: the true Fig. 1 wall contours (raster), the
 > Oh-1997 map digitization for off-design points, Eckardt A/B backswept.
@@ -51,6 +52,28 @@ impellers O/A/B). Assembled 2026-07-12 for the V7 validation effort.
 > PR_stage 3.172 vs 3.0 (+5.7%), η 0.824. Remaining refinements: the
 > full Aungier marching diffuser + λ work-input role, Oh-1997 map
 > digitization for off-design points, Krain second impeller.
+
+> **SLIP DISPOSITION (2026-07-19) — Wiesner 0.877 CONFIRMED for Eckardt O;
+> the "implied ~0.90" observation REFUTED.** The `~0.90` recorded above was
+> a stale `(PR, η)` inversion made **before** the parasitic+diffuser+λ loss
+> stack closed the stage comparison (2026-07-15); `0.90` is precisely the
+> **Stanitz** value (`σ = 1 − 0.63π/Z = 0.901` for Z=20 radial) vs Wiesner
+> `0.877`. Grounding (test-cases + loss-models notebooks) refutes it:
+> - the **Eckardt 1976 paper states no measured slip factor** — the exit is
+>   a distorted jet/wake (wake ≈35% of channel area, ≈15% of mass flow), so
+>   a single mid-passage "slip" is ill-defined and only a mass-averaged
+>   effective value (what Wiesner represents) is meaningful;
+> - the **literature calls Wiesner (~0.877) the *better* Eckardt-O match
+>   than Stanitz (~0.90)** (the potential-theory Stanitz constant suits a
+>   different blade count/flow).
+>
+> **Measured, decisive:** with the closed stage chain the Eckardt-O stage PR
+> is **2.091 (−0.4%) with Wiesner** vs **2.122 (+1.1%) with Stanitz 0.90** —
+> the higher slip *worsens* the comparison and flips it to over-prediction.
+> So Wiesner is right for this rig and no recalibration is warranted (it
+> would degrade the validated PR). Wiesner form was already CONFIRMED in
+> WIE67.md; this is the case-level confirmation. **Constants unchanged.**
+> Pinned: `test_v7_eckardt.py::test_wiesner_slip_is_the_better_match_for_eckardt_o`.
 
 Historical context (2026-07-12, pre-primary-paper) below.
 

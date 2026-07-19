@@ -1060,6 +1060,21 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **Wiesner slip calibration → CONFIRMED 0.877, "implied 0.90" REFUTED
+  (2026-07-19).** Investigated the recorded Eckardt "implied slip ~0.90 vs
+  Wiesner 0.877" observation. Grounding (test-cases + loss-models notebooks)
+  refutes it: the Eckardt 1976 paper states **no measured slip** (the exit
+  is a jet/wake, wake ≈35% area/≈15% mass, so only a mass-averaged effective
+  slip is meaningful), and the literature calls **Wiesner (~0.877) the
+  *better* Eckardt-O match than Stanitz (~0.90)**. The "0.90" was a stale
+  `(PR, η)` inversion recorded 2026-07-15 *before* the parasitic+diffuser+λ
+  loss stack closed the stage comparison — and it is exactly the Stanitz
+  value. **Measured, decisive:** the closed stage PR is **2.091 (−0.4%) with
+  Wiesner** vs **2.122 (+1.1%) with Stanitz 0.90** — the higher slip *worsens*
+  the comparison. So Wiesner is right for this rig; no recalibration
+  (constants unchanged). Pinned:
+  `test_v7_eckardt.py::test_wiesner_slip_is_the_better_match_for_eckardt_o`;
+  ECKARDT.md/WIE67.md slip disposition.
 - **K-O TE curve calibration → DISPOSITION, not a change (2026-07-18,
   gate #2).** Investigated the LS-89 +35% total-loss gap ("the TE curve
   carries most of it"). Grounded via the loss-models notebook (KO82,

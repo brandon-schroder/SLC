@@ -58,9 +58,23 @@ Numerically pinned in `tests/test_wiesner_reference.py`.
    appear in these sources (they cover Stodola, Busemann, Stanitz, Wiesner).
    Not actionable from this library.
 
+## Case-level confirmation — Eckardt O (2026-07-19)
+
+Beyond the form verification, Wiesner `σ = 0.877` is confirmed at the CASE
+level against the Eckardt O rig (Z=20 radial). The recorded "Eckardt implies
+σ ~0.90" was a stale pre-loss-stack `(PR, η)` inversion (= the Stanitz value
+`1 − 0.63π/Z = 0.901`), REFUTED by grounding: the Eckardt 1976 paper states no
+measured slip (jet/wake exit, wake ≈35% area/≈15% mass), and the literature
+calls Wiesner the *better* Eckardt-O match than Stanitz. Measured with the
+closed stage chain: PR_stage **2.091 (−0.4%) with Wiesner** vs **2.122 (+1.1%)
+with Stanitz** — the higher slip worsens the comparison. No recalibration;
+constants unchanged. See `docs/references/ECKARDT.md` "Slip disposition",
+pinned in `test_v7_eckardt.py::test_wiesner_slip_is_the_better_match_for_eckardt_o`.
+
 ## Nothing else outstanding
 
-The base Wiesner form is fully verified, and the radius-ratio limit correction
-(finding 1) is now implemented (Braembussche cubic). Nothing from this source
-remains open — findings 2 (the doc sin/cos slip, doc-only) and 3 (von Backström
-not in the library) needed no code change.
+The base Wiesner form is fully verified, the radius-ratio limit correction
+(finding 1) is implemented (Braembussche cubic), and the Eckardt-O case-level
+check confirms `σ = 0.877` (above). Nothing from this source remains open —
+findings 2 (the doc sin/cos slip, doc-only) and 3 (von Backström not in the
+library) needed no code change.
