@@ -305,21 +305,31 @@ class EckardtO:
         else:
             raise ValueError(f"unknown accounting {accounting!r}")
 
-        # Aungier supercritical Mach loss (Eqs 5-41/42; 1-D convention:
-        # mean-inlet values). Inert when the suction-surface peak stays
-        # subsonic — the mechanism separating Krain (M1'~0.85 tip) from
-        # Eckardt (M1'~0.67).
+        # Aungier supercritical Mach loss (Eqs 5-41/42), evaluated
+        # TIP-RESOLVED (2026-07-19): the suction-surface peak first goes
+        # sonic at the inducer TIP, where the relative Mach is highest
+        # (U1t = omega*r1t >> the mean U1), NOT at the 1-D mean the earlier
+        # convention used. The tip relative velocity uses the exact tip
+        # blade speed with the (near-uniform axial) inducer Vm; W* is at the
+        # tip relative-total conditions. MEASURED inert for BOTH rigs
+        # (Eckardt M1t'~0.65, deeply subcritical; Krain M1t'~0.84, W_max
+        # within ~0.1% of W* — at the threshold but marginally subcritical
+        # by Aungier's own W_max = (W1+W2+dW)/2 estimate), so it is not the
+        # mechanism for the Krain high-loading gap; a higher-loading impeller
+        # (M1t' >~ 0.87) would activate it. Pinned in test_parasitic_reference.
         from ..closures.centrifugal.parasitic import supercritical_loss
         T1 = (float(np.mean(tr.h0[:, j_le]))
               - 0.5 * (vm1 ** 2 + cu1 ** 2)) / self.gas.cp
         a1 = float(np.sqrt(self.gas.gamma * self.gas.R * T1))
-        T0rel1 = T1 + 0.5 * w1 * w1 / self.gas.cp
+        u1t = self.omega * self.r1t
+        w1t = float(np.hypot(vm1, u1t - cu1))       # tip inlet relative speed
+        T0rel1t = T1 + 0.5 * w1t * w1t / self.gas.cp
         w_star = float(np.sqrt(2.0 * self.gas.gamma
                                / (self.gas.gamma + 1.0)
-                               * self.gas.R * T0rel1))
+                               * self.gas.R * T0rel1t))
         dw = 4.0 * np.pi * (self.r2 * cu2 - r1 * cu1) / (
             self.blade_count * self.chord)
-        dh_cr = supercritical_loss(w1 / a1, w1, w2, dw, w_star)
+        dh_cr = supercritical_loss(w1t / a1, w1t, w2, dw, w_star)
 
         # Vaneless-diffuser model (2026-07-17 recalibration): BOTH rigs'
         # papers specify a CONSTANT-AREA vaneless space (width ~ r2 b2/r),

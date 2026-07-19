@@ -1060,6 +1060,22 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **Tip-resolved supercritical loss (2026-07-19) — implemented, MEASURED
+  inert for both rigs.** The recorded tip-resolved follow-up for the Aungier
+  §5 supercritical Mach loss. The onset (suction-surface peak sonic) is
+  physically at the inducer TIP (U1t = ω·r1t, the highest-Mach point), not
+  the 1-D mean the earlier convention used — so `EckardtO.stage_performance`
+  now evaluates `supercritical_loss` at the tip inlet triangle (tip blade
+  speed exact from geometry, near-uniform axial inducer Vm, W* at tip
+  relative-total). **Measured still inert for BOTH rigs:** Eckardt M1t'≈0.65
+  (deeply subcritical, W*−W_max≈68), Krain M1t'≈0.84 sits right AT the
+  threshold but marginally SUBcritical (W_max≈328.6 vs W*≈328.8, ~0.1%) by
+  Aungier's own W_max=(W1+W2+dW)/2 estimate → 0 loss. So it is **not the
+  mechanism for the Krain high-loading gap** (closed via the diffuser width
+  law); a higher-loading impeller (M1t'≳0.87 → W_max>W*) would activate it.
+  Stage-η pins unchanged (inert). Pinned:
+  `test_parasitic_reference.py::test_supercritical_tip_resolved_is_at_threshold_for_krain`;
+  CENT-LOSS.md item 2 revised.
 - **V8 Tier-3 pocket — per-case `wilkinson_c` override (2026-07-19,
   C.3-grounded).** The recorded §6.4-recalibration acceleration follow-up for
   the slow/narrow V8 Tier-3 pocket. C.3 measured `c*=13.2` SAFE for exactly

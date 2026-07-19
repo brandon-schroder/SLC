@@ -205,13 +205,25 @@ Three grounded mechanisms implemented + measured, none adopted:
    overshoots Eckardt to −3.8 pt → **λ stays the default accounting**.
 2. **Aungier supercritical Mach loss** (`supercritical_loss`, Eqs
    5-41/42 verbatim; onset = suction-surface peak sonic, W_max > W*):
-   **inert at both rigs' 1-D mean inlet at design** — not the mechanism
-   at this fidelity; a tip-resolved variant is the recorded follow-up
-   (Krain M1t′ ≈ 0.85).
+   **inert at both rigs.** Originally evaluated at the 1-D mean inlet
+   (M1' ≈ 0.51 Eckardt / 0.67 Krain). **Now TIP-RESOLVED (2026-07-19):**
+   the onset is physically at the inducer TIP, the highest-Mach point
+   (U1t = ω·r1t ≫ the mean U1), so the stage chain evaluates it there
+   (tip blade speed exact from geometry, near-uniform axial inducer Vm;
+   W* at the tip relative-total conditions). **Measured still inert for
+   BOTH rigs:** Eckardt M1t' ≈ 0.65 (deeply subcritical, W* − W_max ≈
+   68 m/s); **Krain M1t' ≈ 0.84 sits right AT the threshold but marginally
+   SUBcritical** (W_max ≈ 328.6 vs W* ≈ 328.8, within ~0.1%) by Aungier's
+   own W_max = (W1+W2+dW)/2 estimate — so the loss is 0. The tip-resolved
+   follow-up is therefore **not the mechanism for the Krain gap** (that
+   closed via the diffuser width law below); a higher-loading impeller
+   (M1t' ≳ 0.87 → W_max > W*) would activate it. Pinned:
+   `test_parasitic_reference.py::test_supercritical_tip_resolved_is_at_threshold_for_krain`.
 3. **The Krain +6.5 pt stands recorded** (~5–6% of work at PR 4.7).
    Measurement-narrowed suspects: the Krain stage measurement
-   plane/η definition, the assumed 0.5 mm clearance, tip-resolved
-   supercritical, loading-grown wake fraction.
+   plane/η definition, the assumed 0.5 mm clearance, loading-grown wake
+   fraction. (Tip-resolved supercritical is now checked and ruled OUT —
+   item 2; the diffuser width law below closed most of this gap.)
 
 ## High-loading gap RESOLVED — the diffuser width law (2026-07-17, same day)
 

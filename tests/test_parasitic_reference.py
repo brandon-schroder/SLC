@@ -122,9 +122,13 @@ def test_high_loading_calibration_dispositions():
     #  (1) Oh-native accounting (Jansen clearance + Johnston-Dean mixing,
     #      MERIDIONAL velocity only) — max joint error worse than lambda
     #      (Eckardt -3.8 pt) -> lambda stays the default accounting.
-    #  (2) Aungier supercritical Mach loss (Eqs 5-41/42): INERT at both
-    #      rigs' 1-D mean inlet at design (the loaded W_max raises M'_cr
-    #      above M1'); a tip-resolved variant is the recorded follow-up.
+    #  (2) Aungier supercritical Mach loss (Eqs 5-41/42): now evaluated
+    #      TIP-RESOLVED (2026-07-19; the onset is at the inducer tip, the
+    #      highest-Mach point). MEASURED still INERT at both rigs: Eckardt
+    #      M1t'~0.65 deeply subcritical, Krain M1t'~0.84 AT the threshold but
+    #      marginally subcritical (W_max within ~0.1% of W* by Aungier's own
+    #      estimate) -> NOT the mechanism for the Krain high-loading gap
+    #      (test_supercritical_tip_resolved_is_at_threshold_for_krain).
     from slcflow.verification.v7_eckardt import EckardtO, KrainImpeller
     eck = EckardtO()
     r_e = eck.evaluate(n_sl=1)
@@ -139,7 +143,7 @@ def test_high_loading_calibration_dispositions():
     sp_ko = kr.stage_performance(r_k, accounting="oh_native")
     assert sp_kl["eta_stage"] == pytest.approx(0.8574, abs=0.012)
     assert sp_ko["eta_stage"] == pytest.approx(0.8431, abs=0.012)
-    assert sp_kl["dh_supercritical"] == 0.0                # 1-D mean inert
+    assert sp_kl["dh_supercritical"] == 0.0                # tip-resolved, inert
     # Oh-native components individually sane (guards the verbatim forms):
     from slcflow.closures.centrifugal.parasitic import (
         jansen_clearance_loss, johnston_dean_mixing_loss,
@@ -163,6 +167,54 @@ def test_high_loading_calibration_dispositions():
     # Subcritical (W_max < W*: the suction-surface peak stays subsonic —
     # the actual Eq 5-41 onset condition) -> exactly zero:
     assert supercritical_loss(0.5, 280.0, 110.0, 100.0, 310.0) == 0.0
+
+
+def test_supercritical_tip_resolved_is_at_threshold_for_krain():
+    # TIP-RESOLVED SUPERCRITICAL FINDING (2026-07-19): the recorded
+    # tip-resolved follow-up. Evaluating the Aungier onset at the inducer
+    # TIP (U1t = omega*r1t, the highest-Mach point) rather than the 1-D mean:
+    # Eckardt is deeply subcritical (M1t'~0.65) and Krain sits AT the
+    # threshold (M1t'~0.84, W_max within ~0.1% of W*) but marginally
+    # subcritical by Aungier's own W_max = (W1+W2+dW)/2 estimate -> the loss
+    # is 0 for BOTH rigs. So the tip-resolved variant is NOT the mechanism
+    # for the Krain high-loading gap (that closed via the diffuser width
+    # law); a higher-loading impeller (M1t' >~ 0.87 -> W_max > W*) would
+    # activate it. This pins the characterization behind the inert reading.
+    import numpy as np
+
+    from slcflow.closures.centrifugal.parasitic import supercritical_loss
+    from slcflow.verification.v7_eckardt import EckardtO, KrainImpeller
+
+    def tip_state(case):
+        res = case.evaluate(n_sl=1).result
+        f, tr = res.fields, res.frozen.transported
+        j_le, j_te = 1, 2 + case.n_inblade
+        r1 = float(np.mean(f.metrics.r[:, j_le]))
+        vm1 = float(np.mean(f.vm[:, j_le]))
+        cu1 = float(np.mean(tr.rvt[:, j_le])) / r1
+        cu2 = float(np.mean(tr.rvt[:, j_te])) / float(
+            np.mean(f.metrics.r[:, j_te]))
+        cm2 = float(np.mean(f.vm[:, j_te]))
+        w2 = float(np.hypot(cm2, case.omega * case.r2 - cu2))
+        T1 = (float(np.mean(tr.h0[:, j_le]))
+              - 0.5 * (vm1 ** 2 + cu1 ** 2)) / case.gas.cp
+        a1 = float(np.sqrt(case.gas.gamma * case.gas.R * T1))
+        w1t = float(np.hypot(vm1, case.omega * case.r1t - cu1))
+        T0r = T1 + 0.5 * w1t * w1t / case.gas.cp
+        w_star = float(np.sqrt(2.0 * case.gas.gamma / (case.gas.gamma + 1.0)
+                               * case.gas.R * T0r))
+        dw = 4.0 * np.pi * (case.r2 * cu2 - r1 * cu1) / (
+            case.blade_count * case.chord)
+        w_max = 0.5 * (w1t + w2 + dw)
+        return w1t / a1, w_max, w_star, supercritical_loss(
+            w1t / a1, w1t, w2, dw, w_star)
+
+    m_e, wmax_e, wstar_e, dh_e = tip_state(EckardtO())
+    m_k, wmax_k, wstar_k, dh_k = tip_state(KrainImpeller())
+    # Eckardt deeply subcritical; Krain at the edge but still below:
+    assert 0.60 < m_e < 0.70 and (wstar_e - wmax_e) > 40.0
+    assert 0.82 < m_k < 0.86 and 0.0 <= (wstar_k - wmax_k) < 3.0
+    assert dh_e == 0.0 and dh_k == 0.0                 # inert for both rigs
 
 
 def test_eckardt_stage_performance_full_chain():
