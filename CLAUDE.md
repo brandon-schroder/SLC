@@ -1060,6 +1060,23 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **CC3 third centrifugal point → data gap characterized, record corrected
+  (2026-07-19).** The recorded "CC3" source (NTRS 19940012913 in
+  validation_cases.md) is actually **NASA TM-4481, the *Low-Speed*
+  Centrifugal Compressor (LSCC)** — a different machine from the high-speed
+  4:1 CC3 (McKain-Holbrook CR-204134), which is NOT in the notebook. Verified
+  by downloading the PDF. The LSCC is a **flow-field paper**: full geometry
+  grounded (20 full blades / 55° backsweep, r2=0.762 m, b2=0.141 m,
+  r1h/r1t 0.217/0.435 m, clearance 2.54 mm, 30 kg/s / 1862 rpm, U2≈149 m/s
+  → PR≈1.1) but **no tables — no measured PR/η/slip** (all in velocity-field
+  figures). So no clean meanline validation exists from this source, and a
+  structural-only case isn't the goal (Wiesner already confirmed; model's
+  55° prediction σ≈0.907 recorded). **NOT built.** Recorded the corrected
+  record + three paths to a real third measured point (docs/references/
+  LSCC.md, validation_cases.md): **Eckardt A/B** (backswept, same 1976 paper
+  already in the notebook — cleanest, RECOMMENDED); LSCC exit-swirl
+  digitization (55° slip); or the real high-speed CC3 (McKain-Holbrook +
+  Skoch, needs notebook sources).
 - **λ work-input role → grounded, characterized, NOT adopted (2026-07-19).**
   The recorded second role of the tip-distortion factor λ. Grounded verbatim
   (Aungier Eq 4-3, theory notebook): `C_U2∞/U2 = 1 − λ·φ2·cot(β2)` — the

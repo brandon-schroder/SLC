@@ -27,7 +27,7 @@ accession, not a DOI. ✅ = public-domain direct URL; 🔒 = paywalled (ASME/AGA
 | 8 | Krain, *Swirling Impeller Flow*, J. Turbomach. 110 (1988) | **10.1115/1.3262157** | 🔒 |
 | 9 | Krain & Hoffmann, *Verification of an Impeller Design by Laser Measurements…*, ASME 89-GT-159 (1989) | **10.1115/89-gt-159** | 🔒 |
 | 10 | Moore & Reid, *…Stage 35, PR 1.82* (second axial point), NASA TP (1982) | no DOI — NTRS **19820014395** | ✅ |
-| 11 | NASA centrifugal CR (McKain & Holbrook CC3-class; confirm on NTRS) | no DOI — NTRS **19940012913** (verify) | ✅ |
+| 11 | ~~NASA CC3 (McKain & Holbrook)~~ **CORRECTED 2026-07-19: NTRS 19940012913 is TM-4481, the NASA *Low-Speed* Centrifugal Compressor (LSCC), NOT the high-speed 4:1 CC3.** LSCC = flow-field-only (no tabulated perf/slip); see `LSCC.md`. Real CC3 = McKain & Holbrook CR-204134 + a Skoch perf report, neither yet sourced. | NTRS **19940012913** (=TM-4481, LSCC) | ✅ |
 
 **Correlation-source primaries** (already consulted via NotebookLM; DOIs here for
 archival/citable copies — see `README.md` for which `[VERIFY]` each discharges):
@@ -142,10 +142,19 @@ Hoffmann. D₂ = 400 mm, U₂ = 468 m/s, ~30° backsweep, PR ≈ 4, 3-component 
 - Some DLR/NTRS coverage; SRV2-O is the transonic 6:1 variant (50 000 rpm) for a
   transonic-centrifugal stretch goal.
 
-### P3 — NASA low-flow centrifugal (CC3 / McKain–Holbrook) ✅ public
-Full geometry + performance for a modern centrifugal stage; NTRS
-(e.g. 19940012913). Good for a third independent centrifugal point.
-- <https://ntrs.nasa.gov/api/citations/19940012913/downloads/19940012913.pdf>
+### P3 — third independent centrifugal point (CORRECTED 2026-07-19)
+**The NTRS 19940012913 link below is TM-4481 = the NASA *Low-Speed*
+Centrifugal Compressor (LSCC), a flow-field study — NOT the high-speed 4:1
+CC3, and NOT a meanline-performance source** (no tabulated PR/η/slip; see
+`docs/references/LSCC.md`). Options for a real MEASURED third point:
+- **Eckardt A/B** (backswept, same 1976 paper already in the notebook) —
+  the cleanest, no new acquisition (RECOMMENDED).
+- **LSCC exit-swirl digitization** → a 55° slip point (moderate effort).
+- **Real high-speed CC3**: McKain & Holbrook CR-204134 (coordinates) + a
+  Skoch CC3 performance report — a transonic 4:1 stretch goal, needs both
+  sources added to the notebook.
+- LSCC (flow-field, geometry grounded in `LSCC.md`):
+  <https://ntrs.nasa.gov/api/citations/19940012913/downloads/19940012913.pdf>
 
 ---
 
