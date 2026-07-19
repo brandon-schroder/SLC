@@ -262,3 +262,61 @@ def test_eckardt_stage_efficiency_with_parasitics():
     c18 = EckardtO(rpm=DESIGN_POINT["rpm"], mdot=DESIGN_POINT["mdot"])
     r18 = c18.evaluate(n_sl=1)
     assert c18.stage_efficiency(r18) == pytest.approx(0.877, abs=0.02)
+
+
+def test_lambda_work_input_role_is_grounded_but_not_adopted():
+    # LAMBDA WORK-INPUT ROLE DISPOSITION (2026-07-19). Aungier Eq. 4-3
+    # (grounded, theory notebook): C_U2inf/U2 = 1 - lambda*phi2*cot(beta2),
+    # so the tip blockage lambda=1/(1-B2) > 1 gives the jet its blocked
+    # meridional velocity lambda*Cm2 in the exit triangle and REDUCES the
+    # work input for a backswept impeller (cot(beta2 from tangent) =
+    # tan|beta2b| > 0). Characterized here and NOT adopted:
+    #
+    #   * ZERO for a radial impeller (Eckardt, beta2b=0 -> tan=0): the
+    #     work-input role cannot touch the (primary) radial validation.
+    #   * ~6% of work for backswept Krain (lambda~1.45, B2~0.31): applying
+    #     it would DROP the Euler work ~10.4 kJ/kg and the stage PR from
+    #     4.412 (-2.0% vs measured 4.5) to ~4.0 (~-11%) - the WRONG
+    #     direction, since the measured Krain work is already at the high
+    #     end (Wiesner-unblocked only -2.0% under). The shared diffuser
+    #     calibration (cf=0.003) is anchored on radial Eckardt, which the
+    #     role does not affect, so it cannot rebalance the Krain drop.
+    #
+    # So the grounded refinement degrades the match in isolation and reveals
+    # a masked work over-prediction the two-point calibration cannot absorb;
+    # recorded, not wired. See docs/references/CENT-LOSS.md.
+    import numpy as np
+
+    from slcflow.verification.v7_eckardt import EckardtO, KrainImpeller
+
+    def work_input_deficit(case):
+        r = case.evaluate(n_sl=1)
+        sp = case.stage_performance(r)
+        res = r.result
+        f, tr = res.fields, res.frozen.transported
+        j_le, j_te = 1, 2 + case.n_inblade
+        r1 = float(np.mean(f.metrics.r[:, j_le]))
+        r2 = float(np.mean(f.metrics.r[:, j_te]))
+        vm1 = float(np.mean(f.vm[:, j_le]))
+        cu1 = float(np.mean(tr.rvt[:, j_le])) / r1
+        cu2 = float(np.mean(tr.rvt[:, j_te])) / r2
+        cm2 = float(np.mean(f.vm[:, j_te]))
+        u2 = case.omega * case.r2
+        w1 = float(np.hypot(vm1, case.omega * r1 - cu1))
+        w2 = float(np.hypot(cm2, u2 - cu2))
+        lam = 1.0 + np.sqrt(2.0 * sp["dh_lambda"] / w1 ** 2) * w2 / cm2
+        # Aungier 4-3 work reduction = U2 (lambda-1) Cm2 tan|beta2b|:
+        dwork = u2 * (lam - 1.0) * cm2 * np.tan(
+            abs(np.radians(case.beta2_blade_deg)))
+        work = float(np.mean(tr.h0[:, j_te]) - tr.h0[:, j_le].mean())
+        return lam, dwork, work
+
+    lam_e, dwork_e, _ = work_input_deficit(EckardtO())
+    assert lam_e > 1.0                                # real blockage
+    assert dwork_e == 0.0                             # radial: zero effect
+
+    lam_k, dwork_k, work_k = work_input_deficit(KrainImpeller())
+    assert lam_k > 1.0
+    assert dwork_k > 0.0                              # backswept: reduces work
+    frac = dwork_k / work_k
+    assert 0.04 < frac < 0.08                         # ~6% - not negligible

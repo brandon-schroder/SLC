@@ -256,9 +256,17 @@ def tip_distortion_loss(omega_sf, pv1, pv2, w1, w2, cm2, d_hyd, b2, l_b,
     ``pv1/pv2`` the inlet/exit relative velocity-pressure ratio. Returned
     as ``omega_bar * 0.5 W1^2`` (the ch.-5 inlet-relative reference).
     ``B2`` is guarded below the lambda pole (0.9 ceiling — far outside
-    the correlation's range; post-solve scalar guard, ARCH-4.2). NOTE:
-    lambda's second role in Aungier's method (distorting the work-input
-    exit triangle) belongs to his full analysis — recorded refinement.
+    the correlation's range; post-solve scalar guard, ARCH-4.2).
+
+    NOTE: lambda has a SECOND role in Aungier's method — the work-input
+    exit triangle (Eq 4-3: ``C_U2inf/U2 = 1 - lambda*phi2*cot(beta2)``, so
+    the jet's blocked ``lambda*Cm2`` REDUCES the backswept work). Grounded
+    and characterized 2026-07-19, then NOT adopted: it is exactly zero for
+    a radial impeller (Eckardt, beta2b=0) and ~6% of work for backswept
+    Krain — the WRONG direction there (measured Krain work is already at
+    the high end, Wiesner-unblocked only -2% under), and the shared
+    diffuser calibration (anchored on radial Eckardt) cannot rebalance it.
+    See docs/references/CENT-LOSS.md; pinned in test_parasitic_reference.
     """
     b2_blk = (omega_sf * (pv1 / pv2) * (w1 * d_hyd / (w2 * b2)) ** 0.5
               + (0.3 + (b2 / l_b) ** 2) * area_ratio ** 2 * rho2 * b2

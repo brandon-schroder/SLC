@@ -175,9 +175,42 @@ with d_H = mean of 2b·w/(b+w) at inlet/exit, blade-to-blade
 w = 2πr·sinβ/Z (β from tangent; Eqs 111/113) and
 A_R = A2 sinβ2/(A1 sinβ_th) (Eq 4-13). Returned on the ch.-5
 inlet-relative reference (×½W1²); B2 guarded below the λ pole (0.9).
-λ's second role (distorting the work-input triangle) = Aungier's full
-analysis, recorded refinement. Recorded estimates: β_th ≈ β1 (throat ~
-LE), L_B = the case chord.
+Recorded estimates: β_th ≈ β1 (throat ~ LE), L_B = the case chord.
+
+### λ's second role — the work-input triangle (grounded + NOT adopted, 2026-07-19)
+
+λ also enters the **work input** (Aungier Eq 4-3, grounded verbatim via the
+theory notebook):
+
+    C_U2∞/U2 = 1 − λ·φ2·cot(β2),   φ2 = ṁ/(ρ2·A2·U2)   (4-3)
+
+i.e. the jet's *blocked* meridional velocity `λ·Cm2` enters the exit
+triangle, and since λ>1 (positive blockage) the subtracted `λ·φ2·cot(β2)`
+term is larger, so **C_U2 and the work input are LOWER than in unblocked
+flow** for a backswept impeller (`cot(β2 from tangent) = tan|β2b| > 0`).
+
+**Characterized and NOT adopted:**
+
+- **Zero for a radial impeller** (Eckardt, β2b=0 → tan=0): the work-input
+  role cannot touch the primary radial validation.
+- **~6% of work for backswept Krain** (λ≈1.45, B2≈0.31): applying it would
+  drop the Euler work ~10.4 kJ/kg and the stage PR from **4.412 (−2.0% vs
+  measured 4.5) to ~4.0 (~−11%)** — the *wrong direction*. The measured
+  Krain work is already at the high end (Wiesner-unblocked is only −2.0%
+  under), so a work *reduction* moves away from it; and the shared diffuser
+  `cf=0.003` calibration is anchored on radial Eckardt (unaffected), so it
+  cannot rebalance the Krain drop.
+
+So the grounded refinement degrades the match in isolation and reveals a
+**masked ~6% Krain work over-prediction the two-point (Eckardt-radial +
+Krain-backswept) calibration cannot absorb** — the work-side analogue of
+the loss-side high-loading gap the diffuser width law addressed. Recorded,
+not wired; pinned in
+`test_parasitic_reference.py::test_lambda_work_input_role_is_grounded_but_not_adopted`.
+A joint slip/blockage/diffuser recalibration (or a Krain measurement-plane/
+blockage re-examination) would be the way to adopt it — a larger effort
+than this refinement, and not clearly convergent given the measured Krain
+work level.
 
 **Measured — the Eckardt laser-point STAGE validation closes:**
 Δh_λ ≈ 1996 J/kg → **PR_stage 2.121 vs measured 2.1 (+1.0%), η_stage

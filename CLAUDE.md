@@ -1060,6 +1060,23 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **λ work-input role → grounded, characterized, NOT adopted (2026-07-19).**
+  The recorded second role of the tip-distortion factor λ. Grounded verbatim
+  (Aungier Eq 4-3, theory notebook): `C_U2∞/U2 = 1 − λ·φ2·cot(β2)` — the
+  jet's blocked `λ·Cm2` enters the exit triangle, and λ>1 REDUCES the
+  backswept work. Characterized: **exactly zero for radial Eckardt** (β2b=0),
+  **~6% of work for backswept Krain** (λ≈1.45, B2≈0.31) → would drop Krain
+  stage PR from 4.412 (−2.0% vs measured 4.5) to ~4.0 (~−11%), the WRONG
+  direction (measured Krain work is at the high end; Wiesner-unblocked only
+  −2% under). The shared diffuser cf=0.003 calibration is anchored on radial
+  Eckardt (unaffected) so it can't rebalance the Krain drop → the grounded
+  refinement degrades the match in isolation and reveals a masked ~6% Krain
+  work over-prediction the two-point calibration can't absorb (the work-side
+  analogue of the loss-side high-loading gap the diffuser width law closed).
+  Recorded, not wired; adopting it needs a joint slip/blockage/diffuser
+  recalibration or a Krain measurement-plane re-examination. Pinned:
+  `test_parasitic_reference.py::test_lambda_work_input_role_is_grounded_but_not_adopted`;
+  CENT-LOSS.md "λ's second role".
 - **Tip-resolved supercritical loss (2026-07-19) — implemented, MEASURED
   inert for both rigs.** The recorded tip-resolved follow-up for the Aungier
   §5 supercritical Mach loss. The onset (suction-surface peak sonic) is
