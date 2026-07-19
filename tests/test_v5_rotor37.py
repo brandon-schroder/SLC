@@ -438,3 +438,83 @@ def test_blade_loading_config_validation():
         SpeedlineConfig(d_factor_max=0.0)
     with pytest.raises(ConfigError):
         SpeedlineConfig(d_factor_max=-0.5)
+
+
+def test_tier2_speedline_steps_over_isolated_choke(case):
+    # TIER-2 SPANWISE SPEEDLINE ROBUSTNESS (2026-07-19). Rotor 37 runs at
+    # validity 0 across its range (D_eq above the SP-36 window), and in that
+    # saturated-closure regime the lagged fixed point has an ISOLATED band of
+    # mass flows (~[20.7, 20.8]) with no positive-branch continuity root -
+    # yet flows on BOTH sides converge to physical points that bracket it
+    # smoothly. The default cut-back only refines toward the last success, so
+    # this one band stalls the whole traversal (skip OFF -> solver_failure
+    # with ~1 point). The opt-in step-over recovery (skip_isolated_choke)
+    # steps PAST the band and resumes, recording the gap in MapResult.skips.
+    from slcflow.drivers.classical import ClassicalConfig
+    from slcflow.drivers.continuation import SpeedlineConfig, solve_speedline
+    from slcflow.grid.core import GridTopology
+    from slcflow.machine import FidelityConfig
+
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=5)
+    inlet = m.inlet.fields(topo.psi)
+    kw = dict(mdot_start=21.0, mdot_min=20.0, mdot_step=0.25, rows=m.rows)
+    cc = ClassicalConfig(max_outer=800)
+
+    # skip OFF: the isolated band stalls the traversal early.
+    off = solve_speedline(topo, case.gas, FidelityConfig.tier2(), inlet,
+                          config=SpeedlineConfig(validity_min=0.0,
+                                                 escalate=False,
+                                                 classical=cc), **kw)
+    assert off.stall is not None and off.stall.criterion == "solver_failure"
+    assert len(off.points) <= 2
+
+    # skip ON: steps over the band and reaches mdot_min, recording the gap.
+    on = solve_speedline(topo, case.gas, FidelityConfig.tier2(), inlet,
+                         config=SpeedlineConfig(validity_min=0.0,
+                                                escalate=False,
+                                                skip_isolated_choke=True,
+                                                classical=cc), **kw)
+    assert on.stall is None                          # reached mdot_min
+    assert len(on.points) > len(off.points) + 2
+    assert len(on.skips) >= 1                        # the band was recorded
+    s = on.skips[0]
+    assert s.mdot_from > s.mdot_to and s.n_failed >= 1
+    # the converged points are physical: PR is monotone across the gap
+    prs = [p.pressure_ratio for p in on.points]
+    assert all(b > a for a, b in zip(prs, prs[1:]))  # rises as flow falls
+
+
+def test_tier2_blade_loading_criterion_unlocked_by_skip(case):
+    # With the step-over, the Tier-2 traversal reaches the loading limit, so
+    # the D-factor criterion (test_v5_rotor38 characterization: tip D=0.6
+    # predicts stall within ~3%) fires at TIER-2 tip accuracy - measured
+    # blade_loading at ~20.0 kg/s, +2.0% vs measured stall 19.60, vs the
+    # Tier-1 mean-D +4.6%. This is what the spanwise robustness unlocks.
+    from slcflow.drivers.classical import ClassicalConfig
+    from slcflow.drivers.continuation import SpeedlineConfig, solve_speedline
+    from slcflow.grid.core import GridTopology
+    from slcflow.machine import FidelityConfig
+
+    m = case.machine()
+    topo = GridTopology(m.flowpath, n_sl=5)
+    inlet = m.inlet.fields(topo.psi)
+    res = solve_speedline(
+        topo, case.gas, FidelityConfig.tier2(), inlet,
+        mdot_start=21.0, mdot_min=18.5, mdot_step=0.25, rows=m.rows,
+        config=SpeedlineConfig(validity_min=0.0, escalate=False,
+                               skip_isolated_choke=True, d_factor_max=0.60,
+                               classical=ClassicalConfig(max_outer=800)))
+    assert res.stall is not None
+    assert res.stall.criterion == "blade_loading"
+    assert abs(res.stall.mdot - 19.60) / 19.60 < 0.04    # +2% tip accuracy
+    assert len(res.skips) >= 1                            # stepped the band
+
+
+def test_skip_max_frac_config_validation():
+    from slcflow.drivers.continuation import SpeedlineConfig
+    from slcflow.errors import ConfigError
+
+    SpeedlineConfig(skip_isolated_choke=True, skip_max_frac=0.06)   # ok
+    with pytest.raises(ConfigError):
+        SpeedlineConfig(skip_max_frac=0.0)

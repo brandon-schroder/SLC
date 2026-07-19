@@ -41,7 +41,7 @@ from .classical import (ClassicalConfig, ClassicalResult, _resolve_rows,
 from .newton import NewtonConfig, solve_newton
 
 __all__ = ["SpeedlineConfig", "BCSwitchConfig", "MapPoint", "StallFlag",
-           "SwitchEvent", "MapResult", "solve_speedline"]
+           "SwitchEvent", "SkipEvent", "MapResult", "solve_speedline"]
 
 _TWO_PI = 2.0 * np.pi
 
@@ -123,6 +123,22 @@ class SpeedlineConfig:
         ``None`` (default) the traversal stays in mass-flow mode and a lost
         mdot root ends it with a stall flag; when set, choke-proximal points
         switch to a back-pressure branch and switch back on recovery.
+    skip_isolated_choke : opt-in step-over recovery (default ``False``). A
+        spanwise solve on out-of-window (validity-saturated) closures can hit
+        an ISOLATED band of mass flows where the lagged fixed point has no
+        positive-branch continuity root, even though flows on BOTH sides
+        converge to physical points that bracket it smoothly (measured on the
+        Rotor-37 Tier-2 line, docs/references/ROTOR37.md). The default
+        cut-back only refines TOWARD the last success, so such a band stalls
+        the whole traversal. When enabled, a failed mass-flow point instead
+        steps the target further PAST the band (by ``mdot_step``), up to a
+        cumulative ``skip_max_frac`` of ``mdot_start``; if a point past the
+        band converges the traversal resumes (recording the skipped band in
+        ``MapResult.skips``), and if the whole skip budget fails it is a real
+        stall region and falls through to the cut-back/stall path. Bounded, so
+        it cannot skip a genuine (wide) stall onset.
+    skip_max_frac : cumulative step-over budget past one failure, as a
+        fraction of ``mdot_start`` (only used with ``skip_isolated_choke``).
     max_points : hard cap on traversed points (runaway guard).
     """
 
@@ -134,6 +150,8 @@ class SpeedlineConfig:
     escalate: bool = True
     d_factor_max: float = None
     bc_switch: BCSwitchConfig = None
+    skip_isolated_choke: bool = False
+    skip_max_frac: float = 0.06
     max_points: int = 200
     classical: ClassicalConfig = field(default_factory=ClassicalConfig)
     newton: NewtonConfig = field(default_factory=NewtonConfig)
@@ -145,6 +163,8 @@ class SpeedlineConfig:
             raise ConfigError("step_grow must be >= 1")
         if self.d_factor_max is not None and self.d_factor_max <= 0.0:
             raise ConfigError("d_factor_max must be > 0 when set")
+        if self.skip_max_frac <= 0.0:
+            raise ConfigError("skip_max_frac must be > 0")
 
 
 @dataclass(frozen=True)
@@ -170,6 +190,18 @@ class StallFlag:
     mdot: float
     criterion: str               # "solver_failure"|"pr_turnover"|"validity_saturated"
     detail: str = ""
+
+
+@dataclass(frozen=True)
+class SkipEvent:
+    """A step-over of an isolated no-root band (``skip_isolated_choke``):
+    the traversal found no positive-branch continuity root between
+    ``mdot_from`` and ``mdot_to`` (converged points bracket it), so the map
+    has a gap there rather than a stall."""
+
+    mdot_from: float             # last converged mdot before the band
+    mdot_to: float               # first converged mdot past the band
+    n_failed: int                # solve attempts that failed inside the band
 
 
 def _tip_diffusion_factor(result: ClassicalResult, resolved_rows):
@@ -258,6 +290,7 @@ class MapResult:
     points: tuple                # tuple[MapPoint], choke -> stall order
     stall: StallFlag = None
     switches: tuple = ()         # tuple[SwitchEvent], section 6.6
+    skips: tuple = ()            # tuple[SkipEvent], skip_isolated_choke
 
     @property
     def converged_points(self) -> int:
@@ -391,7 +424,7 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
                     inlet=inlet, rows=rows, steps=steps, blockage=blockage,
                     metrics_config=metrics_config, config=config)
 
-    points, switches = [], []
+    points, switches, skips = [], [], []
     stall = None
     mode = _NORMAL
     target_mdot, target_p = mdot_start, None
@@ -400,6 +433,10 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
     pr_start = None
     armed = False
     prev_pr = None
+    skip_budget = config.skip_max_frac * mdot_start
+    skip_accum = 0.0             # mass stepped over since the last success
+    skip_from = None            # last converged mdot before the current band
+    skip_fails = 0              # failed attempts inside the current band
 
     while len(points) < config.max_points:
         spec = (MassFlowSpec(target_mdot) if mode == _NORMAL
@@ -418,6 +455,21 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
                     to_mode=_BACKPRESSURE,
                     reason="mdot root lost (choke-limited, section 6.6)"))
                 mode = _BACKPRESSURE
+                continue
+            # Step-over recovery (skip_isolated_choke): a validity-saturated
+            # spanwise line can hit an ISOLATED no-root band with convergent
+            # points on both sides. Instead of cutting back toward the last
+            # success (which never crosses it), step the target PAST the band
+            # up to the skip budget; a point beyond it resumes the traversal.
+            if (config.skip_isolated_choke and mode == _NORMAL
+                    and last_ok is not None
+                    and skip_accum + mdot_step <= skip_budget
+                    and target_mdot - mdot_step > mdot_min):
+                if skip_from is None:
+                    skip_from = _achieved_mdot(last_ok)
+                skip_accum += mdot_step
+                skip_fails += 1
+                target_mdot = target_mdot - mdot_step
                 continue
             if mode == _NORMAL and last_ok is not None:
                 step *= config.cutback
@@ -451,6 +503,12 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
             mdot=out_mdot, pressure_ratio=pr, choke_margin=c,
             validity=validity, driver=driver, mode=mode, result=result))
         last_ok = result
+        # A converged point closes any open step-over band: record the gap
+        # and reset the budget (the band was isolated, not a stall).
+        if skip_from is not None:
+            skips.append(SkipEvent(mdot_from=skip_from, mdot_to=out_mdot,
+                                   n_failed=skip_fails))
+            skip_from, skip_accum, skip_fails = None, 0.0, 0
         if pr_start is None:
             pr_start = pr
         if pr > pr_start + config.pr_rise_min:
@@ -478,4 +536,4 @@ def solve_speedline(topology, fluid, fidelity: FidelityConfig,
             target_p *= (1.0 + bc.bp_step_frac)   # throttle -> lower mdot
 
     return MapResult(points=tuple(points), stall=stall,
-                     switches=tuple(switches))
+                     switches=tuple(switches), skips=tuple(skips))

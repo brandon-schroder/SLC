@@ -1060,6 +1060,29 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **Tier-2 spanwise speedline robustness — step-over recovery (2026-07-19).**
+  Diagnosed (diagnosing-bugs loop) the Rotor-37 Tier-2 `solve_speedline`
+  blocker: an ISOLATED no-root band (~[20.7, 20.8] kg/s) where the
+  saturated-closure (validity 0 across the range) lagged fixed point has no
+  positive-branch continuity root — yet flows on BOTH sides converge to
+  physical points bracketing it smoothly (PR monotone through the gap).
+  Confirmed persistent (patience→300 and closer warm starts don't help) and
+  isolated (a higher flow chokes while lower flows converge — backwards for a
+  real capacity choke). The default cut-back only refines toward the last
+  success, so the one band stalled the whole traversal. **Fix:** opt-in
+  `SpeedlineConfig.skip_isolated_choke` (default off, non-breaking) steps the
+  target PAST the band up to a bounded `skip_max_frac` budget and resumes,
+  recording the gap in `MapResult.skips` (`SkipEvent`); bounded so a
+  genuinely wide stall onset still stalls. **Measured:** Tier-2 line goes
+  from 1 point (solver_failure) to a clean 21.0→19.0 traversal with one
+  recorded skip, and the `blade_loading` D-factor criterion now fires at
+  ~20.0 kg/s, **+2.0% vs measured stall 19.60 — the Tier-2 tip-D accuracy**
+  (vs Tier-1's mean-D +4.6%), unlocking the gate #5 follow-on. Root cause is
+  the saturated closures (a valid transonic loss model removes the band);
+  step-over is the driver-side robustness meanwhile. Pinned:
+  `test_v5_rotor37.py::test_tier2_speedline_steps_over_isolated_choke` +
+  `..._blade_loading_criterion_unlocked_by_skip` +
+  `test_skip_max_frac_config_validation`.
 - **Wiesner slip calibration → CONFIRMED 0.877, "implied 0.90" REFUTED
   (2026-07-19).** Investigated the recorded Eckardt "implied slip ~0.90 vs
   Wiesner 0.877" observation. Grounding (test-cases + loss-models notebooks)

@@ -176,15 +176,32 @@ checked *before* the validity/turnover criteria (blade loading is the
 physical signal; it takes precedence over the endwall-window validity
 artifact). Demonstrated at Tier 1: with `d_factor_max = 0.60` the
 traversal flags `blade_loading` at ~20.5 kg/s (mean-D crossing, +4.6% vs
-measured 19.60) where the control run sails to `mdot_min`; the Tier-2
-tip-D accuracy (+3%) is inherited once the Tier-2 spanwise traversal is
-robust (the classical solve returns intermittent `CHOKE_LIMITED` across
-this rotor's spanwise range — the recorded multi-streamtube robustness
-item, which stops a clean Tier-2 speedline today). Pinned:
+measured 19.60) where the control run sails to `mdot_min`. Pinned:
 `test_v5_rotor37.py::test_blade_loading_stall_criterion_is_opt_in_and_fires`.
 Remaining refinement: a C¹-safe closure-layer `D` if it ever needs to
 enter the residual path (it does not today — it is a post-solve
 diagnostic like the row-throat check).
+
+**TIER-2 TIP ACCURACY UNLOCKED (2026-07-19) — the step-over recovery.**
+The Tier-2 speedline was blocked by an *isolated* no-root band (~[20.7,
+20.8] kg/s): Rotor 37 runs at validity 0 across its range (D_eq above the
+SP-36 window) and in that saturated-closure regime the lagged fixed point
+has no positive-branch continuity root there, **even though flows on both
+sides converge to physical points that bracket it smoothly** (measured: PR
+0.491 at 20.9 → gap → 0.480 at 20.6, monotone through). The default
+cut-back only refines toward the last success, so the one band stalled the
+whole traversal. Fix: the opt-in `SpeedlineConfig.skip_isolated_choke`
+(default off) steps the target *past* the band up to a bounded
+`skip_max_frac` budget and resumes, recording the gap in `MapResult.skips`
+(bounded, so a genuinely wide stall onset still stalls). With it, the
+Tier-2 line traverses cleanly (21.0→19.0, one recorded skip) **and the
+`blade_loading` criterion now fires at ~20.0 kg/s, +2.0% vs measured
+19.60 — the Tier-2 tip-D accuracy, vs Tier-1's mean-D +4.6%.** Pinned:
+`test_v5_rotor37.py::test_tier2_speedline_steps_over_isolated_choke` +
+`..._blade_loading_criterion_unlocked_by_skip`. Root cause is the
+saturated closures (a valid transonic loss model would remove the band
+entirely); the step-over is the driver-side robustness that makes the
+traversal usable meanwhile.
 
 **Next steps this dataset unlocks** (gate #2, in payoff order): a grounded
 blockage schedule (report design values / AGARD); an MCA/transonic deviation
