@@ -349,28 +349,44 @@ many *structural* ones. Be precise about which is which.
   operator, the smoothmath primitives, the transport relations, geometry
   metrics through the 90° bend.
 
-**Structural only (trends, bands, convergence — NOT quantitative validation):**
-- **V4/V5** (axial compressor), **V6** (axial turbine), **V7** (centrifugal),
-  **V8** (mixed-flow): each *converges*, does physically correct work with
-  loss, and lands PR/efficiency in **generous plausibility bands**. They do
-  **not** reproduce any specific published/NASA/Eckardt case point-by-point.
-  (Caveat: with the realistic centrifugal loss the Tier-3 radial/mixed bends
-  are fragile — V7 Tier 3 does not converge and V8 Tier 3 only in a narrow
-  pocket; V7 Tier 2 converges at a re-centred operating point and V8 Tier 2 at
-  its own. See the known-limitations note below.)
+**Point-by-point measured validation (2026-07 — landing within a few %):**
+- **V4/V5** (axial compressor): NASA Rotor 37 (TP-1659) with the grounded
+  Çetin transonic-deviation correction lands Tier-2 PR **+0.2%** of measured,
+  with a matched-PR back-pressure traversal; Rotor 38 (TP-2001) second point.
+- **V6** (axial turbine): NASA TN D-6967 two-stage agrees **~1%** in the
+  matched-PR frame, with a digitized multi-speed map (±2.2%) and a
+  first-stage build; VKI LS-89 cascade at the closure level.
+- **V7** (centrifugal): THREE measured points — Eckardt O (stage PR +1.0%),
+  Krain, and NASA CC3 (real high-speed 4:1) — the stage set closing to
+  PR ±2% / η ±2 pt with one calibrated constant.
+- **Operability** (gate #5): a grounded tip-diffusion-factor stall criterion
+  predicts the measured Rotor 37/38 stall within ~3%.
 
-**Explicitly unvalidated (`[VERIFY]`), by design:**
-- **Every correlation coefficient** in every `CorrelationSet` is `[VERIFY]` —
-  they are representative fits, not calibrated against the reference library.
-  Efficiencies read closer to realistic now that the dominant loss components
-  are modeled (axial endwall/clearance/shock; centrifugal **blade-loading** added
-  2026-07 — centrifugal η ≈ 0.98 → ~0.83 at the loaded design point, using the
-  Coppage/Oh-1997 diffusion factor whose loading-term ratio was corrected
-  `W1/W2`→`W2/W1` on 2026-07-12, ~2.3× less loss; CENT-LOSS.md), but
-  centrifugal **tip-clearance** and
-  **disk-friction** are still deferred (a per-streamtube closure lacks their
-  geometry/`ṁ` inputs).
-- **Speedline/choke-traversal validation** against data is `[VERIFY]`.
+**Structural only (trends, bands, convergence — no measured rig):**
+- **V8** (mixed-flow): converges, does physically correct work with loss, and
+  lands PR/efficiency in plausibility bands, but no open measured mixed-flow
+  rig exists to reproduce point-by-point. (Tier-3 on tight radial/mixed bends
+  is fast and robust in the interior — V8 accelerated 2.6× — but the pocket
+  *edges* and V7's tight synthetic bend need closure-in-Newton; see the
+  known-limitations note below.)
+
+**Grounded and dispositioned (2026-07 reference-calibration + validation):**
+- **The correlation coefficients were grounded verbatim against the reference
+  library** (a systematic pass over every `CorrelationSet`), not left as
+  representative fits — real bugs were found and fixed (Lieblein ω̄ inversion,
+  K-O TE curves, the centrifugal `D_f` loading ratio), and each candidate
+  refinement (K-O TE level, Zhu-Sjolander, Wiesner slip, tip-resolved
+  supercritical, the λ work-input role) was **dispositioned by measurement**
+  with zero constants tuned to individual points. Centrifugal losses are now
+  complete through parasitic (disk/leakage/recirculation) + vaneless-diffuser
+  marching + λ tip-distortion; efficiencies read realistic (centrifugal stage
+  η ±2 pt vs measured).
+- **Residual `[VERIFY]`s** are genuine refinements, not calibration gaps: the
+  backswept-centrifugal work over-prediction (the λ work-input role, a
+  recorded 3-point trend needing a joint recalibration), point-by-point
+  choke-side speedline *shapes* (a capacity/knee matter, dispositioned for
+  Rotor 37), and a few geometry inputs on the newest cases that are recorded
+  estimates where the coordinate report wasn't in hand.
 - The mixing constant `c_mix` and the mixing entropy-*production* term (the
   operator redistributes `s`; the irreversibility source beyond redistribution
   is a refinement) are `[VERIFY]`.

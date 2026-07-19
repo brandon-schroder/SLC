@@ -30,31 +30,51 @@ bands), with pervasive `[VERIFY]` on the correlation coefficients — see
 proven-vs-structural-vs-`[VERIFY]` breakdown. See `CLAUDE.md` for the
 milestone-by-milestone log.
 
-### Before use for quantitative design
+### Validation status
 
-The kernel, architecture, closure framework, and driver stack are **built and
-structurally verified**, but the model has **not been calibrated or validated
-against real turbomachinery data**. It is usable today as a **relative/trend
-tool** (meanline Tier 1, REE Tier 2) — sizing, sensitivity, configuration
-comparison. Before any *absolute* number (efficiency, PR, a speedline) can be
-trusted, in priority order:
+The kernel, architecture, closure framework, and driver stack are built and
+structurally verified, and — as of 2026-07 — the model has been **validated
+point-by-point against real turbomachinery data for every machine class
+except mixed-flow**, landing within a few percent where a clean comparison
+exists:
 
-1. **Quantitative validation** — reproduce at least one published case per
-   machine type (axial compressor stage, turbine cascade, Eckardt impeller)
-   plus a speedline, point-by-point. Every V4–V8 case is structural-only today.
-2. **Correlation calibration** against that data — the coefficients are
-   representative fits (`[VERIFY]`); the **blade-loading loss magnitude** is the
-   highest-leverage one (it drives the spanwise stratification behind the
-   radial/mixed Tier-3 fragility).
-3. **Deferred centrifugal losses** — tip-clearance and disk-friction (need
-   exit width / hub-tip radii and a machine-level `ṁ`); centrifugal efficiency
-   reads optimistic without them. The axial loss stack is complete.
-4. **Tier-3 full-SLC reliability** on tight radial/mixed bends (V8 Tier-3
-   pocket; V7 Tier-3 infeasible at the current loss — calibrating #2 down
-   should help).
-5. **Operability validation** — surge-line / choke-traversal quantitative
-   match (the machinery exists and is demonstrated in V9; the match is
-   `[VERIFY]`).
+- **Axial compressor** — NASA Rotor 37 (TP-1659): with the library-grounded
+  Çetin AGARD-R-745 transonic-deviation correction, Tier-2 pressure ratio
+  2.051 vs measured 2.056 (**+0.2%**); matched-PR back-pressure traversal down
+  the vertical characteristic. Rotor 38 (TP-2001) second point.
+- **Axial turbine** — NASA TN D-6967 two-stage: agrees to **~1%** in the
+  matched-PR frame, plus a digitized multi-speed map (work ±2.2% over
+  50–100% speed) and a first-stage-only build. VKI LS-89 transonic cascade.
+- **Centrifugal** — three points: Eckardt O (radial, stage PR +1.0%), Krain
+  (30° backswept), and NASA CC3 (real high-speed 4:1, 50° backswept). The
+  stage set closes to **PR ±2% / η ±2 pt** at both Eckardt/Krain loadings
+  with one calibrated constant.
+- **Operability** — a grounded tip-diffusion-factor stall criterion predicts
+  the measured Rotor 37/38 stall within ~3%, wired opt-in into the speedline
+  driver.
+
+Calibration was done by **grounding every candidate correlation verbatim from
+the reference library and dispositioning it by measurement** — only the Çetin
+MCA correction was adopted; K-O TE, Zhu-Sjolander, Wiesner slip, and others
+were confirmed, refuted, or found inert with **zero constants tuned to
+individual data points**.
+
+So for the validated classes the model is usable for **absolute numbers within
+documented bounds** at Tier 1/2, not only trends. Known bounds and open items,
+in rough priority:
+
+1. **Mixed-flow (V8)** has no open measured rig — it stays structural-only.
+2. **Backswept-centrifugal work** over-predicts with backsweep (the Aungier
+   λ work-input role, grounded; a 3-point trend across Eckardt/Krain/CC3);
+   adopting it needs a joint slip/blockage/diffuser recalibration.
+3. **Tier-3 full-SLC on tight radial/mixed bends** — the interior is fast and
+   robust (V8 accelerated 2.6×), but the pocket *edges* need closure-in-Newton.
+4. **Off-design map depth** — some speedlines/maps digitized; more available.
+
+Point-by-point speedline *shapes* on the choke side are a capacity/knee
+matter (dispositioned for Rotor 37), and a handful of geometry inputs on the
+newest cases are recorded estimates where the coordinate report wasn't in
+hand. See `CLAUDE.md` and `docs/references/` for the per-case measured record.
 
 ## Documentation
 
