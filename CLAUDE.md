@@ -1060,6 +1060,22 @@ These are not suggestions; violating them is a bug even if tests pass.
   `test_v5_rotor37.py::test_speedline_operability_criteria_measured_disposition`
   + `..._tier2_validity_flag_is_the_endwall_window_artifact`; ROTOR37.md
   "Operability disposition".
+- **V8 Tier-3 pocket — per-case `wilkinson_c` override (2026-07-19,
+  C.3-grounded).** The recorded §6.4-recalibration acceleration follow-up for
+  the slow/narrow V8 Tier-3 pocket. C.3 measured `c*=13.2` SAFE for exactly
+  V8's layout (φ=55°, n_inblade=6; identical answers, 17.6 fails), so the V8
+  case now carries `wilkinson_c=13` (only affects Tier 3 — curvature on;
+  Tier 1/2 run at `omega_sl_max`). **Measured:** Tier 3 converges in ~153
+  outer iterations (2.6× faster than 395 at the duct default 4.4, now inside
+  the stock `max_outer=200`, identical PR 1.4134) AND the converging pocket
+  **widens {13,14}→{13,14,15}** (mdot 15 lifts from slow-max-iter to a
+  264-iteration convergence). Boundaries unmoved by relaxation speed: mdot 12
+  stays the capacity/stratification CHOKE fold, mdot≥16 the upper feasibility
+  edge (MAX_ITER even at c=13) — closure-in-Newton/Newton-finishing stays the
+  lever for the pocket *edges*. Pinned:
+  `test_v8_mixed_flow.py::test_tier3_converges_at_recentred_mdot` (speed) +
+  `..._tier3_pocket_widened_by_wilkinson_c` (widen, with a 4.4 control that
+  fails). C.8/C.3 updated.
 - **Tier-2 spanwise speedline robustness — step-over recovery (2026-07-19).**
   Diagnosed (diagnosing-bugs loop) the Rotor-37 Tier-2 `solve_speedline`
   blocker: an ISOLATED no-root band (~[20.7, 20.8] kg/s) where the

@@ -32,9 +32,20 @@ pocket (choke_limited at the old mdot=12). The **Coppage/Oh-1997 D_f ratio fix**
 (2026-07-12, ~2.3x less loss -> ~27-30% less spanwise stratification) LOWERED
 that pocket into a genuine converging window ``mdot in {13, 14}`` (choke at 12,
 slow-max-iter at 15/16). At the re-centred ``mdot = 14`` all three tiers
-converge (validity 1, Tier 3 PR agrees Tier 2 to ~2.5%) -- still slow at the
-section 6.4 throttle (acceleration, e.g. Newton finishing, is the recorded
-follow-up). ``test_tier3_converges_at_recentred_mdot`` pins it. (V7's tighter
+converge (validity 1, Tier 3 PR agrees Tier 2 to ~2.5%).
+
+**Tier-3 acceleration + pocket widening (2026-07-19, ``wilkinson_c = 13``).**
+The section 6.4 throttle was the recorded slowness follow-up (395 outer
+iterations at the duct default 4.4). Appendix C.3 measured ``c* = 13.2``
+SAFE for exactly this layout (``phi = 55 deg``, ``n_inblade = 6``) with
+identical answers, so the case carries a per-case ``wilkinson_c = 13``: Tier 3
+converges in ~153 iterations (2.6x faster, inside the stock ``max_outer =
+200``) and the pocket WIDENS from ``{13, 14}`` to ``{13, 14, 15}`` (mdot 15
+lifts from slow-max-iter into a 264-iteration convergence). The boundaries are
+unmoved by relaxation speed: ``mdot = 12`` stays a capacity/stratification
+CHOKE fold and ``mdot >= 16`` the upper feasibility edge (still MAX_ITER at 13).
+``test_tier3_converges_at_recentred_mdot`` (speed) and
+``test_tier3_pocket_widened_by_wilkinson_c`` (widen) pin it. (V7's tighter
 90-deg bend is NOT liftable this way -- it stays an infeasible fold; C.7.)
 
 Provenance: M8 sub-step 4, written with the mixed-flow case; Tier-3 status
@@ -47,6 +58,7 @@ from dataclasses import dataclass, field
 import numpy as np  # verification layer: case definitions  # ad6: allow
 
 from ..closures.centrifugal import CENTRIFUGAL
+from ..drivers.classical import ClassicalConfig
 from ..fluid.perfectgas import PerfectGas
 from ..geometry import FlowPath, StationDef, StationType, WallCurve
 from ..geometry.bladerow import ParamRowGeometry
@@ -92,6 +104,15 @@ class V8MixedFlow:
     blade_count: int = 18
     n_inblade: int = 6             # subdivide the bend (Tier-2 stability, M7-4)
     n_sl_rep: int = 7
+    # Per-case section 6.4 relaxation override (Appendix C.3, 2026-07-19).
+    # The duct-calibrated default (4.4) is 2-3x conservative on blade-row
+    # bends; C.3 measured c* = 13.2 SAFE for exactly this layout (phi=55 deg,
+    # n_inblade=6; 17.6 fails, 22 diverges) with IDENTICAL answers. Using 13.0
+    # (a hair inside the measured-safe point) accelerates Tier 3 ~2.6x
+    # (395 -> 153 outer iterations at mdot 14) AND widens the converging
+    # pocket from {13, 14} to {13, 14, 15}. Only affects Tier 3 (curvature
+    # on); Tier 1/2 run at omega_sl_max regardless (_omega_sl).
+    wilkinson_c: float = 13.0
     gas: PerfectGas = field(default_factory=PerfectGas)
 
     pr_band: tuple = (1.2, 3.0)
@@ -129,10 +150,15 @@ class V8MixedFlow:
                        InletCondition(h0=self.h0_in, s=self.s_in, rvt=0.0),
                        rows=[row])
 
-    def evaluate(self, n_sl: int = 1,
-                 fidelity: FidelityConfig = None) -> PerformanceResult:
-        """Solve at the requested fidelity (default Tier-1 meanline)."""
+    def evaluate(self, n_sl: int = 1, fidelity: FidelityConfig = None,
+                 config: ClassicalConfig = None) -> PerformanceResult:
+        """Solve at the requested fidelity (default Tier-1 meanline). The
+        default config applies the case's C.3-grounded ``wilkinson_c`` so a
+        Tier-3 solve converges in ~153 outer iterations (inside the stock
+        ``max_outer = 200``); Tier 1/2 are unaffected (curvature off)."""
         if fidelity is None:
             fidelity = FidelityConfig.tier1()
+        if config is None:
+            config = ClassicalConfig(wilkinson_c=self.wilkinson_c)
         return self.machine().evaluate(MassFlowSpec(self.mdot), fidelity,
-                                       n_sl=n_sl)
+                                       n_sl=n_sl, config=config)

@@ -77,29 +77,46 @@ def test_tier2_ree_converges():
     assert r.pressure_ratio > 1.0
 
 
-# V8 Tier 3 with the dominant blade-loading loss: NOW A PASSING TEST at the
-# re-centred mdot=14 (was an xfail tripwire at the old mdot=12). History: at the
-# old mdot=12 Tier 3 was choke_limited (the realistic loss cut the exit-q-o
-# capacity below mdot -- the operating-point/stratification fold), and the
-# pre-fix pocket was a knife-edge ~15. The Coppage/Oh-1997 D_f ratio fix
-# (2026-07-12, ~2.3x less loss -> ~27-30% less spanwise stratification) LOWERED
-# the pocket into a genuine converging window mdot in {13, 14} (choke at 12,
-# slow-max-iter at 15/16; measured sweep). Re-centring to mdot=14 (the case
-# default now) makes Tier 3 a robust passing test at all three tiers -- the same
-# operating-point re-centre as V7 T2 (12 -> 17). Distinct from V7's tighter
-# 90-deg bend, which stays an infeasible fold at every mdot (C.7).
+# V8 Tier 3 with the dominant blade-loading loss: a PASSING test at the
+# re-centred mdot=14. The Coppage/Oh-1997 D_f ratio fix (2026-07-12) lowered
+# the pocket into a converging window (choke at 12; at the duct-default
+# wilkinson_c=4.4, mdot 14 needed 395 slow outer iterations and 15/16 were
+# slow-max-iter). The C.3-grounded per-case wilkinson_c=13 (2026-07-19; safe
+# for phi=55/n_inblade=6 by Appendix C.3, c*=13.2, IDENTICAL answers)
+# accelerates it ~2.6x AND widens the pocket to {13, 14, 15}.
 def test_tier3_converges_at_recentred_mdot():
-    # Tier 3 converges at the re-centred mdot=14 with the realistic (corrected)
-    # blade-loading loss, and agrees with Tier 2 (validity 1). See Appendix C.8.
+    # Tier 3 at mdot=14 converges with the realistic blade-loading loss and
+    # agrees with Tier 2 (validity 1). With the case wilkinson_c=13 it fits
+    # inside the stock max_outer=200 (~153 iters) - a 2.6x speedup over the
+    # 395 at wilkinson_c=4.4, guarded here by max_outer. See Appendix C.8/C.3.
     case = V8MixedFlow()
-    r = case.machine().evaluate(MassFlowSpec(case.mdot),
-                                FidelityConfig.tier3(), n_sl=case.n_sl_rep,
-                                config=ClassicalConfig(max_outer=800))
-    assert r.converged
+    r = case.evaluate(n_sl=case.n_sl_rep, fidelity=FidelityConfig.tier3())
+    assert r.converged                               # inside default max_outer
+    assert r.result.record.n_iterations < 250        # ~153; guards the speedup
     lo, hi = case.pr_band
     assert lo < r.pressure_ratio < hi
     assert r.validity > 0.0
-    r2 = case.machine().evaluate(MassFlowSpec(case.mdot),
-                                 FidelityConfig.tier2(), n_sl=case.n_sl_rep)
+    r2 = case.evaluate(n_sl=case.n_sl_rep, fidelity=FidelityConfig.tier2())
     assert r2.converged
     assert r.pressure_ratio == pytest.approx(r2.pressure_ratio, rel=5e-2)
+
+
+def test_tier3_pocket_widened_by_wilkinson_c():
+    # POCKET WIDENING (2026-07-19): the C.3-grounded wilkinson_c=13 lifts
+    # mdot=15 from slow-max-iter (at the duct default 4.4) into the converging
+    # window (measured 264 iters), so the pocket is {13, 14, 15} not {13, 14}.
+    # Control: at the duct default 4.4, mdot=15 does NOT converge within the
+    # same budget - the override is load-bearing. (mdot 12 stays a capacity
+    # CHOKE fold and 16+ the upper feasibility edge; only 13-15 lift.)
+    case = V8MixedFlow(mdot=15.0)
+    cfg = ClassicalConfig(max_outer=400, wilkinson_c=case.wilkinson_c)
+    r = case.machine().evaluate(MassFlowSpec(15.0), FidelityConfig.tier3(),
+                                n_sl=case.n_sl_rep, config=cfg)
+    assert r.converged
+    lo, hi = case.pr_band
+    assert lo < r.pressure_ratio < hi
+
+    ctrl = case.machine().evaluate(
+        MassFlowSpec(15.0), FidelityConfig.tier3(), n_sl=case.n_sl_rep,
+        config=ClassicalConfig(max_outer=400, wilkinson_c=4.4))
+    assert not ctrl.converged                        # duct default can't
